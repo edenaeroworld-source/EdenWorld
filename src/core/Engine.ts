@@ -85,6 +85,32 @@ function downloadBlob(blob: Blob, filename: string): void {
   window.setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
+let filePicker: HTMLInputElement | null = null;
+
+/** Abre o seletor de arquivos do navegador e entrega o arquivo escolhido. */
+function pickFile(accept: string, onFile: (file: File) => void): void {
+  filePicker?.remove();
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = accept;
+  input.hidden = true;
+  input.setAttribute('aria-hidden', 'true');
+  input.tabIndex = -1;
+  const discard = (): void => {
+    input.remove();
+    if (filePicker === input) filePicker = null;
+  };
+  input.addEventListener('change', () => {
+    const file = input.files?.[0];
+    discard();
+    if (file) onFile(file);
+  });
+  input.addEventListener('cancel', discard);
+  filePicker = input;
+  document.body.appendChild(input);
+  input.click();
+}
+
 function timestamp(): string {
   const d = new Date();
   const p = (n: number): string => String(n).padStart(2, '0');
@@ -139,6 +165,8 @@ export class Engine {
   private readonly loadStatus: LoadStatus;
   /** `true` depois de avisar que o progresso não está sendo gravado. */
   private saveWarned = false;
+  /** Verdadeiro entre gravar um salvamento importado e recarregar a página. */
+  private importing = false;
   private graphicsChosen: boolean;
   private readonly qualityOverride: boolean;
   private appearanceBeforeEdit: AvatarAppearance | null = null;
@@ -237,6 +265,7 @@ export class Engine {
       commit: (kind) => this.commitSettings(kind),
       testVibration: () => this.input.gamepad.vibrate(0.8, 0.5, 260),
       exportSave: () => this.exportSave(),
+      importSave: () => this.importSave(),
       resetProgress: () => this.confirmReset(),
       close: () => {
         this.ui.close(this.settingsScreen);
@@ -938,7 +967,8 @@ export class Engine {
 
   /** Grava o estado atual no armazenamento local. */
   private persist(): void {
-    if (this.disposed || !this.player) return;
+    // Durante uma importação, o arquivo já gravado não pode ser sobrescrito.
+    if (this.disposed || this.importing || !this.player) return;
     const save = this.save;
     const motor = this.player.motor;
     if (save.profile.created && this.mode !== 'menu' && this.mode !== 'creator') {
@@ -964,6 +994,66 @@ export class Engine {
     this.persist();
     downloadBlob(new Blob([SaveSystem.serialize(this.save)], { type: 'application/json' }), `edenworld-save-${timestamp()}.json`);
     this.hud.toast('Salvamento exportado.', 'check');
+  }
+
+  /** Lê um arquivo exportado anteriormente e pede confirmação antes de aplicá-lo. */
+  private importSave(): void {
+    // O navegador só abre o seletor de arquivos a partir de um gesto direto;
+    // o botão acionado pelo controle não conta como tal.
+    const activation = navigator.userActivation as UserActivation | undefined;
+    if (activation && !activation.isActive) {
+      this.hud.toast('Para escolher o arquivo, use o mouse, o teclado ou o toque neste botão.', 'info', 7);
+      return;
+    }
+    pickFile('.json,application/json', (file) => {
+      const invalid = (): void => this.hud.toast('Este arquivo não é um salvamento do EDENWORLD.', 'info', 6);
+      if (file.size === 0 || file.size > 2_000_000) {
+        invalid();
+        return;
+      }
+      file.text().then(
+        (text) => {
+          const imported = SaveSystem.parse(text);
+          if (!imported) invalid();
+          else if (!imported.profile.created) this.hud.toast('Este salvamento ainda não tem um jogo iniciado.', 'info', 6);
+          else this.confirmImport(imported);
+        },
+        () => this.hud.toast('Não foi possível ler o arquivo.', 'info', 6),
+      );
+    });
+  }
+
+  private confirmImport(imported: SaveData): void {
+    const totals = this.progress.totals;
+    const crystals = Math.min(imported.progress.crystals.length, totals.crystals);
+    const dialog = new DialogScreen({
+      id: 'importar',
+      title: 'Importar este salvamento?',
+      paragraphs: [
+        `Jogador: ${imported.profile.name} · ${crystals} de ${totals.crystals} Cristais de Luz.`,
+        'O avatar e o progresso deste navegador serão substituídos pelos do arquivo. As configurações deste aparelho serão mantidas.',
+      ],
+      note: 'O jogo será recarregado para aplicar o salvamento.',
+      actions: [
+        { label: 'Cancelar', kind: 'ghost', onClick: () => this.ui.close(dialog) },
+        { label: 'Importar', onClick: () => this.applyImport(imported) },
+      ],
+      onDismiss: () => this.ui.close(dialog),
+    });
+    this.ui.open(dialog);
+  }
+
+  private applyImport(imported: SaveData): void {
+    // Gráficos, áudio e controles pertencem a este aparelho, não ao arquivo.
+    this.persist();
+    const next: SaveData = { ...imported, settings: this.save.settings };
+    if (!this.saveSystem.save(next)) {
+      this.ui.close('importar');
+      this.hud.toast('Não foi possível gravar o salvamento neste navegador.', 'info', 7);
+      return;
+    }
+    this.importing = true;
+    window.location.reload();
   }
 
   /* ------------------------------------------------------------------ */

@@ -38,6 +38,7 @@ export interface SettingsHost {
   commit(kind: 'audio' | 'input' | 'gameplay'): void;
   testVibration(): void;
   exportSave(): void;
+  importSave(): void;
   resetProgress(): void;
   close(): void;
 }
@@ -475,13 +476,14 @@ export class SettingsScreen implements Screen {
       h('p', {
         class: 'muted',
         text: this.host.save.profile.created
-          ? 'Seu progresso fica guardado apenas neste navegador. Nenhum dado é enviado para servidores.'
-          : 'Nenhum jogo iniciado ainda. O progresso ficará guardado apenas neste navegador.',
+          ? 'Seu progresso fica guardado apenas neste navegador. Nenhum dado é enviado para servidores. Exporte um arquivo para guardar uma cópia ou continuar em outro aparelho.'
+          : 'Nenhum jogo iniciado ainda. O progresso ficará guardado apenas neste navegador. Se você tem um arquivo de salvamento, pode importá-lo aqui.',
       }),
       h(
         'div',
         { class: 'row' },
         button({ class: 'btn btn--ghost btn--small', label: 'Exportar salvamento', onClick: () => this.host.exportSave() }),
+        button({ class: 'btn btn--ghost btn--small', label: 'Importar salvamento', onClick: () => this.host.importSave() }),
         button({ class: 'btn btn--danger btn--small', label: 'Apagar progresso', onClick: () => this.host.resetProgress() }),
       ),
     );
