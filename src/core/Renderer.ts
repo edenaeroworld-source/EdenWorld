@@ -139,6 +139,29 @@ export class Renderer {
     this.three.render(scene, camera);
   }
 
+  /**
+   * Desenha um quadro na resolução nativa da tela — ignorando a escala
+   * reduzida usada para ganhar desempenho — e chama `capture` enquanto a
+   * imagem ainda está no canvas. Usado pelo modo foto, para que a imagem
+   * salva não saia granulada nas qualidades mais baixas.
+   */
+  renderForCapture(scene: THREE.Scene, camera: THREE.Camera, capture: () => void): void {
+    const normal = this.three.getPixelRatio();
+    const native = Math.min(window.devicePixelRatio || 1, 2);
+    const boosted = native > normal + 0.01;
+    if (boosted) this.three.setPixelRatio(native);
+    try {
+      this.three.render(scene, camera);
+      capture();
+    } finally {
+      if (boosted) {
+        // Volta à resolução de jogo e redesenha, para não piscar um quadro vazio.
+        this.applySize();
+        this.three.render(scene, camera);
+      }
+    }
+  }
+
   dispose(): void {
     this.canvas.removeEventListener('webglcontextlost', this.handleContextLost);
     this.canvas.removeEventListener('webglcontextrestored', this.handleContextRestored);

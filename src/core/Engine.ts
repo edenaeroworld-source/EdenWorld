@@ -901,17 +901,19 @@ export class Engine {
 
   private capturePhoto(): void {
     if (this.mode !== 'photo') return;
-    // O desenho precisa acontecer no mesmo instante da captura.
-    this.renderer.render(this.scene, this.rig.camera);
+    // O desenho precisa acontecer no mesmo instante da captura; a foto usa a
+    // resolução nativa da tela, mesmo que o jogo esteja em resolução reduzida.
     try {
-      this.canvas.toBlob((blob) => {
-        if (!blob) {
-          this.hud.toast('Não foi possível salvar a foto.', 'camera');
-          return;
-        }
-        downloadBlob(blob, `edenworld-foto-${timestamp()}.png`);
-        this.hud.toast('Foto salva nos seus downloads.', 'camera');
-      }, 'image/png');
+      this.renderer.renderForCapture(this.scene, this.rig.camera, () => {
+        this.canvas.toBlob((blob) => {
+          if (!blob) {
+            this.hud.toast('Não foi possível salvar a foto.', 'camera');
+            return;
+          }
+          downloadBlob(blob, `edenworld-foto-${timestamp()}.png`);
+          this.hud.toast('Foto salva nos seus downloads.', 'camera');
+        }, 'image/png');
+      });
     } catch {
       this.hud.toast('Não foi possível salvar a foto.', 'camera');
       return;
