@@ -1,0 +1,302 @@
+/**
+ * Aplicativo Afters® do EdenPhone — painel de transformação ao vivo.
+ *
+ * Tudo aqui mexe no jogo de verdade: cada slider, atalho, interruptor e
+ * preset chama o sistema de transformação e o avatar muda na hora, sem
+ * sair da cidade. Nenhum controle é enfeite.
+ *
+ * A tela tem duas partes:
+ *
+ * 1. **Silhueta** — AfterBust® e AfterCurve®, de 0% a 250%, com controle
+ *    independente, modo combinado, duração da transição e presets.
+ * 2. **Assinatura estética** — o produto (anel, halo e partículas), a cor e
+ *    a intensidade do brilho, que já existiam e continuam funcionando.
+ */
+
+import { AFTERS_PRODUCTS, type AftersConfig } from '../afters/AftersCatalog';
+import type { AftersBodyStatus } from '../afters/AftersBodySystem';
+import {
+  AFTERS_PRESETS,
+  type AftersBody,
+  type AftersChannelId,
+  CHANNEL_DESCRIPTIONS,
+  CHANNEL_LABELS,
+  INTENSITY_STEPS,
+  MAX_DURATION,
+  MAX_PERCENT,
+  MIN_DURATION,
+  PERCENT_STEP,
+  effectiveIntensity,
+  isCombined,
+  isNeutral,
+  toPercent,
+} from '../afters/AftersState';
+import { button, h, slider, toggle } from './dom';
+import { type IconName, icon } from './icons';
+
+/** O que o aplicativo precisa do jogo para funcionar. */
+export interface AftersAppHost {
+  afters(): AftersConfig;
+  setAfters(patch: Partial<AftersConfig>): void;
+  /** Estado da transformação de silhueta. */
+  aftersBody(): AftersBody;
+  /** Situação dos canais neste instante (inclui transição em andamento). */
+  aftersStatus(): AftersBodyStatus;
+  setAftersIntensity(channel: AftersChannelId, percent: number): void;
+  setAftersActive(channel: AftersChannelId, active: boolean): void;
+  setAftersCombined(active: boolean): void;
+  setAftersDuration(seconds: number): void;
+  applyAftersPreset(id: string): void;
+  aftersAllOff(): void;
+}
+
+const CHANNEL_ICON: Record<AftersChannelId, IconName> = { bust: 'sparkle', curve: 'star' };
+
+function card(...children: (Node | string | false | null | undefined)[]): HTMLDivElement {
+  return h('div', { class: 'card card--glass' }, ...children);
+}
+
+function formatPercent(value: number): string {
+  return `${Math.round(value)}%`;
+}
+
+/* ------------------------- Controle de um canal ------------------------ */
+
+function buildChannel(host: AftersAppHost, channel: AftersChannelId, refresh: () => void): HTMLElement {
+  const body = host.aftersBody();
+  const status = host.aftersStatus();
+  const snapshot = channel === 'bust' ? status.bust : status.curve;
+  const stored = channel === 'bust' ? body.bust : body.curve;
+  const active = channel === 'bust' ? body.bustActive : body.curveActive;
+  const percent = toPercent(stored);
+  const shown = toPercent(snapshot.current);
+
+  const readout = h('div', { class: 'afters__readout' }, h('b', { class: 'afters__percent', text: formatPercent(percent) }), h('small', { text: active ? 'ativo' : 'desligado' }));
+  if (snapshot.animating) {
+    readout.appendChild(h('small', { class: 'afters__live', text: `aplicando ${formatPercent(shown)}…` }));
+  }
+
+  const header = h(
+    'header',
+    { class: 'afters__head' },
+    h('span', { class: `afters__badge afters__badge--${channel}`, html: icon(CHANNEL_ICON[channel], 22) }),
+    h('div', { class: 'afters__title' }, h('b', { text: CHANNEL_LABELS[channel] }), h('small', { text: CHANNEL_DESCRIPTIONS[channel] })),
+    toggle(`${CHANNEL_LABELS[channel]} ligado`, active, (value) => {
+      host.setAftersActive(channel, value);
+      refresh();
+    }),
+  );
+
+  const range = slider({
+    label: `Intensidade de ${CHANNEL_LABELS[channel]}, de 0 a ${MAX_PERCENT} por cento`,
+    min: 0,
+    max: MAX_PERCENT,
+    step: PERCENT_STEP,
+    value: percent,
+    format: formatPercent,
+    onInput: (value) => {
+      host.setAftersIntensity(channel, value);
+      // A leitura numérica do cabeçalho acompanha o arrasto sem redesenhar
+      // a tela inteira (redesenhar perderia o foco do controle).
+      const label = readout.querySelector('.afters__percent');
+      if (label) label.textContent = formatPercent(value);
+    },
+  });
+  range.classList.add('slider--afters');
+
+  const steps = h('div', { class: 'afters__steps', attrs: { role: 'group', 'aria-label': `Atalhos de intensidade de ${CHANNEL_LABELS[channel]}` } });
+  for (const step of INTENSITY_STEPS) {
+    const chip = h('button', {
+      class: Math.abs(step - percent) < 0.01 ? 'chip is-on' : 'chip',
+      text: `${step}%`,
+      attrs: { type: 'button', 'aria-pressed': String(Math.abs(step - percent) < 0.01) },
+    });
+    chip.addEventListener('click', () => {
+      host.setAftersIntensity(channel, step);
+      refresh();
+    });
+    steps.appendChild(chip);
+  }
+
+  return h('section', { class: `card card--glass afters__channel${active ? ' is-on' : ''}` }, header, readout, range, steps);
+}
+
+/* ------------------------------ Aplicativo ----------------------------- */
+
+export function buildAftersApp(host: AftersAppHost, content: HTMLElement, refresh: () => void): void {
+  const config = host.afters();
+
+  content.append(
+    h(
+      'div',
+      { class: 'phone__app-head' },
+      h('h2', { text: 'Afters®' }),
+      h('span', { class: 'muted', text: 'Body Expansion Tech · assinatura Luma' }),
+    ),
+  );
+
+  if (!config.unlocked) {
+    content.appendChild(
+      card(
+        h('h3', { text: 'Painel bloqueado' }),
+        h('p', { text: 'A tecnologia Afters é liberada por Luma, no Ateliê Aero, a sudoeste da Praça Central.' }),
+        h('p', { class: 'muted', text: 'Converse com ela para ativar o painel no seu EdenPhone.' }),
+      ),
+    );
+    return;
+  }
+
+  const body = host.aftersBody();
+  const status = host.aftersStatus();
+
+  /* --- Estado atual --- */
+  const statusCard = h(
+    'section',
+    { class: `card card--glass afters__status${isNeutral(body) ? '' : ' is-on'}`, attrs: { 'aria-live': 'polite' } },
+    h('h3', { text: status.label }),
+    h(
+      'div',
+      { class: 'afters__gauges' },
+      h('span', { class: 'afters__gauge' }, h('small', { text: 'AfterBust®' }), h('b', { text: formatPercent(toPercent(effectiveIntensity(body, 'bust'))) })),
+      h('span', { class: 'afters__gauge' }, h('small', { text: 'AfterCurve®' }), h('b', { text: formatPercent(toPercent(effectiveIntensity(body, 'curve'))) })),
+    ),
+    h('p', {
+      class: 'muted',
+      text: status.animating
+        ? 'Transição em andamento. Você pode continuar andando, correndo e conversando: a mudança acontece no mundo, sem recarregar nada.'
+        : 'A transformação acontece ao vivo em Aurora City. Dá para ajustar enquanto caminha.',
+    }),
+  );
+  content.appendChild(statusCard);
+
+  /* --- Canais independentes --- */
+  content.appendChild(buildChannel(host, 'bust', refresh));
+  content.appendChild(buildChannel(host, 'curve', refresh));
+
+  /* --- Modo combinado e desligamento --- */
+  const combined = isCombined(body);
+  content.appendChild(
+    card(
+      h('h3', { text: 'Modo combinado' }),
+      h('p', { class: 'muted', text: 'Liga e desliga os dois canais de uma vez, mantendo a intensidade de cada um.' }),
+      h(
+        'div',
+        { class: 'row' },
+        button({
+          class: combined ? 'btn btn--small' : 'btn btn--green btn--small',
+          icon: icon(combined ? 'close' : 'check', 18),
+          label: combined ? 'Desligar os dois' : 'Ligar os dois',
+          onClick: () => {
+            host.setAftersCombined(!combined);
+            refresh();
+          },
+        }),
+        button({
+          class: 'btn btn--ghost btn--small',
+          icon: icon('close', 18),
+          label: 'Desligar tudo',
+          onClick: () => {
+            host.aftersAllOff();
+            refresh();
+          },
+        }),
+      ),
+    ),
+  );
+
+  /* --- Duração da transição --- */
+  const durationSlider = slider({
+    label: 'Duração da transição, em segundos',
+    min: MIN_DURATION,
+    max: MAX_DURATION,
+    step: 0.1,
+    value: body.duration,
+    format: (value) => `${value.toFixed(1)} s`,
+    onInput: (value) => host.setAftersDuration(value),
+  });
+  content.appendChild(
+    card(
+      h('h3', { text: 'Animação' }),
+      h('p', { class: 'muted', text: 'Quanto tempo a silhueta leva para chegar ao valor escolhido. A intensidade não muda: só o tempo da transição.' }),
+      durationSlider,
+    ),
+  );
+
+  /* --- Presets --- */
+  const presets = h('ul', { class: 'list', attrs: { 'aria-label': 'Presets Afters' } });
+  for (const preset of AFTERS_PRESETS) {
+    const selected = body.preset === preset.id;
+    const item = h(
+      'button',
+      { class: selected ? 'list-btn is-on' : 'list-btn', attrs: { type: 'button', 'aria-pressed': String(selected) } },
+      h('span', { class: 'tagdot tagdot--muted', text: `${preset.bust}/${preset.curve}` }),
+      h('span', {}, preset.name, h('small', { text: preset.description })),
+    );
+    item.addEventListener('click', () => {
+      host.applyAftersPreset(preset.id);
+      refresh();
+    });
+    presets.appendChild(h('li', {}, item));
+  }
+  content.appendChild(card(h('h3', { text: 'Presets' }), presets));
+
+  /* --- Assinatura estética (produtos, cor, brilho) --- */
+  const active = config.productId;
+  const products = h('ul', { class: 'list', attrs: { 'aria-label': 'Assinatura estética' } });
+  for (const product of AFTERS_PRODUCTS) {
+    const selected = product.id === active;
+    const swatch = h('span', { class: 'swatch' });
+    swatch.style.background = product.color;
+    const item = h(
+      'button',
+      { class: selected ? 'list-btn is-on' : 'list-btn', attrs: { type: 'button', 'aria-pressed': String(selected) } },
+      swatch,
+      h('span', {}, product.name, h('small', { text: product.tagline })),
+    );
+    item.addEventListener('click', () => {
+      host.setAfters({ productId: selected ? null : product.id, color: selected ? config.color : product.color });
+      refresh();
+    });
+    products.appendChild(h('li', {}, item));
+  }
+  content.appendChild(
+    card(
+      h('h3', { text: 'Assinatura estética' }),
+      h('p', { class: 'muted', text: 'Anel de presença, halo e partículas em volta do corpo. Funciona junto com a transformação de silhueta ou sozinho.' }),
+      products,
+    ),
+  );
+
+  const colors = ['#ff8fc0', '#c9a2ff', '#7fd6ff', '#ffd84a', '#ff6f91', '#9a7bff', '#24e08a', '#ffffff'];
+  const palette = h('div', { class: 'palette', attrs: { role: 'group', 'aria-label': 'Cor do efeito' } });
+  for (const color of colors) {
+    const swatch = h('button', {
+      class: config.color === color ? 'swatch swatch--pick is-on' : 'swatch swatch--pick',
+      attrs: { type: 'button', 'aria-label': `Cor ${color}`, 'aria-pressed': String(config.color === color) },
+    });
+    swatch.style.background = color;
+    swatch.addEventListener('click', () => {
+      host.setAfters({ color });
+      refresh();
+    });
+    palette.appendChild(swatch);
+  }
+
+  content.appendChild(
+    card(
+      h('h3', { text: 'Ajustes do brilho' }),
+      palette,
+      slider({
+        label: 'Intensidade do brilho',
+        min: 0,
+        max: 1,
+        step: 0.05,
+        value: config.intensity,
+        format: (value) => `${Math.round(value * 100)}%`,
+        onInput: (value) => host.setAfters({ intensity: value }),
+      }),
+      h('div', { class: 'row' }, h('span', { text: 'Partículas' }), toggle('Partículas', config.particles, (value) => host.setAfters({ particles: value }))),
+      h('div', { class: 'row' }, h('span', { text: 'Som de confirmação' }), toggle('Som de confirmação', config.sound, (value) => host.setAfters({ sound: value }))),
+    ),
+  );
+}

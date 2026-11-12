@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { AftersBodySystem } from '../../src/afters/AftersBodySystem';
 import { AFTERS_PRODUCTS, defaultAftersConfig, type AftersConfig } from '../../src/afters/AftersCatalog';
+import { AFTERS_PRESETS, fromPercent, getAftersPreset, toPercent } from '../../src/afters/AftersState';
 import { MemoryFlags, DialogueRunner } from '../../src/characters/Dialogue';
 import { PANTHEON, getCharacter } from '../../src/characters/Pantheon';
 import { EdenSocial } from '../../src/edenos/EdenSocial';
@@ -19,6 +21,8 @@ import { DialogueScreen } from '../../src/interface/DialogueScreen';
 function makeHost(overrides: Partial<EdenAppsHost> = {}) {
   const social = new EdenSocial();
   let afters: AftersConfig = defaultAftersConfig();
+  // Sistema real: as telas conversam com a mesma lógica usada no jogo.
+  const bodySystem = new AftersBodySystem();
   let music = { enabled: true, volume: 0.55 };
   const calls = { camera: 0, deleted: [] as string[] };
   const host: EdenAppsHost = {
@@ -51,9 +55,23 @@ function makeHost(overrides: Partial<EdenAppsHost> = {}) {
         hasFlag: () => false,
       }),
     library: () => libraryFor(() => false),
-    afters: () => afters,
+    afters: () => ({ ...afters, body: bodySystem.current }),
     setAfters: (patch) => {
-      afters = { ...afters, ...patch };
+      afters = { ...afters, ...patch, body: bodySystem.current };
+    },
+    aftersBody: () => bodySystem.current,
+    aftersStatus: () => bodySystem.status,
+    setAftersIntensity: (channel, percent) => bodySystem.setIntensity(channel, fromPercent(percent)),
+    setAftersActive: (channel, active) => bodySystem.setActive(channel, active),
+    setAftersCombined: (active) => bodySystem.setCombined(active),
+    setAftersDuration: (seconds) => bodySystem.setDuration(seconds),
+    applyAftersPreset: (id) => {
+      const preset = getAftersPreset(id);
+      if (preset) bodySystem.applyPreset(preset);
+    },
+    aftersAllOff: () => {
+      bodySystem.turnOff();
+      afters = { ...afters, productId: null, body: bodySystem.current };
     },
     musicEnabled: () => music.enabled,
     musicVolume: () => music.volume,
@@ -62,7 +80,7 @@ function makeHost(overrides: Partial<EdenAppsHost> = {}) {
     },
     ...overrides,
   };
-  return { host, social, calls, state: () => ({ afters, music }) };
+  return { host, social, calls, bodySystem, state: () => ({ afters: { ...afters, body: bodySystem.current }, music }) };
 }
 
 let content: HTMLDivElement;
@@ -214,7 +232,7 @@ describe('Afters', () => {
     host.setAfters({ unlocked: true });
     const refresh = vi.fn();
     buildAfters(host, content, refresh);
-    const items = content.querySelectorAll('.list-btn');
+    const items = content.querySelectorAll('[aria-label="Assinatura estética"] .list-btn');
     expect(items.length).toBe(AFTERS_PRODUCTS.length);
     items[0].dispatchEvent(new Event('click'));
     expect(state().afters.productId).toBe(AFTERS_PRODUCTS[0].id);
@@ -240,20 +258,168 @@ describe('Afters', () => {
     expect(swatches.length).toBeGreaterThan(4);
     swatches[2].click();
     expect(state().afters.color).toBe('#7fd6ff');
-    const range = content.querySelector<HTMLInputElement>('input[type="range"]');
+    const range = content.querySelector<HTMLInputElement>('input[aria-label="Intensidade do brilho"]');
     expect(range).not.toBeNull();
     range!.value = '0.3';
     range!.dispatchEvent(new Event('input'));
     expect(state().afters.intensity).toBeCloseTo(0.3, 5);
   });
 
-  it('descreve o efeito como estético, sem anatomia', () => {
+  it('fala de silhueta estilizada, sem descrição anatômica', () => {
     const { host } = makeHost();
     host.setAfters({ unlocked: true });
     buildAfters(host, content, () => {});
     const lower = text().toLowerCase();
-    expect(lower).toContain('aura');
-    for (const forbidden of ['seio', 'busto', 'peito', 'nádega', 'quadril', 'decote']) expect(lower).not.toContain(forbidden);
+    expect(lower).toContain('silhueta');
+    expect(lower).toContain('partículas');
+    // As marcas AfterBust® e AfterCurve® aparecem; o vocabulário anatômico, não.
+    for (const forbidden of ['seio', 'peito', 'nádega', 'bumbum', 'decote', 'cintura fina']) expect(lower).not.toContain(forbidden);
+  });
+});
+
+describe('Afters · painel de silhueta', () => {
+  it('mostra os dois canais com leitura numérica e controle de 0 a 250', () => {
+    const { host } = makeHost();
+    host.setAfters({ unlocked: true });
+    buildAfters(host, content, () => {});
+    const bust = content.querySelector<HTMLInputElement>('input[aria-label^="Intensidade de AfterBust"]');
+    const curve = content.querySelector<HTMLInputElement>('input[aria-label^="Intensidade de AfterCurve"]');
+    expect(bust).not.toBeNull();
+    expect(curve).not.toBeNull();
+    for (const range of [bust!, curve!]) {
+      expect(range.min).toBe('0');
+      expect(range.max).toBe('250');
+    }
+    expect(text()).toContain('AfterBust®');
+    expect(text()).toContain('AfterCurve®');
+    expect(text()).toContain('0%');
+  });
+
+  it('arrastar o slider muda o estado do jogo na hora', () => {
+    const { host, bodySystem } = makeHost();
+    host.setAfters({ unlocked: true });
+    buildAfters(host, content, () => {});
+    const bust = content.querySelector<HTMLInputElement>('input[aria-label^="Intensidade de AfterBust"]')!;
+    bust.value = '175';
+    bust.dispatchEvent(new Event('input'));
+    expect(toPercent(bodySystem.current.bust)).toBe(175);
+    const readout = content.querySelector('.afters__percent');
+    expect(readout?.textContent).toBe('175%');
+  });
+
+  it('cada canal liga e desliga sozinho', () => {
+    const { host, bodySystem } = makeHost();
+    host.setAfters({ unlocked: true });
+    host.setAftersIntensity('bust', 100);
+    host.setAftersIntensity('curve', 100);
+    const refresh = vi.fn();
+    buildAfters(host, content, refresh);
+    const switches = content.querySelectorAll<HTMLButtonElement>('.afters__channel button[role="switch"]');
+    expect(switches.length).toBe(2);
+    switches[0].click();
+    expect(bodySystem.current.bustActive).toBe(true);
+    expect(bodySystem.current.curveActive).toBe(false);
+    switches[1].click();
+    expect(bodySystem.current.curveActive).toBe(true);
+    expect(refresh).toHaveBeenCalledTimes(2);
+  });
+
+  it('os atalhos de porcentagem existem e funcionam', () => {
+    const { host, bodySystem } = makeHost();
+    host.setAfters({ unlocked: true });
+    buildAfters(host, content, () => {});
+    const chips = content.querySelectorAll<HTMLButtonElement>('.afters__steps .chip');
+    expect([...chips].map((chip) => chip.textContent)).toContain('250%');
+    const max = [...chips].find((chip) => chip.textContent === '250%')!;
+    max.click();
+    expect(toPercent(bodySystem.current.bust)).toBe(250);
+  });
+
+  it('o modo combinado liga os dois de uma vez', () => {
+    const { host, bodySystem } = makeHost();
+    host.setAfters({ unlocked: true });
+    buildAfters(host, content, () => {});
+    const both = [...content.querySelectorAll('button')].find((item) => item.textContent?.includes('Ligar os dois'));
+    expect(both).toBeDefined();
+    both?.click();
+    expect(bodySystem.current.bustActive).toBe(true);
+    expect(bodySystem.current.curveActive).toBe(true);
+  });
+
+  it('"desligar tudo" zera a silhueta e a assinatura estética', () => {
+    const { host, bodySystem, state } = makeHost();
+    host.setAfters({ unlocked: true, productId: AFTERS_PRODUCTS[0].id });
+    host.setAftersIntensity('bust', 200);
+    host.setAftersCombined(true);
+    buildAfters(host, content, () => {});
+    const off = [...content.querySelectorAll('button')].find((item) => item.textContent?.includes('Desligar tudo'));
+    off?.click();
+    expect(bodySystem.current.bustActive).toBe(false);
+    expect(bodySystem.current.curveActive).toBe(false);
+    expect(state().afters.productId).toBeNull();
+    // A intensidade escolhida fica guardada para quando religar.
+    expect(toPercent(bodySystem.current.bust)).toBe(200);
+  });
+
+  it('a duração da animação é um controle separado da intensidade', () => {
+    const { host, bodySystem } = makeHost();
+    host.setAfters({ unlocked: true });
+    host.setAftersIntensity('bust', 150);
+    buildAfters(host, content, () => {});
+    const duration = content.querySelector<HTMLInputElement>('input[aria-label^="Duração da transição"]')!;
+    expect(duration).not.toBeNull();
+    duration.value = '3.4';
+    duration.dispatchEvent(new Event('input'));
+    expect(bodySystem.current.duration).toBeCloseTo(3.4, 5);
+    // Mudar o tempo não mexe na porcentagem.
+    expect(toPercent(bodySystem.current.bust)).toBe(150);
+  });
+
+  it('os presets aplicam os dois canais de verdade', () => {
+    const { host, bodySystem } = makeHost();
+    host.setAfters({ unlocked: true });
+    buildAfters(host, content, () => {});
+    const items = [...content.querySelectorAll<HTMLButtonElement>('[aria-label="Presets Afters"] .list-btn')];
+    expect(items.length).toBe(AFTERS_PRESETS.length);
+    const palco = items[AFTERS_PRESETS.findIndex((preset) => preset.id === 'palco')];
+    palco.click();
+    expect(toPercent(bodySystem.current.bust)).toBe(175);
+    expect(toPercent(bodySystem.current.curve)).toBe(125);
+  });
+
+  it('mostra a situação atual, inclusive o modo combinado', () => {
+    const { host } = makeHost();
+    host.setAfters({ unlocked: true });
+    host.setAftersIntensity('bust', 100);
+    host.setAftersIntensity('curve', 50);
+    host.setAftersCombined(true);
+    buildAfters(host, content, () => {});
+    expect(text()).toContain('Modo combinado');
+    expect(text()).toContain('100%');
+    expect(text()).toContain('50%');
+  });
+
+  it('não tem botão de enfeite: todo controle chama o jogo', () => {
+    const { host } = makeHost();
+    host.setAfters({ unlocked: true });
+    const touched: string[] = [];
+    const spy: typeof host = {
+      ...host,
+      setAfters: (patch) => touched.push(`setAfters:${Object.keys(patch).join(',')}`),
+      setAftersIntensity: (channel) => touched.push(`intensity:${channel}`),
+      setAftersActive: (channel) => touched.push(`active:${channel}`),
+      setAftersCombined: () => touched.push('combined'),
+      setAftersDuration: () => touched.push('duration'),
+      applyAftersPreset: (id) => touched.push(`preset:${id}`),
+      aftersAllOff: () => touched.push('off'),
+    };
+    buildAfters(spy, content, () => {});
+    const buttons = [...content.querySelectorAll<HTMLButtonElement>('button')];
+    expect(buttons.length).toBeGreaterThan(10);
+    for (const item of buttons) item.click();
+    for (const range of content.querySelectorAll<HTMLInputElement>('input[type="range"]')) range.dispatchEvent(new Event('input'));
+    // Cada botão e cada slider desta tela chamou alguma ação do jogo.
+    expect(touched.length).toBeGreaterThanOrEqual(buttons.length);
   });
 });
 

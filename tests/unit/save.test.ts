@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { defaultAftersBody } from '../../src/afters/AftersState';
 import { WORLD } from '../../src/core/Config';
 import { DEFAULT_APPEARANCE } from '../../src/player/AvatarAppearance';
 import { ProgressSystem } from '../../src/systems/ProgressSystem';
@@ -344,7 +345,7 @@ describe('salvamento v2 (EdenOS, Afters e bandeiras)', () => {
     const save = createNewSave(NOW);
     save.flags = ['conheceu-luma'];
     save.social = { contacts: ['luma'], citizens: ['Gael Brisa'], photos: [], readThreads: [] };
-    save.afters = { unlocked: true, productId: 'afterlove', color: '#ff6f91', intensity: 0.8, particles: false, sound: true };
+    save.afters = { unlocked: true, productId: 'afterlove', color: '#ff6f91', intensity: 0.8, particles: false, sound: true, body: defaultAftersBody() };
     expect(system.save(save)).toBe(true);
     const loaded = system.load();
     expect(loaded.status).toBe('carregado');

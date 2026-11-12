@@ -24,6 +24,11 @@ describe('grafo de módulos', () => {
       import('../../src/edenos/Library'),
       import('../../src/afters/AftersSystem'),
       import('../../src/afters/AftersCatalog'),
+      import('../../src/afters/AftersBodySystem'),
+      import('../../src/afters/AftersMorph'),
+      import('../../src/afters/AftersNet'),
+      import('../../src/afters/AftersState'),
+      import('../../src/interface/AftersApp'),
       import('../../src/interface/EdenApps'),
       import('../../src/interface/EdenPhoneUI'),
       import('../../src/interface/DialogueScreen'),
@@ -34,8 +39,12 @@ describe('grafo de módulos', () => {
   it('registra os sistemas novos com ids distintos no registro de sistemas', async () => {
     const { NpcSystem } = await import('../../src/npc/NpcSystem');
     const { AftersSystem } = await import('../../src/afters/AftersSystem');
+    const { AftersBodySystem } = await import('../../src/afters/AftersBodySystem');
     expect(NpcSystem.prototype.id ?? 'npcs').toBeTruthy();
     expect(AftersSystem.prototype.id ?? 'afters').toBeTruthy();
+    // Os dois sistemas Afters convivem: aura e silhueta têm ids distintos.
+    expect(new AftersBodySystem().id).toBe('afters-body');
+    expect(AftersSystem.prototype.id ?? 'afters').not.toBe('afters-body');
     expect(typeof NpcSystem.prototype.update).toBe('function');
     expect(typeof AftersSystem.prototype.update).toBe('function');
     expect(typeof NpcSystem.prototype.dispose).toBe('function');

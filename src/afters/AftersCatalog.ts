@@ -2,13 +2,21 @@
  * Catálogo Afters — a linha BET (Body Expansion Tech) do Éden Aero,
  * assinada por Luma.
  *
- * No EDENWORLD a linha é representada como **personalização estética
- * abstrata**: aura, brilho, partículas, cor e intensidade, com transição
- * animada, som de confirmação e desligamento manual. Não há detalhe
- * anatômico nem enquadramento de câmera sobre o corpo.
+ * A linha tem duas camadas no EDENWORLD:
+ *
+ * 1. **Transformação de silhueta** (AfterBust® e AfterCurve®), de 0% a
+ *    250%, aplicada ao próprio avatar ao vivo — ver `AftersState.ts`,
+ *    `AftersBodySystem.ts` e `AftersMorph.ts`.
+ * 2. **Assinatura estética** (anel, halo e partículas em volta do corpo),
+ *    uma por produto — ver `AftersSystem.ts`.
+ *
+ * O avatar é estilizado, feito de primitivas sem detalhe anatômico, e
+ * continua assim: o que muda é o volume suave da região, com a roupa junto.
  *
  * Módulo puro: catálogo + validação de preferências (testável).
  */
+
+import { type AftersBody, defaultAftersBody, sanitizeAftersBody } from './AftersState';
 
 export type AftersSignature = 'halo' | 'orbita' | 'cascata' | 'brilho' | 'coracao' | 'veludo';
 
@@ -110,15 +118,25 @@ export interface AftersConfig {
   productId: string | null;
   /** Cor do efeito (hexadecimal). */
   color: string;
-  /** Intensidade visual (0–1). */
+  /** Intensidade visual da assinatura estética (0–1). */
   intensity: number;
   particles: boolean;
   /** Som ao ligar, desligar e trocar de produto. */
   sound: boolean;
+  /** Transformação de silhueta: AfterBust® e AfterCurve®. */
+  body: AftersBody;
 }
 
 export function defaultAftersConfig(): AftersConfig {
-  return { unlocked: false, productId: null, color: AFTERS_PRODUCTS[0].color, intensity: 0.6, particles: true, sound: true };
+  return {
+    unlocked: false,
+    productId: null,
+    color: AFTERS_PRODUCTS[0].color,
+    intensity: 0.6,
+    particles: true,
+    sound: true,
+    body: defaultAftersBody(),
+  };
 }
 
 const HEX = /^#[0-9a-f]{6}$/i;
@@ -137,5 +155,8 @@ export function sanitizeAftersConfig(raw: unknown): AftersConfig {
     intensity,
     particles: typeof source.particles === 'boolean' ? source.particles : base.particles,
     sound: typeof source.sound === 'boolean' ? source.sound : base.sound,
+    // Salvamentos anteriores à versão 2.0 dos Afters não têm este bloco:
+    // carregam com a silhueta original, sem perder o resto do progresso.
+    body: sanitizeAftersBody(source.body),
   };
 }

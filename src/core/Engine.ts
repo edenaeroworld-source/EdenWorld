@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import type { AftersConfig } from '../afters/AftersCatalog';
+import { fromPercent, getAftersPreset } from '../afters/AftersState';
+import { AftersBodySystem } from '../afters/AftersBodySystem';
 import { AftersSystem } from '../afters/AftersSystem';
 import { ThirdPersonCamera } from '../camera/ThirdPersonCamera';
 import { type DialogueEffect, DialogueRunner, MemoryFlags, type DialogueTree } from '../characters/Dialogue';
@@ -151,6 +153,7 @@ export class Engine {
   private player!: Player;
   private npcs!: NpcSystem;
   private afters!: AftersSystem;
+  private aftersBody!: AftersBodySystem;
   private edenSocial: EdenSocial;
   private story: MemoryFlags;
   private collectibles!: Collectibles;
@@ -365,6 +368,22 @@ export class Engine {
       }),
     );
     this.afters.setConfig(this.save.afters, false);
+    // Transformação de silhueta: escreve direto no avatar, quadro a quadro.
+    this.aftersBody = this.systems.register(
+      new AftersBodySystem({
+        onTransition: (_channel, from, to) => {
+          if (!this.save.afters.sound) return;
+          if (to > from + 0.01) this.audio.discovery();
+          else if (to < from - 0.01) this.audio.ui('close');
+        },
+        onChange: (body) => {
+          this.save.afters = { ...this.save.afters, body };
+          this.dirty = true;
+        },
+      }),
+    );
+    this.aftersBody.setAvatars([this.player.avatar]);
+    this.aftersBody.setBody(this.save.afters.body, false);
 
     // Registros do diário: uma entrada por placa com `entryId`.
     const seen = new Set<string>();
@@ -610,6 +629,7 @@ export class Engine {
     this.story = new MemoryFlags(this.save.flags);
     this.edenSocial = new EdenSocial(this.save.social);
     this.afters.setConfig(this.save.afters, false);
+    this.aftersBody.setBody(this.save.afters.body, false);
     this.collectibles.reset(() => false);
     this.world.city.sphere?.setMode(0);
     this.player.setAppearance(this.save.profile.appearance);
@@ -1029,7 +1049,7 @@ export class Engine {
           break;
         }
         case 'afters': {
-          const config: AftersConfig = { ...this.afters.current, unlocked: true };
+          const config: AftersConfig = { ...this.afters.current, unlocked: true, body: this.aftersBody.current };
           this.afters.setConfig(config, false);
           this.save.afters = config;
           this.hud.toast('Painel Afters liberado no EdenPhone.', 'sparkle', 5);
@@ -1179,7 +1199,7 @@ export class Engine {
     save.progress = this.progress.toData();
     save.flags = [...this.story.all];
     save.social = this.edenSocial.toData();
-    save.afters = this.afters.current;
+    save.afters = { ...this.afters.current, body: this.aftersBody.current };
     if (this.graphicsChosen && !this.qualityOverride) save.settings.graphics = { ...this.quality.graphics };
     const ok = this.saveSystem.save(save);
     // Armazenamento cheio ou bloqueado no meio da sessão: avisa uma única vez.
@@ -1304,11 +1324,29 @@ export class Engine {
           hasFlag: (flag) => this.story.has(flag),
         }),
       library: () => libraryFor((flag) => this.story.has(flag)),
-      afters: () => this.afters.current,
+      afters: () => ({ ...this.afters.current, body: this.aftersBody.current }),
       setAfters: (patch) => {
-        const next: AftersConfig = { ...this.afters.current, ...patch };
+        const next: AftersConfig = { ...this.afters.current, ...patch, body: this.aftersBody.current };
         this.afters.setConfig(next);
         this.save.afters = next;
+        this.dirty = true;
+      },
+      // Silhueta ao vivo: cada chamada muda o avatar no mesmo quadro, sem
+      // sair da cidade e sem interromper o movimento.
+      aftersBody: () => this.aftersBody.current,
+      aftersStatus: () => this.aftersBody.status,
+      setAftersIntensity: (channel, percent) => this.aftersBody.setIntensity(channel, fromPercent(percent)),
+      setAftersActive: (channel, active) => this.aftersBody.setActive(channel, active),
+      setAftersCombined: (active) => this.aftersBody.setCombined(active),
+      setAftersDuration: (seconds) => this.aftersBody.setDuration(seconds),
+      applyAftersPreset: (id) => {
+        const preset = getAftersPreset(id);
+        if (preset) this.aftersBody.applyPreset(preset);
+      },
+      aftersAllOff: () => {
+        this.aftersBody.turnOff();
+        this.afters.setConfig({ ...this.afters.current, productId: null });
+        this.save.afters = { ...this.afters.current, body: this.aftersBody.current };
         this.dirty = true;
       },
       musicEnabled: () => this.save.settings.audio.music > 0,
@@ -1602,7 +1640,7 @@ export class Engine {
         return true;
       },
       bandeiras: () => [...this.story.all],
-      afters: () => ({ ...this.afters.current }),
+      afters: () => ({ ...this.afters.current, body: this.aftersBody.current, silhueta: this.aftersBody.status }),
     };
     (window as unknown as Record<string, unknown>).__eden = api;
   }

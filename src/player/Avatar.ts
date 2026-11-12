@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { TAU } from '../utils/math';
+import { MAX_INTENSITY, Zone as MorphZone, aftersMorphGLSL } from '../afters/AftersMorph';
+import { TAU, clamp } from '../utils/math';
 import { Ch, type Pose } from './AvatarAnimator';
 import { type AvatarAppearance, DEFAULT_APPEARANCE } from './AvatarAppearance';
 
@@ -13,6 +14,12 @@ const FOREARM = 0.23;
 const WAIST = 0.06;
 const SHOULDER_Y = 0.37;
 const SHOULDER_X = 0.2;
+/** Afastamento lateral do quadril para cada perna. */
+const LEG_X = 0.095;
+/** Quanto o ombro abre por unidade de AfterBust® (0–2.5). */
+const SHOULDER_SPREAD = 0.034;
+/** Quanto a perna abre por unidade de AfterCurve® (0–2.5). */
+const LEG_SPREAD = 0.022;
 const NECK_Y = 0.48;
 
 type Hex = string | number;
@@ -45,11 +52,25 @@ class PartBuilder {
     return this;
   }
 
-  build(): THREE.BufferGeometry {
-    if (this.parts.length === 0) return new THREE.BufferGeometry();
+  /**
+   * @param zone zona de deformação dos Afters gravada em cada vértice
+   *   (`AftersMorph.Zone`). Todas as geometrias recebem o atributo, mesmo
+   *   as que nunca deformam, para o shader ser um só.
+   */
+  build(zone: number = MorphZone.None): THREE.BufferGeometry {
+    if (this.parts.length === 0) {
+      const empty = new THREE.BufferGeometry();
+      empty.setAttribute('position', new THREE.BufferAttribute(new Float32Array(0), 3));
+      empty.setAttribute('aZone', new THREE.BufferAttribute(new Float32Array(0), 1));
+      return empty;
+    }
     const merged = mergeGeometries(this.parts, false) ?? new THREE.BufferGeometry();
     for (const part of this.parts) part.dispose();
     this.parts.length = 0;
+    const count = merged.getAttribute('position')?.count ?? 0;
+    const zones = new Float32Array(count);
+    if (zone !== 0) zones.fill(zone);
+    merged.setAttribute('aZone', new THREE.BufferAttribute(zones, 1));
     merged.computeBoundingSphere();
     return merged;
   }
@@ -300,12 +321,14 @@ function buildGeometries(a: AvatarAppearance): JointGeometries {
   }
 
   return {
-    hips: hips.build(),
-    torso: torso.build(),
+    // O quadril leva a saia do vestido junto; a coxa recebe uma zona
+    // atenuada para a junção com o quadril não ficar estrangulada.
+    hips: hips.build(MorphZone.Curve),
+    torso: torso.build(MorphZone.Bust),
     head: head.build(),
     upperArm: upperArm.build(),
     forearm: forearm.build(),
-    thigh: thigh.build(),
+    thigh: thigh.build(MorphZone.Thigh),
     shin: shin.build(),
   };
 }
@@ -333,9 +356,15 @@ export class Avatar {
   private readonly shinR: THREE.Mesh;
   private readonly halo: THREE.Mesh;
   private readonly material: THREE.MeshStandardMaterial;
+  /** Material de profundidade com a mesma deformação: a sombra acompanha. */
+  private readonly depthMaterial: THREE.MeshDepthMaterial;
   private readonly haloMaterial: THREE.MeshBasicMaterial;
   /** Fração da cor própria somada à luz recebida (uniforme do shader). */
   private readonly fillUniform = { value: 0.1 };
+  /** Intensidade do AfterBust® aplicada à silhueta (0–2.5). */
+  private readonly bustUniform = { value: 0 };
+  /** Intensidade do AfterCurve® aplicada à silhueta (0–2.5). */
+  private readonly curveUniform = { value: 0 };
   private geometries: JointGeometries | null = null;
   private current: AvatarAppearance = DEFAULT_APPEARANCE;
 
@@ -347,16 +376,39 @@ export class Avatar {
     // roupas não fiquem acinzentadas na sombra (a luz ambiente é azulada).
     this.material.onBeforeCompile = (shader) => {
       shader.uniforms.avatarFill = this.fillUniform;
+      shader.uniforms.uBust = this.bustUniform;
+      shader.uniforms.uCurve = this.curveUniform;
       shader.fragmentShader = shader.fragmentShader
         .replace('#include <common>', '#include <common>\nuniform float avatarFill;')
         .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n\ttotalEmissiveRadiance += diffuseColor.rgb * avatarFill;');
+      // Afters: a silhueta é deformada na GPU, no espaço local da junta.
+      // Como o rig só gira juntas, a deformação continua correta andando,
+      // correndo, nadando ou sentado — e a roupa vai junto, porque está na
+      // mesma malha fundida.
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', `#include <common>\n${aftersMorphGLSL()}`)
+        .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\n\tobjectNormal = edenAftersNormal(position, objectNormal);')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\n\ttransformed = edenAftersPosition(transformed);');
     };
-    this.material.customProgramCacheKey = () => 'eden-avatar-fill';
+    this.material.customProgramCacheKey = () => 'eden-avatar-fill-afters';
+
+    // O mapa de sombras usa um material próprio: sem isto a sombra do
+    // avatar continuaria com a silhueta antiga enquanto o corpo muda.
+    this.depthMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+    this.depthMaterial.onBeforeCompile = (shader) => {
+      shader.uniforms.uBust = this.bustUniform;
+      shader.uniforms.uCurve = this.curveUniform;
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', `#include <common>\n${aftersMorphGLSL()}`)
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\n\ttransformed = edenAftersPosition(transformed);');
+    };
+    this.depthMaterial.customProgramCacheKey = () => 'eden-avatar-depth-afters';
     this.haloMaterial = new THREE.MeshBasicMaterial({ color: 0xfff2a8, toneMapped: false });
 
     const mesh = (name: string): THREE.Mesh => {
       const m = new THREE.Mesh(new THREE.BufferGeometry(), this.material);
       m.name = name;
+      m.customDepthMaterial = this.depthMaterial;
       m.castShadow = true;
       m.receiveShadow = false;
       return m;
@@ -387,8 +439,8 @@ export class Avatar {
     this.armR.add(this.foreR);
     this.foreL.position.y = -UPPER_ARM;
     this.foreR.position.y = -UPPER_ARM;
-    this.legL.position.set(0.095, -0.02, 0);
-    this.legR.position.set(-0.095, -0.02, 0);
+    this.legL.position.set(LEG_X, -0.02, 0);
+    this.legR.position.set(-LEG_X, -0.02, 0);
     this.legL.add(this.shinL);
     this.legR.add(this.shinR);
     this.shinL.position.y = -THIGH;
@@ -422,6 +474,37 @@ export class Avatar {
     this.halo.visible = appearance.accessory === 'aureola';
     this.scaler.scale.setScalar(appearance.height);
     if (previous) for (const geometry of Object.values(previous)) geometry.dispose();
+  }
+
+  /**
+   * Transformação de silhueta dos Afters®, aplicada ao vivo.
+   *
+   * Escrever aqui custa dois `float`: não reconstrói geometria, não troca
+   * material e não interrompe a animação. `0, 0` devolve exatamente a
+   * silhueta original.
+   *
+   * @param bust intensidade do AfterBust® (0 a 2.5, ou seja 0% a 250%)
+   * @param curve intensidade do AfterCurve® (0 a 2.5)
+   */
+  setMorph(bust: number, curve: number): void {
+    const b = clamp(bust, 0, MAX_INTENSITY);
+    const c = clamp(curve, 0, MAX_INTENSITY);
+    this.bustUniform.value = b;
+    this.curveUniform.value = c;
+    // O rig acompanha: ombros e pernas abrem um pouco, como fariam em volta
+    // de um corpo mais largo. São deslocamentos de junta, não deformação —
+    // braços e pernas continuam do mesmo tamanho, só não atravessam o corpo.
+    const shoulder = SHOULDER_X + b * SHOULDER_SPREAD;
+    this.armL.position.x = shoulder;
+    this.armR.position.x = -shoulder;
+    const leg = LEG_X + c * LEG_SPREAD;
+    this.legL.position.x = leg;
+    this.legR.position.x = -leg;
+  }
+
+  /** Intensidades em vigor neste instante (já limitadas). */
+  get morph(): { bust: number; curve: number } {
+    return { bust: this.bustUniform.value, curve: this.curveUniform.value };
   }
 
   /** Intensidade da luz de preenchimento (0 = só a luz do cenário). */
@@ -465,6 +548,7 @@ export class Avatar {
     this.geometries = null;
     this.halo.geometry.dispose();
     this.material.dispose();
+    this.depthMaterial.dispose();
     this.haloMaterial.dispose();
     this.root.removeFromParent();
   }

@@ -1,3 +1,4 @@
+import type { AftersNetState } from '../afters/AftersNet';
 import type { GameSystem } from '../core/GameSystem';
 import type { AvatarAppearance } from '../player/AvatarAppearance';
 
@@ -18,6 +19,15 @@ export interface RemotePlayerState {
   heading: number;
   /** Estado de animação (ex.: "walk", "sit"). */
   motion: string;
+  /**
+   * Transformação de silhueta Afters®, quando houver servidor.
+   *
+   * Campo opcional de propósito: hoje nada o preenche, porque o EDENWORLD
+   * não tem multijogador (`LocalSocial.online` é `false`). Ele existe para
+   * que a transformação já tenha um lugar definido no estado remoto — ver
+   * `src/afters/AftersNet.ts`.
+   */
+  afters?: AftersNetState;
 }
 
 export interface LocalPlayerState {
