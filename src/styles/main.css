@@ -851,11 +851,14 @@ button {
 
 .hud__banner {
   position: absolute;
-  top: 26%;
+  top: calc(26% - 20px);
   left: 0;
   right: 0;
+  padding: 20px 0 26px;
   text-align: center;
   color: #fff;
+  /* Névoa azul atrás do título: mantém o texto legível sobre o piso claro e o céu. */
+  background: radial-gradient(ellipse 44% 62% at 50% 52%, rgba(6, 66, 146, 0.46), rgba(6, 66, 146, 0.2) 55%, transparent 80%);
   pointer-events: none;
   opacity: 0;
 }
@@ -871,17 +874,19 @@ button {
   letter-spacing: 0.4em;
   text-indent: 0.4em;
   text-transform: uppercase;
-  text-shadow: 0 2px 10px rgba(4, 50, 120, 0.8);
+  text-shadow:
+    0 1px 2px rgba(3, 36, 92, 0.7),
+    0 2px 10px rgba(4, 50, 120, 0.8);
 }
 
 .hud__banner-main {
   display: block;
   font-size: clamp(1.7rem, 5.4vw, 3.1rem);
-  font-weight: 300;
+  font-weight: 400;
   letter-spacing: 0.06em;
   text-shadow:
-    0 2px 16px rgba(4, 50, 120, 0.75),
-    0 0 40px rgba(120, 230, 255, 0.7);
+    0 1px 3px rgba(3, 36, 92, 0.65),
+    0 2px 16px rgba(4, 50, 120, 0.8);
 }
 
 @keyframes banner {
@@ -1940,7 +1945,7 @@ input[type='range']::-moz-range-thumb {
   }
 
   .hud__banner {
-    top: 31%;
+    top: calc(31% - 20px);
   }
 
   .hud__banner-main {
