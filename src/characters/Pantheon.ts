@@ -523,7 +523,8 @@ const LUMA: EdenCharacter = {
     title: 'Luma e a tecnologia Afters',
     paragraphs: [
       'Luma liberou o painel Afters no meu EdenPhone. Afters é a marca de BET — Body Expansion Tech — do Éden Aero.',
-      'No Éden, a linha serve para expressão: aura, brilho, contorno de presença, cor e intensidade. Tudo com desligamento manual, por causa da BlueBloom.',
+      'AfterBust® e AfterCurve® mudam a silhueta do avatar ao vivo, de 0% a 250%, cada um com o seu controle. Os outros produtos são luz: aura, brilho, contorno de presença.',
+      'Tudo com desligamento manual e botão de reiniciar, por causa da BlueBloom.',
       'Ela repetiu três vezes: a configuração é sua, o corpo é seu, e ninguém precisa de permissão para mudar de ideia.',
     ],
   },
@@ -552,8 +553,9 @@ const LUMA: EdenCharacter = {
         id: 'afters',
         text: [
           'Afters é a nossa família de produtos: AfterBust®, AfterCurve®, GelGrow®, CandyGrow®, AfterLove e AfterVelvet.',
-          'Cada um tem uma assinatura própria de luz, movimento e som. No Éden eles são usados como estética — aura, contorno, presença.',
-          'Acabei de liberar o painel Afters no seu EdenPhone. Escolha o produto, a cor, a intensidade e o que acontece na transição.',
+          'Os dois primeiros mudam a silhueta do seu avatar de verdade: AfterBust® trabalha a parte de cima, AfterCurve® a de baixo. De 0% a 250%, cada um no seu controle, juntos ou separados.',
+          'A mudança acontece ao vivo, aqui mesmo na cidade — você pode continuar andando enquanto ajusta. Os outros quatro são só luz: aura, partículas, brilho.',
+          'Acabei de liberar o painel no seu EdenPhone. Escolha a porcentagem, o tempo da transição e, se quiser, a luz de assinatura.',
         ],
         effects: [
           { kind: 'afters', id: 'liberado' },

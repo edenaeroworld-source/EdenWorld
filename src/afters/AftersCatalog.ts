@@ -16,7 +16,7 @@
  * Módulo puro: catálogo + validação de preferências (testável).
  */
 
-import { type AftersBody, defaultAftersBody, sanitizeAftersBody } from './AftersState';
+import { type AftersBody, type AftersChannelId, defaultAftersBody, sanitizeAftersBody } from './AftersState';
 
 export type AftersSignature = 'halo' | 'orbita' | 'cascata' | 'brilho' | 'coracao' | 'veludo';
 
@@ -26,6 +26,14 @@ export interface AftersProduct {
   name: string;
   tagline: string;
   description: string;
+  /**
+   * Canal de transformação que este produto acompanha.
+   *
+   * AfterBust® e AfterCurve® **são** transformações de silhueta; a luz é só
+   * a assinatura delas, e por isso mora dentro da própria seção do produto.
+   * Os demais produtos não transformam nada: são efeitos complementares.
+   */
+  channel?: AftersChannelId;
   /** Assinatura visual do produto. */
   signature: AftersSignature;
   /** Cor sugerida (o jogador pode trocar). */
@@ -42,8 +50,9 @@ export const AFTERS_PRODUCTS: readonly AftersProduct[] = [
   {
     id: 'afterbust',
     name: 'AfterBust®',
-    tagline: 'Presença que entra na sala antes de você.',
-    description: 'Halo luminoso amplo e constante em torno da silhueta, com pulso lento no ritmo da respiração.',
+    tagline: 'Transformação da silhueta superior, de 0% a 250%.',
+    description: 'Muda o volume do tronco do avatar ao vivo. O halo luminoso é apenas a assinatura de luz do produto, opcional.',
+    channel: 'bust',
     signature: 'halo',
     color: '#ff8fc0',
     particles: 0.45,
@@ -53,8 +62,9 @@ export const AFTERS_PRODUCTS: readonly AftersProduct[] = [
   {
     id: 'aftercurve',
     name: 'AfterCurve®',
-    tagline: 'Movimento desenhado em luz.',
-    description: 'Linhas curvas de luz que orbitam o corpo e acompanham cada mudança de direção.',
+    tagline: 'Transformação da silhueta inferior, de 0% a 250%.',
+    description: 'Muda o volume do quadril e do topo da coxa ao vivo. As linhas de luz em órbita são apenas a assinatura do produto, opcional.',
+    channel: 'curve',
     signature: 'orbita',
     color: '#c9a2ff',
     particles: 0.75,
@@ -109,6 +119,19 @@ export const AFTERS_PRODUCTS: readonly AftersProduct[] = [
 
 export function getAftersProduct(id: string): AftersProduct | undefined {
   return AFTERS_PRODUCTS.find((product) => product.id === id);
+}
+
+/** Os dois produtos que transformam o avatar, na ordem da interface. */
+export const TRANSFORM_PRODUCTS: readonly AftersProduct[] = AFTERS_PRODUCTS.filter((product) => product.channel !== undefined);
+
+/** Produtos que só acrescentam efeito em volta do corpo. */
+export const SUPPLEMENTARY_PRODUCTS: readonly AftersProduct[] = AFTERS_PRODUCTS.filter((product) => product.channel === undefined);
+
+/** Produto de transformação de um canal (`bust` → AfterBust®). */
+export function productForChannel(channel: AftersChannelId): AftersProduct {
+  const product = TRANSFORM_PRODUCTS.find((item) => item.channel === channel);
+  if (!product) throw new Error(`Canal Afters sem produto: ${channel}`);
+  return product;
 }
 
 export interface AftersConfig {

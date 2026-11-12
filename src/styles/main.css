@@ -2378,6 +2378,23 @@ input[type='range']::-moz-range-thumb {
   font-size: 0.74rem;
 }
 
+.afters__actions {
+  justify-content: space-between;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(27, 130, 234, 0.18);
+}
+
+.afters__glow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.afters__glow .muted {
+  font-size: 0.78rem;
+}
+
 .tagdot--muted {
   background: linear-gradient(180deg, #8fe6ff, #1f95ea);
   font-variant-numeric: tabular-nums;

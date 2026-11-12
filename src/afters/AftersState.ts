@@ -175,6 +175,24 @@ export function allOff(body: AftersBody): AftersBody {
 }
 
 /**
+ * Volta um canal ao padrão de fábrica: 0% e desligado.
+ *
+ * É diferente de desligar. O interruptor guarda a porcentagem escolhida
+ * para quando o canal voltar; o reinício apaga essa escolha.
+ */
+export function resetChannel(body: AftersBody, channel: AftersChannelId): AftersBody {
+  const next: AftersBody =
+    channel === 'bust' ? { ...body, bust: 0, bustActive: false } : { ...body, curve: 0, curveActive: false };
+  next.preset = matchingPreset(next)?.id ?? null;
+  return next;
+}
+
+/** Volta os dois canais e a duração ao padrão de fábrica. */
+export function resetAll(): AftersBody {
+  return defaultAftersBody();
+}
+
+/**
  * Valida preferências vindas do salvamento.
  *
  * Nunca lança: entrada inválida vira o padrão. Salvamentos antigos (sem o

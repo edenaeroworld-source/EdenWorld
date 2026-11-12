@@ -20,6 +20,7 @@ import {
 import { isNetStateSettled, sampleNetState, sanitizeNetState, toNetState } from '../../src/afters/AftersNet';
 import {
   AFTERS_PRESETS,
+  type AftersBody,
   INTENSITY_STEPS,
   MAX_PERCENT,
   allOff,
@@ -32,6 +33,7 @@ import {
   isNeutral,
   matchingPreset,
   nearestStep,
+  resetChannel,
   sanitizeAftersBody,
   statusLabel,
   toPercent,
@@ -278,6 +280,79 @@ describe('Afters 2.0 · desligar sem perder o outro', () => {
     expect(avatar.morph.bust).toBe(0);
     expect(system.status.bust.animating).toBe(false);
     system.dispose();
+  });
+});
+
+/* ------------------- 8.1 Reinício (padrão de fábrica) ------------------- */
+
+describe('Afters 2.0 · reiniciar', () => {
+  it('reiniciar um canal zera a porcentagem guardada', () => {
+    const { system, avatar } = makeSystem();
+    system.setIntensity('bust', fromPercent(225));
+    system.setActive('bust', true);
+    run(system, 3);
+    system.reset('bust');
+    run(system, 3);
+    expect(avatar.morph.bust).toBe(0);
+    expect(toPercent(system.current.bust)).toBe(0);
+    expect(system.current.bustActive).toBe(false);
+    // Religar depois do reinício começa do zero, não dos 225%.
+    system.setActive('bust', true);
+    run(system, 3);
+    expect(avatar.morph.bust).toBe(0);
+    system.dispose();
+  });
+
+  it('reiniciar um canal não encosta no outro', () => {
+    const { system, avatar } = makeSystem();
+    system.setIntensity('bust', fromPercent(150));
+    system.setIntensity('curve', fromPercent(200));
+    system.setCombined(true);
+    system.setDuration(2.4);
+    run(system, 4);
+    system.reset('curve');
+    run(system, 4);
+    expect(toPercent(avatar.morph.bust)).toBe(150);
+    expect(avatar.morph.curve).toBe(0);
+    expect(system.current.bustActive).toBe(true);
+    expect(system.current.duration).toBeCloseTo(2.4, 5);
+    system.dispose();
+  });
+
+  it('reiniciar tudo volta ao estado de fábrica', () => {
+    const { system, avatar } = makeSystem();
+    system.applyPreset(getAftersPreset('maximo')!);
+    system.setDuration(5.5);
+    run(system, 7);
+    system.resetAll();
+    run(system, 4);
+    expect(avatar.morph).toEqual({ bust: 0, curve: 0 });
+    expect(system.current).toEqual(defaultAftersBody());
+    system.dispose();
+  });
+
+  it('reiniciar avisa a interface, como qualquer outra mudança', () => {
+    const changes: AftersBody[] = [];
+    const system = new AftersBodySystem({ onChange: (body) => changes.push(body) });
+    system.setAvatars([new Avatar(DEFAULT_APPEARANCE)]);
+    system.setIntensity('curve', fromPercent(100));
+    const before = changes.length;
+    system.reset('curve');
+    expect(changes.length).toBeGreaterThan(before);
+    expect(toPercent(changes[changes.length - 1].curve)).toBe(0);
+    system.dispose();
+  });
+
+  it('reiniciar o estado puro é diferente de desligar', () => {
+    const body = { bust: 2, curve: 1, bustActive: true, curveActive: true, duration: 1.6, preset: null };
+    const off = allOff(body);
+    expect(off.bust).toBe(2);
+    expect(off.bustActive).toBe(false);
+    const reset = resetChannel(body, 'bust');
+    expect(reset.bust).toBe(0);
+    expect(reset.bustActive).toBe(false);
+    expect(reset.curve).toBe(1);
+    expect(reset.curveActive).toBe(true);
   });
 });
 

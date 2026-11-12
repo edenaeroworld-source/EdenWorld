@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AftersBodySystem } from '../../src/afters/AftersBodySystem';
-import { AFTERS_PRODUCTS, defaultAftersConfig, type AftersConfig } from '../../src/afters/AftersCatalog';
-import { AFTERS_PRESETS, fromPercent, getAftersPreset, toPercent } from '../../src/afters/AftersState';
+import { AFTERS_PRODUCTS, SUPPLEMENTARY_PRODUCTS, defaultAftersConfig, type AftersConfig } from '../../src/afters/AftersCatalog';
+import { AFTERS_PRESETS, defaultAftersBody, fromPercent, getAftersPreset, toPercent } from '../../src/afters/AftersState';
 import { MemoryFlags, DialogueRunner } from '../../src/characters/Dialogue';
 import { PANTHEON, getCharacter } from '../../src/characters/Pantheon';
 import { EdenSocial } from '../../src/edenos/EdenSocial';
@@ -69,6 +69,8 @@ function makeHost(overrides: Partial<EdenAppsHost> = {}) {
       const preset = getAftersPreset(id);
       if (preset) bodySystem.applyPreset(preset);
     },
+    resetAfters: (channel) => bodySystem.reset(channel),
+    resetAftersAll: () => bodySystem.resetAll(),
     aftersAllOff: () => {
       bodySystem.turnOff();
       afters = { ...afters, productId: null, body: bodySystem.current };
@@ -232,11 +234,12 @@ describe('Afters', () => {
     host.setAfters({ unlocked: true });
     const refresh = vi.fn();
     buildAfters(host, content, refresh);
-    const items = content.querySelectorAll('[aria-label="Assinatura estética"] .list-btn');
-    expect(items.length).toBe(AFTERS_PRODUCTS.length);
+    const items = content.querySelectorAll('[aria-label="Efeitos complementares"] .list-btn');
+    // Só os complementares: AfterBust® e AfterCurve® têm seção própria.
+    expect(items.length).toBe(SUPPLEMENTARY_PRODUCTS.length);
     items[0].dispatchEvent(new Event('click'));
-    expect(state().afters.productId).toBe(AFTERS_PRODUCTS[0].id);
-    expect(state().afters.color).toBe(AFTERS_PRODUCTS[0].color);
+    expect(state().afters.productId).toBe(SUPPLEMENTARY_PRODUCTS[0].id);
+    expect(state().afters.color).toBe(SUPPLEMENTARY_PRODUCTS[0].color);
     expect(refresh).toHaveBeenCalled();
   });
 
@@ -314,7 +317,7 @@ describe('Afters · painel de silhueta', () => {
     host.setAftersIntensity('curve', 100);
     const refresh = vi.fn();
     buildAfters(host, content, refresh);
-    const switches = content.querySelectorAll<HTMLButtonElement>('.afters__channel button[role="switch"]');
+    const switches = content.querySelectorAll<HTMLButtonElement>('.afters__channel .afters__head button[role="switch"]');
     expect(switches.length).toBe(2);
     switches[0].click();
     expect(bodySystem.current.bustActive).toBe(true);
@@ -359,6 +362,77 @@ describe('Afters · painel de silhueta', () => {
     expect(state().afters.productId).toBeNull();
     // A intensidade escolhida fica guardada para quando religar.
     expect(toPercent(bodySystem.current.bust)).toBe(200);
+  });
+
+  it('o botão Reiniciar zera o canal sem tocar no outro', () => {
+    const { host, bodySystem } = makeHost();
+    host.setAfters({ unlocked: true });
+    host.setAftersIntensity('bust', 200);
+    host.setAftersIntensity('curve', 125);
+    host.setAftersCombined(true);
+    buildAfters(host, content, () => {});
+    const resets = [...content.querySelectorAll<HTMLButtonElement>('button')].filter((item) =>
+      item.getAttribute('aria-label')?.startsWith('Reiniciar AfterBust'),
+    );
+    expect(resets.length).toBe(1);
+    resets[0].click();
+    expect(toPercent(bodySystem.current.bust)).toBe(0);
+    expect(bodySystem.current.bustActive).toBe(false);
+    // O AfterCurve® continua exatamente como estava.
+    expect(toPercent(bodySystem.current.curve)).toBe(125);
+    expect(bodySystem.current.curveActive).toBe(true);
+  });
+
+  it('cada produto tem o seu Reiniciar, e há um Reiniciar tudo', () => {
+    const { host, bodySystem } = makeHost();
+    host.setAfters({ unlocked: true });
+    host.setAftersIntensity('bust', 250);
+    host.setAftersIntensity('curve', 250);
+    host.setAftersCombined(true);
+    host.setAftersDuration(4);
+    buildAfters(host, content, () => {});
+    const labels = [...content.querySelectorAll<HTMLButtonElement>('button')]
+      .map((item) => item.getAttribute('aria-label') ?? item.textContent ?? '')
+      .filter((label) => label.includes('Reiniciar'));
+    expect(labels.some((label) => label.includes('AfterBust'))).toBe(true);
+    expect(labels.some((label) => label.includes('AfterCurve'))).toBe(true);
+    const all = [...content.querySelectorAll<HTMLButtonElement>('button')].find((item) => item.textContent?.includes('Reiniciar tudo'));
+    expect(all).toBeDefined();
+    all?.click();
+    expect(toPercent(bodySystem.current.bust)).toBe(0);
+    expect(toPercent(bodySystem.current.curve)).toBe(0);
+    expect(bodySystem.current.bustActive).toBe(false);
+    expect(bodySystem.current.curveActive).toBe(false);
+    expect(bodySystem.current.duration).toBeCloseTo(defaultAftersBody().duration, 5);
+  });
+
+  it('reiniciar é diferente de desligar: desligar guarda a porcentagem', () => {
+    const { host, bodySystem } = makeHost();
+    host.setAfters({ unlocked: true });
+    host.setAftersIntensity('bust', 175);
+    host.setAftersActive('bust', true);
+    buildAfters(host, content, () => {});
+    const off = [...content.querySelectorAll<HTMLButtonElement>('button')].find((item) => item.textContent?.includes('Desligar tudo'));
+    off?.click();
+    expect(toPercent(bodySystem.current.bust)).toBe(175);
+    host.resetAfters('bust');
+    expect(toPercent(bodySystem.current.bust)).toBe(0);
+  });
+
+  it('a luz de assinatura de cada produto fica na seção dele', () => {
+    const { host, state } = makeHost();
+    host.setAfters({ unlocked: true });
+    buildAfters(host, content, () => {});
+    const sections = content.querySelectorAll('.afters__channel');
+    expect(sections.length).toBe(2);
+    const glow = sections[0].querySelector<HTMLButtonElement>('.afters__glow button[role="switch"]');
+    expect(glow).not.toBeNull();
+    glow!.click();
+    expect(state().afters.productId).toBe('afterbust');
+    // E a lista de complementares não repete o produto.
+    const names = [...content.querySelectorAll('[aria-label="Efeitos complementares"] .list-btn')].map((item) => item.textContent ?? '');
+    expect(names.some((name) => name.includes('AfterBust'))).toBe(false);
+    expect(names.some((name) => name.includes('AfterCurve'))).toBe(false);
   });
 
   it('a duração da animação é um controle separado da intensidade', () => {
