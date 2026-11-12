@@ -28,7 +28,9 @@ export type InteractionPayload =
   | { type: 'telescopio'; view: ScenicView }
   | { type: 'atelie'; stand?: { x: number; z: number; heading: number } }
   | { type: 'holomapa' }
-  | { type: 'eventos' };
+  | { type: 'eventos' }
+  /** Conversa com um habitante: `personId` é o id do panteão ou a semente do cidadão. */
+  | { type: 'conversa'; personId: string; divino: boolean };
 
 export type InteractionType = InteractionPayload['type'];
 

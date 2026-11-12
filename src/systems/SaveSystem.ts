@@ -1,10 +1,15 @@
+import { type AftersConfig, defaultAftersConfig, sanitizeAftersConfig } from '../afters/AftersCatalog';
 import { STORAGE, WORLD } from '../core/Config';
+import { type SocialData, emptySocialData, sanitizeSocialData } from '../edenos/EdenSocial';
 import { type InputSettingsData, defaultInputSettings, sanitizeInputSettings } from '../input/InputSettings';
 import { type AvatarAppearance, DEFAULT_APPEARANCE, sanitizeAppearance, sanitizePlayerName } from '../player/AvatarAppearance';
 import { clamp } from '../utils/math';
 import { type GraphicsSettings, isQualityLevel } from './QualitySystem';
 
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
+
+/** Versões anteriores que ainda são carregadas e convertidas. */
+export const MIN_SAVE_VERSION = 1;
 
 export interface AudioSettings {
   master: number;
@@ -56,6 +61,12 @@ export interface SaveData {
   player: { x: number; y: number; z: number; heading: number } | null;
   world: { hours: number; day: number };
   progress: ProgressData;
+  /** Bandeiras de história marcadas nas conversas. */
+  flags: string[];
+  /** EdenOS: contatos, conversas e fotos (tudo local). */
+  social: SocialData;
+  /** Preferências dos Afters (BET). */
+  afters: AftersConfig;
   settings: {
     /** `null` = ainda não escolhido (detectar pelo dispositivo). */
     graphics: GraphicsSettings | null;
@@ -86,6 +97,9 @@ export function createNewSave(now: number = Date.now()): SaveData {
     player: null,
     world: { hours: WORLD.startHour, day: 1 },
     progress: emptyProgress(),
+    flags: [],
+    social: emptySocialData(),
+    afters: defaultAftersConfig(),
     settings: {
       graphics: null,
       audio: defaultAudioSettings(),
@@ -160,7 +174,7 @@ export function sanitizeGameplaySettings(raw: unknown): GameplaySettings {
  */
 export function sanitizeSave(raw: unknown, now: number = Date.now()): SaveData | null {
   if (!isRecord(raw)) return null;
-  if (typeof raw.version !== 'number' || raw.version < 1 || raw.version > SAVE_VERSION) return null;
+  if (typeof raw.version !== 'number' || raw.version < MIN_SAVE_VERSION || raw.version > SAVE_VERSION) return null;
   const base = createNewSave(now);
 
   const profile = isRecord(raw.profile) ? raw.profile : {};
@@ -208,6 +222,10 @@ export function sanitizeSave(raw: unknown, now: number = Date.now()): SaveData |
       playSeconds: num(progress.playSeconds, 0, 0, 1e9),
       sphereMode: Math.floor(num(progress.sphereMode, 0, 0, 16)),
     },
+    // Campos novos da versão 2: salvamentos antigos entram com o padrão.
+    flags: idList(raw.flags, 256),
+    social: sanitizeSocialData(raw.social),
+    afters: sanitizeAftersConfig(raw.afters),
     settings: {
       graphics: sanitizeGraphicsSettings(settings.graphics),
       audio: sanitizeAudioSettings(settings.audio),

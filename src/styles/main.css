@@ -1963,6 +1963,265 @@ input[type='range']::-moz-range-thumb {
   }
 }
 
+/* ==========================================================================
+   Conversas (panteão e habitantes)
+   ========================================================================== */
+
+.talk {
+  --talk: var(--aqua);
+  max-width: 620px;
+  border-top: 3px solid var(--talk);
+}
+
+.talk__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.talk__badge {
+  flex: none;
+  width: 46px;
+  height: 46px;
+  border: 2px solid rgba(255, 255, 255, 0.92);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.9) 0 16%, rgba(255, 255, 255, 0) 46%),
+    var(--talk);
+  box-shadow:
+    0 4px 14px rgba(6, 58, 120, 0.3),
+    inset 0 -6px 10px rgba(0, 0, 0, 0.12);
+}
+
+.talk__who {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.talk__role {
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+}
+
+.talk__place {
+  flex: none;
+  padding: 4px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.52);
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+.talk__text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6em;
+  max-height: min(46vh, 420px);
+  overflow-y: auto;
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+.talk__text p {
+  margin: 0;
+}
+
+.talk__text p:first-child {
+  font-size: 1.06rem;
+  color: var(--deep);
+}
+
+.talk__choices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.talk__choices .btn {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+/* ==========================================================================
+   Aplicativos do EdenOS (feed, fotos, conversas, acervo, Afters)
+   ========================================================================== */
+
+.eden-note {
+  margin: 0 0 10px;
+  padding: 7px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 12px;
+  background: rgba(8, 52, 110, 0.4);
+  font-size: 0.74rem;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.post + .post,
+.person + .person {
+  margin-top: 8px;
+}
+
+.post__head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 7px;
+}
+
+.post__head div {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.post__head b {
+  font-size: 0.95rem;
+  color: var(--deep);
+}
+
+.post__head small {
+  font-size: 0.74rem;
+  color: var(--ink-soft);
+}
+
+.post__avatar {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 2px solid rgba(255, 255, 255, 0.92);
+  border-radius: 50%;
+  box-shadow: inset 0 -4px 8px rgba(0, 0, 0, 0.12);
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(6, 40, 90, 0.5);
+}
+
+.person.is-unknown {
+  opacity: 0.78;
+}
+
+.person.is-unknown .post__avatar {
+  color: var(--ink-soft);
+  text-shadow: none;
+}
+
+.gram {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.gram__item {
+  position: relative;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 4px 12px rgba(4, 40, 100, 0.26);
+}
+
+.gram__img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  background: #2f9be8;
+}
+
+.gram__item figcaption {
+  padding: 5px 8px;
+  font-size: 0.7rem;
+  line-height: 1.25;
+  color: var(--ink-soft);
+}
+
+.gram__del {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  min-width: 0;
+  min-height: 0;
+  padding: 4px;
+  border-radius: 50%;
+}
+
+.bubble {
+  max-width: 86%;
+  margin: 0 0 8px;
+  padding: 9px 13px;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(222, 243, 255, 0.88));
+  box-shadow: 0 3px 10px rgba(4, 40, 100, 0.2);
+}
+
+.bubble p {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+.bubble--them {
+  border-bottom-left-radius: 5px;
+}
+
+.tagdot {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--rose);
+  font-size: 0.64rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.list-btn.is-on {
+  border-color: var(--blue);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(196, 234, 255, 0.92));
+  box-shadow:
+    0 0 0 2px rgba(27, 130, 234, 0.4),
+    0 4px 12px rgba(4, 40, 100, 0.26);
+}
+
+.list-btn .swatch {
+  width: 24px;
+  height: 24px;
+  border-width: 2px;
+}
+
+.palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 4px 0 12px;
+}
+
+.swatch--pick {
+  width: 32px;
+  height: 32px;
+}
+
+.swatch--pick.is-on {
+  outline: 3px solid var(--blue);
+  outline-offset: 2px;
+  transform: scale(1.08);
+}
+
+.app__badge--info {
+  background: rgba(27, 130, 234, 0.9);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .bubbles i,
   .touch-btn--interact {

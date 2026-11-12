@@ -1,5 +1,14 @@
 import * as THREE from 'three';
+import type { AftersConfig } from '../afters/AftersCatalog';
+import { AftersSystem } from '../afters/AftersSystem';
 import { ThirdPersonCamera } from '../camera/ThirdPersonCamera';
+import { type DialogueEffect, DialogueRunner, MemoryFlags, type DialogueTree } from '../characters/Dialogue';
+import { CHARACTER_JOURNAL, PANTHEON, getCharacter } from '../characters/Pantheon';
+import { EdenSocial } from '../edenos/EdenSocial';
+import { libraryFor } from '../edenos/Library';
+import { citizenGreeting } from '../npc/CitizenData';
+import { NpcSystem } from '../npc/NpcSystem';
+import { DialogueScreen } from '../interface/DialogueScreen';
 import { AREAS, BUILDINGS, PLAZA, SPAWN, areaAt, coastRadius } from '../cities/aurora-city/Layout';
 import { type EdenConnectService, OfflineEdenConnect } from '../eden-connect/EdenConnect';
 import { InputManager } from '../input/InputManager';
@@ -140,6 +149,10 @@ export class Engine {
   private save: SaveData;
   private progress: ProgressSystem;
   private player!: Player;
+  private npcs!: NpcSystem;
+  private afters!: AftersSystem;
+  private edenSocial: EdenSocial;
+  private story: MemoryFlags;
   private collectibles!: Collectibles;
   private interactions!: InteractionSystem;
   private journalEntries: Omit<JournalEntry, 'read'>[] = [];
@@ -177,6 +190,10 @@ export class Engine {
   private creatorDrag: { id: number; x: number } | null = null;
   private frames = 0;
   private lastDistance = 0;
+  /** Último volume de música usado (para o interruptor do EdenMusic). */
+  private musicMemory = 0.55;
+  /** A próxima foto vai para a galeria do EdenGram em vez do disco. */
+  private gramCapture = false;
   private disposed = false;
 
   /** Cria e inicia o jogo. Lança erro se o navegador não oferecer WebGL2. */
@@ -196,6 +213,9 @@ export class Engine {
     this.save = loaded.data;
     this.progress = new ProgressSystem(this.save.progress);
     this.loadStatus = loaded.status;
+    this.edenSocial = new EdenSocial(this.save.social);
+    this.story = new MemoryFlags(this.save.flags);
+    this.musicMemory = this.save.settings.audio.music > 0 ? this.save.settings.audio.music : 0.55;
     if (loaded.status === 'corrompido') console.warn('[Save] Salvamento inválido: iniciando um novo jogo.');
 
     // Qualidade gráfica: preferência salva, ou sugestão conforme o dispositivo.
@@ -319,6 +339,33 @@ export class Engine {
     this.collectibles = new Collectibles(city.collectibles, (id) => this.progress.hasCrystal(id));
     this.scene.add(this.collectibles.group);
 
+    loading.setProgress(0.92, 'Chamando os habitantes de Aurora…');
+    await nextFrame();
+    const field = this.world.heightField;
+    const zones = this.world.zones;
+    this.npcs = this.systems.register(
+      new NpcSystem({
+        scene: this.scene,
+        ground: (x, z) => field.getHeight(x, z),
+        blocked: (x, z) => {
+          if (Math.hypot(x, z) > WORLD.boundaryRadius - 8) return true;
+          if (field.getHeight(x, z) < WORLD.waterLevel + 0.35) return true;
+          return zones.has(x, z, Zone.Water | Zone.Building);
+        },
+        quality: this.quality.current,
+      }),
+    );
+    this.afters = this.systems.register(
+      new AftersSystem(this.scene, {
+        onSound: (kind) => {
+          if (kind === 'ligar') this.audio.discovery();
+          else if (kind === 'trocar') this.audio.ui('toggle');
+          else this.audio.ui('close');
+        },
+      }),
+    );
+    this.afters.setConfig(this.save.afters, false);
+
     // Registros do diário: uma entrada por placa com `entryId`.
     const seen = new Set<string>();
     for (const item of city.interactables) {
@@ -326,6 +373,8 @@ export class Engine {
       seen.add(item.payload.entryId);
       this.journalEntries.push({ id: item.payload.entryId, title: item.payload.title, paragraphs: item.payload.paragraphs });
     }
+    // Encontros com o panteão também viram registros do diário.
+    for (const entry of CHARACTER_JOURNAL) this.journalEntries.push(entry);
     this.progress.totals = { crystals: city.collectibles.length, entries: this.journalEntries.length, areas: AREAS.length, portals: city.portals.length };
     this.progress.retainKnown({
       crystals: city.collectibles.map((spot) => spot.id),
@@ -334,7 +383,7 @@ export class Engine {
       portals: city.portals.map((portal) => portal.id),
     });
 
-    this.interactions = new InteractionSystem(city.interactables);
+    this.interactions = new InteractionSystem([...city.interactables, ...this.npcs.interactables]);
     this.registerInteractions();
     this.interactions.onTargetChange = (item) => this.showPrompt(item);
     city.sphere?.setMode(this.progress.sphereMode);
@@ -345,6 +394,7 @@ export class Engine {
     this.quality.onChange((profile) => {
       this.renderer.setResolution(profile);
       this.world.applyQuality(profile);
+      this.npcs.applyQuality(profile);
       this.player.avatar.setShadows(profile.shadows);
       const size = this.renderer.size;
       this.world.setViewport(size.width, size.height, this.renderer.effectivePixelRatio, this.rig.fov);
@@ -550,10 +600,16 @@ export class Engine {
     this.save.player = null;
     this.save.world = fresh.world;
     this.save.progress = fresh.progress;
+    this.save.flags = fresh.flags;
+    this.save.social = fresh.social;
+    this.save.afters = fresh.afters;
     this.save.createdAt = fresh.createdAt;
     const totals = this.progress.totals;
     this.progress = new ProgressSystem(this.save.progress);
     this.progress.totals = totals;
+    this.story = new MemoryFlags(this.save.flags);
+    this.edenSocial = new EdenSocial(this.save.social);
+    this.afters.setConfig(this.save.afters, false);
     this.collectibles.reset(() => false);
     this.world.city.sphere?.setMode(0);
     this.player.setAppearance(this.save.profile.appearance);
@@ -881,30 +937,170 @@ export class Engine {
       this.audio.ui('open');
     });
 
+    interactions.register('conversa', (item, payload) => this.startConversation(item.id, payload.personId, payload.divino));
+
     interactions.register('atelie', (_item, payload) => this.openCreator(true, payload.stand));
     interactions.register('holomapa', () => this.openPhone('mapa'));
     interactions.register('eventos', () => this.openPhone('eventos'));
   }
 
-  private exitSpecialMode(): void {
-    if (this.mode !== 'scenic' && this.mode !== 'photo') return;
-    this.audio.ui('close');
-    this.resumePlay();
+  /** Abre a conversa com alguém do panteão ou com um habitante. */
+  private startConversation(interactableId: string, personId: string, divino: boolean): void {
+    if (this.ui.hasModal) return;
+    const speakerName = divino ? (getCharacter(personId)?.name ?? personId) : (this.npcs.citizenOf(interactableId)?.profile.name ?? 'Habitante');
+    const tree = divino ? this.pantheonDialogue(personId) : this.citizenDialogue(interactableId);
+    if (!tree) return;
+    const character = divino ? getCharacter(personId) : undefined;
+    const citizen = divino ? null : this.npcs.citizenOf(interactableId);
+    if (character) this.npcs.lookAt(character.id, this.player.position.x, this.player.position.z);
+    if (citizen) {
+      citizen.startTalking(this.player.position.x, this.player.position.z, 14);
+      if (this.edenSocial.meetCitizen(citizen.profile.name)) this.dirty = true;
+    }
+    const runner = new DialogueRunner(tree.tree, this.story, tree.start);
+    const screen = new DialogueScreen({
+      speaker: {
+        name: speakerName,
+        title: character?.title ?? citizen?.profile.archetype.label ?? 'Habitante de Aurora City',
+        color: character?.colors[0] ?? '#8fe6ff',
+        place: character?.place.label ?? this.areaName,
+      },
+      runner,
+      onEffects: (effects) => this.applyDialogueEffects(effects),
+      onClose: () => {
+        this.ui.close(screen);
+        this.interactions.clearTarget();
+      },
+    });
+    this.audio.ui('open');
+    this.ui.open(screen);
   }
 
-  private enterPhotoMode(): void {
+  private pantheonDialogue(id: string): { tree: DialogueTree; start?: string } | null {
+    const character = getCharacter(id);
+    if (!character) return null;
+    const knows = this.edenSocial.hasMet(id);
+    const hasReencontro = character.dialogue.nodes.some((node) => node.id === 'reencontro');
+    return { tree: character.dialogue, start: knows && hasReencontro ? 'reencontro' : undefined };
+  }
+
+  private citizenDialogue(interactableId: string): { tree: DialogueTree; start?: string } | null {
+    const citizen = this.npcs.citizenOf(interactableId);
+    if (!citizen) return null;
+    const lines = citizenGreeting(citizen.profile, {
+      period: this.world.environment.clock.period,
+      weather: this.world.environment.weather.label,
+      area: this.areaName,
+      playerName: this.save.profile.name,
+    });
+    const tree: DialogueTree = {
+      start: 'fala',
+      nodes: [
+        {
+          id: 'fala',
+          text: lines,
+          choices: [
+            { label: 'Acenar', effects: [{ kind: 'mensagem', id: 'acenar' }] },
+            { label: 'Boa conversa. Até mais!' },
+          ],
+        },
+      ],
+    };
+    return { tree };
+  }
+
+  private applyDialogueEffects(effects: readonly DialogueEffect[]): void {
+    for (const effect of effects) {
+      switch (effect.kind) {
+        case 'contato': {
+          if (this.edenSocial.meet(effect.id)) {
+            const character = getCharacter(effect.id);
+            this.hud.toast(`Novo contato no EdenPhone: ${character?.name ?? effect.id}`, 'people', 4.5);
+            this.audio.discovery();
+            this.dirty = true;
+          }
+          break;
+        }
+        case 'diario': {
+          if (this.progress.readEntry(effect.id)) {
+            this.hud.toast('Novo registro no seu Diário.', 'book', 3.6);
+            this.dirty = true;
+          }
+          break;
+        }
+        case 'afters': {
+          const config: AftersConfig = { ...this.afters.current, unlocked: true };
+          this.afters.setConfig(config, false);
+          this.save.afters = config;
+          this.hud.toast('Painel Afters liberado no EdenPhone.', 'sparkle', 5);
+          this.dirty = true;
+          break;
+        }
+        case 'mensagem': {
+          if (effect.id === 'acenar' && !this.player.motor.swimming) this.player.wave();
+          break;
+        }
+        case 'bandeira':
+          this.dirty = true;
+          break;
+      }
+    }
+  }
+
+  private exitSpecialMode(): void {
+    if (this.mode !== 'scenic' && this.mode !== 'photo') return;
+    const gram = this.gramCapture;
+    this.gramCapture = false;
+    this.audio.ui('close');
+    this.resumePlay();
+    // Voltou da câmera do EdenGram: reabre o aplicativo na galeria.
+    if (gram) this.openPhone('gram');
+  }
+
+  /**
+   * @param forGram quando verdadeiro, a próxima foto vai para a galeria do
+   *   EdenGram (dentro do jogo) em vez de ser baixada como arquivo.
+   */
+  private enterPhotoMode(forGram = false): void {
     this.ui.closeAll();
     this.interactions.clearTarget();
-    this.hud.setMode('photo', 'Modo foto · gire a câmera e ajuste o zoom');
+    this.gramCapture = forGram;
+    this.hud.setMode('photo', forGram ? 'EdenGram · enquadre e toque em Interagir para publicar' : 'Modo foto · gire a câmera e ajuste o zoom');
     this.setMode('photo');
+  }
+
+  /** Guarda a foto na galeria do EdenGram (miniatura JPEG, só neste aparelho). */
+  private storeGramPhoto(): void {
+    const source = this.canvas;
+    const width = 384;
+    const height = Math.max(1, Math.round((width * source.height) / Math.max(1, source.width)));
+    const thumb = document.createElement('canvas');
+    thumb.width = width;
+    thumb.height = height;
+    const ctx = thumb.getContext('2d');
+    if (!ctx) throw new Error('sem contexto 2d');
+    ctx.drawImage(source, 0, 0, width, height);
+    this.edenSocial.addPhoto({
+      id: `foto-${Date.now().toString(36)}`,
+      data: thumb.toDataURL('image/jpeg', 0.72),
+      place: this.areaName,
+      clock: this.world.environment.clock.label,
+      at: Date.now(),
+    });
+    this.hud.toast('Foto publicada no EdenGram (só neste aparelho).', 'camera', 4);
   }
 
   private capturePhoto(): void {
     if (this.mode !== 'photo') return;
     // O desenho precisa acontecer no mesmo instante da captura; a foto usa a
     // resolução nativa da tela, mesmo que o jogo esteja em resolução reduzida.
+    const toGram = this.gramCapture;
     try {
       this.renderer.renderForCapture(this.scene, this.rig.camera, () => {
+        if (toGram) {
+          this.storeGramPhoto();
+          return;
+        }
         this.canvas.toBlob((blob) => {
           if (!blob) {
             this.hud.toast('Não foi possível salvar a foto.', 'camera');
@@ -981,6 +1177,9 @@ export class Engine {
     const clock = this.world.environment.clock;
     save.world = { hours: clock.hours, day: clock.day };
     save.progress = this.progress.toData();
+    save.flags = [...this.story.all];
+    save.social = this.edenSocial.toData();
+    save.afters = this.afters.current;
     if (this.graphicsChosen && !this.qualityOverride) save.settings.graphics = { ...this.quality.graphics };
     const ok = this.saveSystem.save(save);
     // Armazenamento cheio ou bloqueado no meio da sessão: avisa uma única vez.
@@ -1076,6 +1275,54 @@ export class Engine {
         if (portal && this.progress.hasPortal(id)) void this.travelTo(portal.x, portal.z, portal.heading, portal.y + 0.5, portal.name, PORTAL_CAMERA_TURN);
       },
       journal: () => this.journalEntries.map((entry) => ({ ...entry, read: this.progress.hasEntry(entry.id) })),
+
+      /* --- Aplicativos do EdenOS --- */
+      metCharacters: () => this.edenSocial.contactIds,
+      citizensMet: () => this.edenSocial.citizenCount,
+      threads: () => this.edenSocial.threads(),
+      markThreadRead: (id) => {
+        this.edenSocial.markThreadRead(id);
+        this.dirty = true;
+      },
+      photos: () => this.edenSocial.photos,
+      deletePhoto: (id) => {
+        this.edenSocial.removePhoto(id);
+        this.dirty = true;
+      },
+      openGramCamera: () => this.enterPhotoMode(true),
+      feed: () =>
+        this.edenSocial.feed({
+          playerName: this.save.profile.name,
+          clock: this.world.environment.clock.label,
+          weather: this.world.environment.weather.label,
+          area: this.areaName,
+          day: this.world.environment.clock.day,
+          crystals: [this.progress.crystalCount, this.progress.totals.crystals],
+          areas: [this.progress.areaCount, this.progress.totals.areas],
+          portals: [this.progress.portalCount, this.progress.totals.portals],
+          night: this.world.environment.clock.isNight,
+          hasFlag: (flag) => this.story.has(flag),
+        }),
+      library: () => libraryFor((flag) => this.story.has(flag)),
+      afters: () => this.afters.current,
+      setAfters: (patch) => {
+        const next: AftersConfig = { ...this.afters.current, ...patch };
+        this.afters.setConfig(next);
+        this.save.afters = next;
+        this.dirty = true;
+      },
+      musicEnabled: () => this.save.settings.audio.music > 0,
+      musicVolume: () => (this.save.settings.audio.music > 0 ? this.save.settings.audio.music : this.musicMemory),
+      setMusic: (patch) => {
+        const audio = this.save.settings.audio;
+        if (patch.volume !== undefined) {
+          this.musicMemory = Math.max(0.05, patch.volume);
+          audio.music = patch.volume;
+        }
+        if (patch.enabled !== undefined) audio.music = patch.enabled ? this.musicMemory : 0;
+        this.audio.applySettings(audio);
+        this.dirty = true;
+      },
       stats: () => {
         const t = this.progress.totals;
         return {
@@ -1222,6 +1469,13 @@ export class Engine {
     }
 
     const worldActive = (playing || mode === 'scenic' || mode === 'photo') && !this.ui.isOpen(this.pauseScreen.id);
+    // Habitantes: a simulação acompanha o jogador e o horário do mundo.
+    this.npcs.setFocus(p.x, p.y, p.z);
+    this.npcs.setPeriod(this.world.environment.clock.period);
+    this.npcs.enabled = worldActive;
+    // Afters: o brilho acompanha o avatar (ou o manequim do criador).
+    this.afters.setTarget(p.x, p.y, p.z, this.player.avatar.appearance.height);
+    this.afters.setVisible(this.player.visible && mode !== 'menu');
     this.world.update(dt, elapsed, this.rig.camera, this.shadowFocus, worldActive);
     this.systems.update(dt, elapsed);
 
@@ -1328,6 +1582,27 @@ export class Engine {
       interactables: () => this.world.city.interactables.map((i) => ({ id: i.id, type: i.payload.type, x: i.position.x, y: i.position.y, z: i.position.z })),
       collectibles: () => this.world.city.collectibles.map((c) => ({ id: c.id, x: c.x, y: c.y, z: c.z })),
       portals: () => this.world.city.portals.map((portal) => ({ ...portal })),
+      // Habitantes e panteão: posição atual e estado de conhecimento.
+      npcs: () => ({
+        populacao: this.npcs.population,
+        visiveis: this.npcs.interactables.filter((item) => item.enabled && item.id.startsWith('cidadao:')).length,
+        panteao: PANTHEON.map((character) => ({
+          id: character.id,
+          nome: character.name,
+          conhecido: this.edenSocial.hasMet(character.id),
+          ...(this.npcs.characterPosition(character.id) ?? {}),
+        })),
+      }),
+      /** Teleporta para um personagem do panteão: `__eden.irPara('haru')`. */
+      irPara: (characterId: string) => {
+        const place = this.npcs.characterPosition(characterId);
+        if (!place) return false;
+        const angle = Math.atan2(place.x - this.player.position.x, place.z - this.player.position.z);
+        void this.travelTo(place.x - Math.sin(angle) * 2.5, place.z - Math.cos(angle) * 2.5, angle, undefined, getCharacter(characterId)?.place.label ?? 'Aurora City');
+        return true;
+      },
+      bandeiras: () => [...this.story.all],
+      afters: () => ({ ...this.afters.current }),
     };
     (window as unknown as Record<string, unknown>).__eden = api;
   }
