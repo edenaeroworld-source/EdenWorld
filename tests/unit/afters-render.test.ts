@@ -3,8 +3,10 @@ import { writeFileSync } from 'node:fs';
 import * as THREE from 'three';
 import { describe, it } from 'vitest';
 import { displaceNormal, displaceVertex } from '../../src/afters/AftersMorph';
+import { effectiveIntensity } from '../../src/afters/AftersState';
+import { makeCitizen } from '../../src/npc/CitizenData';
 import { Avatar } from '../../src/player/Avatar';
-import { DEFAULT_APPEARANCE } from '../../src/player/AvatarAppearance';
+import { DEFAULT_APPEARANCE, type AvatarAppearance } from '../../src/player/AvatarAppearance';
 
 /**
  * Prova visual da transformação, sem GPU.
@@ -15,8 +17,10 @@ import { DEFAULT_APPEARANCE } from '../../src/player/AvatarAppearance';
  *
  *     EDEN_RENDER=1 npx vitest run tests/unit/afters-render.test.ts
  *
- * Saída: `docs/afters-silhueta.png` (0%, 125%, 250% de frente e 250% de
- * perfil). Serve para conferir a silhueta quando não há navegador à mão.
+ * Saídas: `docs/afters-silhueta.png` (0%, 125%, 250% de frente e 250% de
+ * perfil) e `docs/afters-cidade.png` (quatro moradores de Aurora City com a
+ * configuração que o perfil de cada um sorteou). Servem para conferir a
+ * silhueta quando não há navegador à mão.
  */
 
 /** Rasterizador mínimo, só para gerar a prova visual da silhueta. */
@@ -66,7 +70,7 @@ interface Panel {
   depth: Float32Array;
 }
 
-function renderPanel(bust: number, curve: number, turn = 0): Panel {
+function renderPanel(bust: number, curve: number, turn = 0, appearance: AvatarAppearance = { ...DEFAULT_APPEARANCE, outfit: 'aero' }): Panel {
   const rgb = new Uint8Array(W * H * 3);
   const depth = new Float32Array(W * H).fill(-Infinity);
   // Fundo em degradê aqua, a identidade do Éden Aero.
@@ -80,7 +84,7 @@ function renderPanel(bust: number, curve: number, turn = 0): Panel {
     }
   }
 
-  const avatar = new Avatar({ ...DEFAULT_APPEARANCE, outfit: 'aero' });
+  const avatar = new Avatar({ ...appearance });
   avatar.setMorph(bust, curve);
   avatar.root.rotation.y = turn;
   avatar.root.updateMatrixWorld(true);
@@ -191,5 +195,33 @@ describe.runIf(process.env.EDEN_RENDER)('prova visual da silhueta', () => {
       }
     }
     writeFileSync(process.env.EDEN_OUT ?? 'docs/afters-silhueta.png', png(W * panels.length, H, total));
+  });
+
+  it('gera a rua: quatro moradores com a silhueta do próprio perfil', () => {
+    // Sementes escolhidas por cobrirem os quatro casos: silhueta original,
+    // só AfterBust®, só AfterCurve® e os dois combinados.
+    const panels = [7, 25, 19, 43].map((seed) => {
+      const citizen = makeCitizen(seed);
+      return renderPanel(effectiveIntensity(citizen.afters, 'bust'), effectiveIntensity(citizen.afters, 'curve'), 0, citizen.appearance);
+    });
+    const total = new Uint8Array(W * panels.length * H * 3);
+    for (let y = 0; y < H; y += 1) {
+      for (let panel = 0; panel < panels.length; panel += 1) {
+        for (let x = 0; x < W; x += 1) {
+          const src = (y * W + x) * 3;
+          const dst = (y * W * panels.length + panel * W + x) * 3;
+          total[dst] = panels[panel].rgb[src];
+          total[dst + 1] = panels[panel].rgb[src + 1];
+          total[dst + 2] = panels[panel].rgb[src + 2];
+        }
+      }
+      for (let panel = 1; panel < panels.length; panel += 1) {
+        const dst = (y * W * panels.length + panel * W) * 3;
+        total[dst] = 20;
+        total[dst + 1] = 110;
+        total[dst + 2] = 180;
+      }
+    }
+    writeFileSync(process.env.EDEN_CITY_OUT ?? 'docs/afters-cidade.png', png(W * panels.length, H, total));
   });
 });

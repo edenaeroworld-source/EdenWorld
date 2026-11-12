@@ -1,3 +1,12 @@
+import {
+  AFTERS_PRESETS,
+  type AftersBody,
+  applyPreset,
+  defaultAftersBody,
+  fromPercent,
+  getAftersPreset,
+  toPercent,
+} from '../afters/AftersState';
 import type { Accessory, AvatarAppearance, HairStyle, Outfit } from '../player/AvatarAppearance';
 import { ACCESSORIES, CLOTH_COLORS, EYE_COLORS, HAIR_COLORS, HAIR_STYLES, SKIN_TONES } from '../player/AvatarAppearance';
 import { createRng, pick, randInt, type Rng } from '../utils/math';
@@ -25,6 +34,24 @@ export interface CitizenArchetype {
   speed: readonly [number, number];
   /** Falas típicas do arquétipo. */
   lines: readonly string[];
+  /**
+   * Perfil Afters do arquétipo.
+   *
+   * A tecnologia é de uso comum em Aurora City, mas não é uniforme: cada
+   * ocupação tem a sua relação com ela. Isto é o que faz a multidão parecer
+   * uma cidade, e não um desfile.
+   */
+  afters: AftersTaste;
+}
+
+/** Gosto de um arquétipo pela linha Afters. */
+export interface AftersTaste {
+  /** Chance (0–1) de um habitante deste arquétipo usar a tecnologia. */
+  chance: number;
+  /** Presets preferidos (ids de `AFTERS_PRESETS`). */
+  presets: readonly string[];
+  /** `true` quando o arquétipo sobe a intensidade na noite da cidade. */
+  night: boolean;
 }
 
 
@@ -59,6 +86,7 @@ export const CITIZEN_ARCHETYPES: readonly CitizenArchetype[] = [
       'Rego o jardim de madrugada. A planta gosta, e eu também.',
       'Essa cidade é um jardim que aprendeu a ter ruas.',
     ],
+    afters: { chance: 0.16, presets: ['suave'], night: false },
   },
   {
     id: 'estudante',
@@ -78,6 +106,7 @@ export const CITIZEN_ARCHETYPES: readonly CitizenArchetype[] = [
       'Dizem que a Estufa Celeste tem uma planta que só floresce de madrugada. Ainda não vi.',
       'Estou atrasado(a) para a aula, mas valeu a pena esse caminho.',
     ],
+    afters: { chance: 0.3, presets: ['suave', 'aurora'], night: true },
   },
   {
     id: 'musico',
@@ -97,6 +126,7 @@ export const CITIZEN_ARCHETYPES: readonly CitizenArchetype[] = [
       'Toco no fim da tarde, quando o reflexo da água entra no tom certo.',
       'Se ouvir um acorde vindo da orla, provavelmente sou eu.',
     ],
+    afters: { chance: 0.55, presets: ['aurora', 'palco'], night: true },
   },
   {
     id: 'tecnica',
@@ -116,6 +146,7 @@ export const CITIZEN_ARCHETYPES: readonly CitizenArchetype[] = [
       'Depois do BlueBloom, a gente testa tudo duas vezes. Deu certo: a cura chegou a cem por cento.',
       'Se o seu EdenPhone travar, é só desligar e ligar. Vale até para deuses.',
     ],
+    afters: { chance: 0.2, presets: ['suave'], night: false },
   },
   {
     id: 'comerciante',
@@ -135,6 +166,7 @@ export const CITIZEN_ARCHETYPES: readonly CitizenArchetype[] = [
       'A Akemi-Chan encomendou trinta caixas de mangá para a próxima convenção.',
       'Se procura lembrancinha de Aurora, é na banca da esquina.',
     ],
+    afters: { chance: 0.3, presets: ['suave', 'aurora'], night: false },
   },
   {
     id: 'atleta',
@@ -154,6 +186,7 @@ export const CITIZEN_ARCHETYPES: readonly CitizenArchetype[] = [
       'Corro todo dia. Com duzentos anos de vida, dá tempo de criar o hábito.',
       'O calçadão do píer é o melhor trecho. Vento a favor na volta.',
     ],
+    afters: { chance: 0.34, presets: ['aurora', 'palco'], night: false },
   },
   {
     id: 'artista',
@@ -173,6 +206,7 @@ export const CITIZEN_ARCHETYPES: readonly CitizenArchetype[] = [
       'Venho ao Mirante pela luz das seis. Nenhuma tela alcança aquilo.',
       'Se vir tinta no meu rosto, é porque o dia foi bom.',
     ],
+    afters: { chance: 0.6, presets: ['aurora', 'palco', 'vice'], night: true },
   },
   {
     id: 'cuidador',
@@ -192,6 +226,7 @@ export const CITIZEN_ARCHETYPES: readonly CitizenArchetype[] = [
       'Hoje acompanhei doze filhotes até o lago. Nenhum se perdeu.',
       'Se encontrar um bicho perdido, leve até a Casa EdenPawl.',
     ],
+    afters: { chance: 0.15, presets: ['suave'], night: false },
   },
   {
     id: 'navegante',
@@ -211,6 +246,7 @@ export const CITIZEN_ARCHETYPES: readonly CitizenArchetype[] = [
       'Já vi o reflexo da Aérion no mar daqui. Uma vez só, e bastou.',
       'Barco bom é o que volta. O resto é enfeite.',
     ],
+    afters: { chance: 0.24, presets: ['suave', 'aurora'], night: false },
   },
   {
     id: 'viajante',
@@ -225,6 +261,7 @@ export const CITIZEN_ARCHETYPES: readonly CitizenArchetype[] = [
       'Bitnara abre em 14 de novembro de 2026. Já estou com passagem marcada.',
       'Dez trilhões de pessoas em Éden, e a praça ainda parece acolhedora.',
     ],
+    afters: { chance: 0.42, presets: ['aurora', 'vice'], night: true },
   },
 ];
 
@@ -295,6 +332,53 @@ export interface CitizenProfile {
   speed: number;
   /** Fala pessoal, escolhida do arquétipo. */
   line: string;
+  /**
+   * Configuração Afters pessoal: AfterBust® e AfterCurve® deste habitante,
+   * de 0% a 250%, com a mesma estrutura usada pelo jogador.
+   */
+  afters: AftersBody;
+  /** `true` se esta pessoa reforça a silhueta quando a noite cai. */
+  aftersNight: boolean;
+}
+
+/** Identificador do ator Afters de um cidadão (`cidadao:12`). */
+export function citizenAftersId(seed: number): string {
+  return `cidadao:${seed}`;
+}
+
+/**
+ * Sorteia a configuração Afters de um habitante.
+ *
+ * Determinística: a mesma semente devolve sempre a mesma pessoa, com a
+ * mesma silhueta. É o que mantém a cidade reconhecível entre sessões, sem
+ * precisar gravar nada.
+ */
+export function rollCitizenAfters(rng: Rng, archetype: CitizenArchetype): AftersBody {
+  const base = defaultAftersBody();
+  if (rng() >= archetype.afters.chance) return base;
+  const preset = getAftersPreset(pick(rng, archetype.afters.presets)) ?? AFTERS_PRESETS[1];
+  const body = applyPreset(base, preset);
+  // Variação de até ±25 pontos: ninguém usa exatamente o mesmo número.
+  const vary = (value: number): number => {
+    const percent = toPercent(value);
+    if (percent <= 0) return 0;
+    const shifted = Math.round((percent + (rng() * 50 - 25)) / 5) * 5;
+    return fromPercent(Math.max(25, Math.min(250, shifted)));
+  };
+  body.bust = vary(body.bust);
+  body.curve = vary(body.curve);
+  // Um canal sozinho acontece: nem todo mundo usa os dois.
+  const solo = rng();
+  if (solo < 0.18) {
+    body.curve = 0;
+    body.curveActive = false;
+  } else if (solo < 0.34) {
+    body.bust = 0;
+    body.bustActive = false;
+  }
+  body.duration = 1.1 + rng() * 1.4;
+  body.preset = null;
+  return body;
 }
 
 /** Cria um cidadão determinístico a partir de uma semente. */
@@ -318,14 +402,12 @@ export function makeCitizen(seed: number): CitizenProfile {
   // A auréola é marca dos seres divinos: cidadãos comuns não a usam.
   if (appearance.accessory === 'aureola') appearance.accessory = 'nenhum';
   const [minSpeed, maxSpeed] = archetype.speed;
-  return {
-    seed,
-    name,
-    archetype,
-    appearance,
-    speed: minSpeed + rng() * (maxSpeed - minSpeed),
-    line: pick(rng, archetype.lines),
-  };
+  // A ordem dos sorteios importa: o bloco Afters vem por último para que os
+  // habitantes já existentes continuem idênticos aos de antes.
+  const speed = minSpeed + rng() * (maxSpeed - minSpeed);
+  const line = pick(rng, archetype.lines);
+  const afters = rollCitizenAfters(rng, archetype);
+  return { seed, name, archetype, appearance, speed, line, afters, aftersNight: archetype.afters.night };
 }
 
 export interface GreetingContext {

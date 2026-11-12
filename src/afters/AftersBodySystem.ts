@@ -1,244 +1,294 @@
 /**
  * Sistema de transformação de silhueta dos Afters®.
  *
- * Liga o estado (`AftersBody`) aos dois canais animados e escreve o
- * resultado no avatar a cada quadro. A escrita custa dois `float`: não
- * reconstrói geometria, não troca material, não recarrega a cena e não
- * interrompe o movimento — por isso a transformação acontece ao vivo,
- * andando, correndo ou conversando com alguém.
+ * Um sistema, dois tipos de cliente:
+ *
+ * - **o jogador**, sempre presente, atualizado todo quadro;
+ * - **os habitantes de Aurora City**, dezenas deles, atualizados em
+ *   frequência reduzida enquanto ninguém os vê.
+ *
+ * Os dois usam a mesma classe (`AftersActor`), a mesma animação e os mesmos
+ * limites de 0% a 250%. Escrever a silhueta custa dois `float` por avatar:
+ * não reconstrói geometria, não troca material e não interrompe o movimento.
  */
 
 import type { GameSystem } from '../core/GameSystem';
 import type { Avatar } from '../player/Avatar';
-import { AfterBustController, AfterCurveController, type ChannelSnapshot } from './AftersChannel';
-import {
-  type AftersBody,
-  type AftersChannelId,
-  type AftersPreset,
-  applyPreset,
-  clampDuration,
-  defaultAftersBody,
-  effectiveIntensity,
-  matchingPreset,
-  resetChannel,
-  statusLabel,
-} from './AftersState';
+import { AftersActor, type AftersActorCallbacks, type AftersActorStatus } from './AftersActor';
+import type { AfterBustController, AfterCurveController } from './AftersChannel';
+import { type AftersActorNetState, sampleNetState, toActorNetState } from './AftersNet';
+import { type AftersBody, type AftersChannelId, type AftersPreset, defaultAftersBody, isNeutral, sanitizeAftersBody } from './AftersState';
 
-export interface AftersBodyCallbacks {
-  /** Avisa quando uma transição começa (para som e aviso na tela). */
-  onTransition?(channel: AftersChannelId, from: number, to: number): void;
-  /** Avisa a cada mudança de estado, para o salvamento marcar sujeira. */
-  onChange?(body: AftersBody): void;
-}
+export type AftersBodyCallbacks = AftersActorCallbacks;
+export type AftersBodyStatus = AftersActorStatus;
 
-export interface AftersBodyStatus {
-  bust: ChannelSnapshot;
-  curve: ChannelSnapshot;
-  /** Os dois canais ligados ao mesmo tempo. */
-  combined: boolean;
-  /** Alguma transição em andamento. */
-  animating: boolean;
-  label: string;
-}
+/** Quantos atores adormecidos são acordados por fatia de atualização. */
+const SLEEPER_SLICE = 8;
+/** Intervalo (s) entre fatias de atualização dos atores sem avatar. */
+const SLEEPER_INTERVAL = 0.25;
 
 export class AftersBodySystem implements GameSystem {
   readonly id = 'afters-body';
-  readonly bust = new AfterBustController();
-  readonly curve = new AfterCurveController();
+  /** O ator do jogador: o mesmo tipo usado por qualquer habitante. */
+  readonly player: AftersActor;
 
-  private body: AftersBody = defaultAftersBody();
-  private avatars: Avatar[] = [];
+  private readonly actors = new Map<string, AftersActor>();
+  private order: AftersActor[] = [];
+  private cursor = 0;
+  private sleeperClock = 0;
   private disposed = false;
 
-  constructor(private readonly callbacks: AftersBodyCallbacks = {}) {
-    this.bust.duration = this.body.duration;
-    this.curve.duration = this.body.duration;
+  constructor(callbacks: AftersBodyCallbacks = {}) {
+    this.player = new AftersActor('jogador', callbacks);
   }
 
-  /**
-   * Avatares que recebem a transformação. Normalmente é só o do jogador,
-   * mas o manequim do criador de avatar também entra, para o jogador ver
-   * o resultado enquanto escolhe a aparência.
-   */
-  setAvatars(avatars: readonly Avatar[]): void {
-    this.avatars = [...avatars];
-    this.push();
+  /* -------------------------- Jogador (fachada) ------------------------- */
+  /* A interface do EdenPhone e o Engine continuam falando com o sistema.  */
+
+  get bust(): AfterBustController {
+    return this.player.bust;
   }
 
-  addAvatar(avatar: Avatar): void {
-    if (this.avatars.includes(avatar)) return;
-    this.avatars.push(avatar);
-    this.push();
-  }
-
-  removeAvatar(avatar: Avatar): void {
-    const index = this.avatars.indexOf(avatar);
-    if (index >= 0) {
-      this.avatars.splice(index, 1);
-      // Devolve a silhueta original ao avatar que sai do sistema.
-      avatar.setMorph(0, 0);
-    }
+  get curve(): AfterCurveController {
+    return this.player.curve;
   }
 
   get current(): AftersBody {
-    return { ...this.body };
+    return this.player.current;
   }
 
   get status(): AftersBodyStatus {
-    return {
-      bust: this.bust.snapshot(),
-      curve: this.curve.snapshot(),
-      combined: this.bust.active && this.curve.active,
-      animating: this.bust.animating || this.curve.animating,
-      label: statusLabel(this.body),
-    };
+    return this.player.status;
   }
 
-  /**
-   * Carrega o estado inteiro (salvamento, importação, novo jogo).
-   *
-   * @param animate `false` salta direto para o destino, sem transição.
-   */
+  setAvatars(avatars: readonly Avatar[]): void {
+    this.player.setAvatars(avatars);
+  }
+
+  addAvatar(avatar: Avatar): void {
+    this.player.addAvatar(avatar);
+  }
+
+  removeAvatar(avatar: Avatar): void {
+    this.player.removeAvatar(avatar);
+  }
+
   setBody(body: AftersBody, animate = true): void {
-    this.body = { ...body };
-    this.bust.duration = body.duration;
-    this.curve.duration = body.duration;
-    this.bust.apply(body.bust, body.bustActive, animate);
-    this.curve.apply(body.curve, body.curveActive, animate);
-    if (!animate) {
-      this.bust.snap();
-      this.curve.snap();
-    }
-    this.push();
-    this.callbacks.onChange?.(this.current);
+    this.player.setBody(body, animate);
   }
 
-  /** Intensidade de um canal, em unidade interna (0–2.5). */
   setIntensity(channel: AftersChannelId, value: number): void {
-    const before = channel === 'bust' ? this.bust.target : this.curve.target;
-    if (channel === 'bust') {
-      this.bust.setIntensity(value);
-      this.body.bust = this.bust.stored;
-    } else {
-      this.curve.setIntensity(value);
-      this.body.curve = this.curve.stored;
-    }
-    this.afterEdit(channel, before);
+    this.player.setIntensity(channel, value);
   }
 
-  /** Liga ou desliga um canal, preservando a intensidade escolhida. */
   setActive(channel: AftersChannelId, active: boolean): void {
-    const before = channel === 'bust' ? this.bust.target : this.curve.target;
-    if (channel === 'bust') {
-      this.bust.setActive(active);
-      this.body.bustActive = active;
-    } else {
-      this.curve.setActive(active);
-      this.body.curveActive = active;
-    }
-    this.afterEdit(channel, before);
+    this.player.setActive(channel, active);
   }
 
-  /** Liga ou desliga os dois canais de uma vez (modo combinado). */
   setCombined(active: boolean): void {
-    const bustBefore = this.bust.target;
-    const curveBefore = this.curve.target;
-    this.bust.setActive(active);
-    this.curve.setActive(active);
-    this.body.bustActive = active;
-    this.body.curveActive = active;
-    this.afterEdit('bust', bustBefore);
-    this.afterEdit('curve', curveBefore);
+    this.player.setCombined(active);
   }
 
-  /** Duração da transição, igual para os dois canais. */
   setDuration(seconds: number): void {
-    const value = clampDuration(seconds);
-    this.body.duration = value;
-    this.bust.duration = value;
-    this.curve.duration = value;
-    this.callbacks.onChange?.(this.current);
+    this.player.setDuration(seconds);
   }
 
   applyPreset(preset: AftersPreset): void {
-    const bustBefore = this.bust.target;
-    const curveBefore = this.curve.target;
-    this.body = applyPreset(this.body, preset);
-    this.bust.apply(this.body.bust, this.body.bustActive);
-    this.curve.apply(this.body.curve, this.body.curveActive);
-    if (Math.abs(this.bust.target - bustBefore) > 1e-4) this.callbacks.onTransition?.('bust', bustBefore, this.bust.target);
-    if (Math.abs(this.curve.target - curveBefore) > 1e-4) this.callbacks.onTransition?.('curve', curveBefore, this.curve.target);
-    this.callbacks.onChange?.(this.current);
+    this.player.applyPreset(preset);
   }
 
-  /** Desliga os dois canais sem perder os valores escolhidos. */
   turnOff(): void {
-    this.setCombined(false);
+    this.player.turnOff();
+  }
+
+  reset(channel: AftersChannelId): void {
+    this.player.reset(channel);
+  }
+
+  resetAll(): void {
+    this.player.resetAll();
+  }
+
+  effective(channel: AftersChannelId): number {
+    return this.player.effective(channel);
+  }
+
+  requested(channel: AftersChannelId): number {
+    return this.player.requested(channel);
+  }
+
+  /* --------------------------- População da cidade ---------------------- */
+
+  /**
+   * Cria (ou devolve) o ator de um habitante.
+   *
+   * O id é o do cidadão ou do personagem do panteão. Chamar duas vezes com o
+   * mesmo id devolve o mesmo ator — nada é duplicado quando um habitante sai
+   * e volta ao campo de visão.
+   */
+  actor(id: string, body?: AftersBody): AftersActor {
+    let actor = this.actors.get(id);
+    if (!actor) {
+      actor = new AftersActor(id);
+      this.actors.set(id, actor);
+      this.order.push(actor);
+      actor.setBody(body ?? defaultAftersBody(), false);
+    } else if (body) {
+      actor.setBody(body, false);
+    }
+    return actor;
+  }
+
+  hasActor(id: string): boolean {
+    return this.actors.has(id);
+  }
+
+  findActor(id: string): AftersActor | undefined {
+    return this.actors.get(id);
+  }
+
+  get actorCount(): number {
+    return this.actors.size;
+  }
+
+  /** Atores de habitante com alguma transformação ligada. */
+  get activeActorCount(): number {
+    let total = 0;
+    for (const actor of this.actors.values()) if (!isNeutral(actor.current)) total += 1;
+    return total;
   }
 
   /**
-   * Reinicia um canal: 0% e desligado, apagando a porcentagem guardada.
+   * Liga um avatar a um habitante.
    *
-   * O outro canal não é tocado — reiniciar o AfterBust® não mexe em nada do
-   * AfterCurve®, nem na duração da transição, nem no efeito de luz.
+   * O avatar vem de um conjunto reutilizável: ele pode ter acabado de servir
+   * a outra pessoa. Por isso a silhueta é acertada **de uma vez** (`snap`),
+   * e não animada — ninguém deve ver um habitante inflando ao surgir na rua.
    */
-  reset(channel: AftersChannelId): void {
-    const before = channel === 'bust' ? this.bust.target : this.curve.target;
-    this.body = resetChannel(this.body, channel);
-    if (channel === 'bust') this.bust.apply(0, false);
-    else this.curve.apply(0, false);
-    if (Math.abs(before) > 1e-4) this.callbacks.onTransition?.(channel, before, 0);
-    this.callbacks.onChange?.(this.current);
+  bindAvatar(id: string, avatar: Avatar, body?: AftersBody): AftersActor {
+    const actor = this.actor(id, body);
+    actor.setAvatars([avatar]);
+    actor.visible = true;
+    actor.snap();
+    return actor;
   }
 
-  /** Reinicia os dois canais e a duração: volta tudo ao padrão de fábrica. */
-  resetAll(): void {
-    const bustBefore = this.bust.target;
-    const curveBefore = this.curve.target;
-    this.setBody(defaultAftersBody(), true);
-    if (Math.abs(bustBefore) > 1e-4) this.callbacks.onTransition?.('bust', bustBefore, 0);
-    if (Math.abs(curveBefore) > 1e-4) this.callbacks.onTransition?.('curve', curveBefore, 0);
+  /** Solta o avatar de um habitante que saiu de vista (o ator continua). */
+  unbindAvatar(id: string): void {
+    const actor = this.actors.get(id);
+    if (!actor) return;
+    actor.release();
+    actor.visible = false;
   }
 
-  private afterEdit(channel: AftersChannelId, before: number): void {
-    const target = channel === 'bust' ? this.bust.target : this.curve.target;
-    this.body.preset = matchingPreset(this.body)?.id ?? null;
-    if (Math.abs(target - before) > 1e-4) this.callbacks.onTransition?.(channel, before, target);
-    this.callbacks.onChange?.(this.current);
+  /** Remove o ator por completo (habitante descartado). */
+  removeActor(id: string): void {
+    const actor = this.actors.get(id);
+    if (!actor) return;
+    actor.release();
+    this.actors.delete(id);
+    this.order = this.order.filter((candidate) => candidate !== actor);
   }
 
-  /** Escreve as intensidades atuais em todos os avatares ligados. */
-  private push(): void {
-    const bust = this.bust.current;
-    const curve = this.curve.current;
-    for (const avatar of this.avatars) avatar.setMorph(bust, curve);
+  /** Estado de todos os habitantes com transformação, para salvar/depurar. */
+  snapshotActors(): Record<string, AftersBody> {
+    const out: Record<string, AftersBody> = {};
+    for (const [id, actor] of this.actors) {
+      const body = actor.current;
+      if (!isNeutral(body)) out[id] = body;
+    }
+    return out;
   }
+
+  /** Recarrega estados de habitantes vindos do salvamento. */
+  restoreActors(states: Record<string, AftersBody> | undefined | null): void {
+    if (!states) return;
+    for (const [id, raw] of Object.entries(states)) {
+      this.actor(id).setBody(sanitizeAftersBody(raw), false);
+    }
+  }
+
+  /* ------------------------------ Rede ---------------------------------- */
+
+  /**
+   * Instantâneos dos habitantes para enviar a outros jogadores.
+   *
+   * Só vão os que não estão com a silhueta original: a cidade é gerada da
+   * mesma semente em todas as máquinas, então o padrão não precisa viajar.
+   */
+  netStates(ids?: readonly string[], now = Date.now()): AftersActorNetState[] {
+    const out: AftersActorNetState[] = [];
+    const source = ids ?? [...this.actors.keys()];
+    for (const id of source) {
+      const actor = this.actors.get(id);
+      if (!actor || isNeutral(actor.current)) continue;
+      out.push(toActorNetState(id, actor.current, { fromBust: actor.effective('bust'), fromCurve: actor.effective('curve'), now }));
+    }
+    return out;
+  }
+
+  /**
+   * Aplica instantâneos recebidos de outro cliente.
+   *
+   * O ponto da transição é reconstruído localmente (`sampleNetState`), de
+   * modo que quem entra no meio de uma transformação vê o habitante no mesmo
+   * estágio que os demais — e o mesmo habitante não fica diferente para cada
+   * jogador. Habitantes ausentes do pacote voltam à configuração local.
+   */
+  applyNetStates(states: readonly AftersActorNetState[], now = Date.now()): void {
+    for (const state of states) {
+      const actor = this.actor(state.id);
+      const sample = sampleNetState(state, now);
+      actor.setBody(
+        {
+          bust: state.bust,
+          curve: state.curve,
+          bustActive: state.bust > 0,
+          curveActive: state.curve > 0,
+          duration: state.duration,
+          preset: null,
+        },
+        false,
+      );
+      // Sem avatar à vista não há o que mostrar; com avatar, entra no mesmo
+      // ponto da transição que o remetente já está mostrando.
+      actor.seek(sample.bust, sample.curve);
+    }
+  }
+
+  /* ------------------------------ Atualização --------------------------- */
 
   update(dt: number): void {
     if (this.disposed) return;
-    const wasAnimating = this.bust.animating || this.curve.animating;
-    this.bust.update(dt);
-    this.curve.update(dt);
-    // Fora da transição a escrita é redundante, mas custa dois `float` e
-    // garante que um avatar recém-criado já nasça com a silhueta certa.
-    this.push();
-    if (wasAnimating && !this.bust.animating && !this.curve.animating) this.callbacks.onChange?.(this.current);
-  }
+    this.player.update(dt);
 
-  /** Intensidade que o avatar está mostrando agora (para rede e HUD). */
-  effective(channel: AftersChannelId): number {
-    return channel === 'bust' ? this.bust.current : this.curve.current;
-  }
+    // Quem está à vista acompanha o quadro.
+    for (const actor of this.order) if (actor.visible) actor.update(dt);
 
-  /** Intensidade pedida pelo jogador (o destino da transição). */
-  requested(channel: AftersChannelId): number {
-    return effectiveIntensity(this.body, channel);
+    // Quem não está é atualizado em fatias, com o tempo acumulado: sem
+    // avatar ligado não há nada para mostrar, basta manter o estado
+    // coerente para que ele chegue certo quando o habitante aparecer.
+    this.sleeperClock += dt;
+    if (this.sleeperClock < SLEEPER_INTERVAL) return;
+    const sleeperDt = this.sleeperClock;
+    this.sleeperClock = 0;
+
+    const total = this.order.length;
+    if (total === 0) return;
+    const slice = Math.min(SLEEPER_SLICE, total);
+    for (let i = 0; i < slice; i += 1) {
+      const actor = this.order[(this.cursor + i) % total];
+      if (!actor.visible) actor.update(sleeperDt);
+    }
+    this.cursor = (this.cursor + slice) % total;
   }
 
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
-    for (const avatar of this.avatars) avatar.setMorph(0, 0);
-    this.avatars.length = 0;
+    this.player.release();
+    for (const actor of this.actors.values()) actor.release();
+    this.actors.clear();
+    this.order.length = 0;
   }
 }

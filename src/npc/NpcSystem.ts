@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import type { AftersBodySystem } from '../afters/AftersBodySystem';
+import { type AftersBody, type AftersChannelId, clampIntensity, fromPercent, getAftersPreset, sanitizeAftersBody, toPercent } from '../afters/AftersState';
 import { PANTHEON, type EdenCharacter } from '../characters/Pantheon';
 import type { GameSystem } from '../core/GameSystem';
 import type { Interactable } from '../interactions/Interactable';
@@ -7,7 +9,7 @@ import { AvatarAnimator } from '../player/AvatarAnimator';
 import type { QualityProfile } from '../systems/QualitySystem';
 import { createRng, type Rng } from '../utils/math';
 import type { DayPeriod } from '../world/WorldClock';
-import { makeCitizen } from './CitizenData';
+import { citizenAftersId, makeCitizen } from './CitizenData';
 import { CitizenSim } from './CitizenSim';
 import { buildAuroraWalkNetwork, type WalkNetwork } from './WalkNetwork';
 
@@ -60,6 +62,8 @@ interface VisualSlot {
   animator: AvatarAnimator;
   citizen: CitizenSim | null;
   interactable: Interactable;
+  /** Ator Afters ligado ao avatar deste lugar, se houver. */
+  aftersId: string | null;
 }
 
 interface DeityNpc {
@@ -74,7 +78,22 @@ interface DeityNpc {
   label: THREE.Sprite | null;
   interactable: Interactable;
   waveCooldown: number;
+  /** Ator Afters do personagem, quando ele usa a tecnologia. */
+  aftersId: string | null;
 }
+
+/** Identificador do ator Afters de um personagem do panteão. */
+export function characterAftersId(characterId: string): string {
+  return `divino:${characterId}`;
+}
+
+/**
+ * Eventos da cidade que mudam a silhueta de quem usa Afters.
+ *
+ * `noite` é disparado pelo relógio do mundo; os demais existem para
+ * roteiro (uma cena, um show no Palco Aurora, uma conversa).
+ */
+export type AftersCityEvent = 'normal' | 'noite' | 'palco' | 'desligado';
 
 function auraMaterial(color: number): THREE.MeshBasicMaterial {
   return new THREE.MeshBasicMaterial({
@@ -147,6 +166,11 @@ export class NpcSystem implements GameSystem {
   private routineCursor = 0;
   /** Reconstruções de avatar pendentes (no máximo uma por quadro). */
   private readonly pending: { slot: VisualSlot; citizen: CitizenSim }[] = [];
+  /** Sistema de silhueta compartilhado com o jogador (ligado pelo Engine). */
+  private afters: AftersBodySystem | null = null;
+  /** Habitantes cuja silhueta foi mudada por roteiro: eventos não os tocam. */
+  private readonly aftersOverrides = new Map<string, AftersBody>();
+  private aftersEvent: AftersCityEvent = 'normal';
   private disposed = false;
 
   constructor(options: NpcSystemOptions) {
@@ -215,6 +239,7 @@ export class NpcSystem implements GameSystem {
         label: null,
         interactable,
         waveCooldown: 0,
+        aftersId: character.afters ? characterAftersId(character.id) : null,
       });
     }
   }
@@ -232,7 +257,7 @@ export class NpcSystem implements GameSystem {
         payload: { type: 'conversa', personId: '', divino: false },
       };
       this.interactables.push(interactable);
-      this.slots.push({ avatar: null, animator: new AvatarAnimator(), citizen: null, interactable });
+      this.slots.push({ avatar: null, animator: new AvatarAnimator(), citizen: null, interactable, aftersId: null });
     }
   }
 
@@ -246,6 +271,182 @@ export class NpcSystem implements GameSystem {
     this.group.add(avatar.root);
     slot.avatar = avatar;
     return avatar;
+  }
+
+  /* ------------------------------ Afters ----------------------------- */
+
+  /**
+   * Liga a população ao sistema de silhueta do jogo.
+   *
+   * Cada habitante ganha um ator Afters com a configuração do seu perfil —
+   * o mesmo tipo de ator usado pelo jogador. Nada é desenhado aqui: os
+   * atores só escrevem nos avatares quando o habitante está à vista.
+   */
+  attachAfters(system: AftersBodySystem): void {
+    this.afters = system;
+    for (const citizen of this.citizens) {
+      system.actor(citizenAftersId(citizen.profile.seed), citizen.profile.afters);
+    }
+    for (const deity of this.deities) {
+      if (deity.aftersId && deity.character.afters) system.actor(deity.aftersId, deity.character.afters);
+    }
+    // Avatares já desenhados (troca de qualidade, recarga) recebem o estado.
+    for (const slot of this.slots) {
+      if (slot.citizen && slot.avatar) {
+        slot.aftersId = citizenAftersId(slot.citizen.profile.seed);
+        system.bindAvatar(slot.aftersId, slot.avatar);
+      }
+    }
+    for (const deity of this.deities) {
+      if (deity.aftersId && deity.avatar) system.bindAvatar(deity.aftersId, deity.avatar);
+    }
+    this.applyAftersEvent(this.aftersEvent, true);
+  }
+
+  /** Configuração Afters em vigor para um habitante (ou `null`). */
+  aftersOf(id: string): AftersBody | null {
+    return this.afters?.findActor(id)?.current ?? null;
+  }
+
+  /**
+   * Muda a silhueta de um habitante por roteiro.
+   *
+   * Aceita porcentagens (0–250) para quem chama de fora, e marca a pessoa
+   * como "dirigida por roteiro": eventos automáticos da cidade deixam de
+   * mexer nela, e o estado entra no salvamento.
+   */
+  setAftersFor(id: string, patch: { bust?: number; curve?: number; bustActive?: boolean; curveActive?: boolean; duration?: number }): AftersBody | null {
+    if (!this.afters) return null;
+    const actor = this.afters.findActor(id);
+    if (!actor) return null;
+    const current = actor.current;
+    const next: AftersBody = {
+      bust: patch.bust === undefined ? current.bust : fromPercent(patch.bust),
+      curve: patch.curve === undefined ? current.curve : fromPercent(patch.curve),
+      bustActive: patch.bustActive === undefined ? (patch.bust === undefined ? current.bustActive : patch.bust > 0) : patch.bustActive,
+      curveActive: patch.curveActive === undefined ? (patch.curve === undefined ? current.curveActive : patch.curve > 0) : patch.curveActive,
+      duration: patch.duration === undefined ? current.duration : patch.duration,
+      preset: null,
+    };
+    actor.setBody(next);
+    this.aftersOverrides.set(id, actor.current);
+    return actor.current;
+  }
+
+  /** Liga ou desliga a transformação de um habitante (evento de roteiro). */
+  setAftersActiveFor(id: string, active: boolean, channel?: AftersChannelId): AftersBody | null {
+    if (!this.afters) return null;
+    const actor = this.afters.findActor(id);
+    if (!actor) return null;
+    if (channel) actor.setActive(channel, active);
+    else actor.setCombined(active);
+    this.aftersOverrides.set(id, actor.current);
+    return actor.current;
+  }
+
+  /** Aplica um preset a um habitante (roteiro ou evento). */
+  setAftersPresetFor(id: string, presetId: string): AftersBody | null {
+    const preset = getAftersPreset(presetId);
+    if (!preset || !this.afters) return null;
+    const actor = this.afters.findActor(id);
+    if (!actor) return null;
+    actor.applyPreset(preset);
+    this.aftersOverrides.set(id, actor.current);
+    return actor.current;
+  }
+
+  /** Devolve um habitante dirigido por roteiro ao perfil original dele. */
+  clearAftersOverride(id: string): void {
+    if (!this.aftersOverrides.delete(id)) return;
+    const actor = this.afters?.findActor(id);
+    if (!actor) return;
+    actor.setBody(this.profileAfters(id));
+  }
+
+  /**
+   * Evento da cidade.
+   *
+   * Quando a noite cai, quem tem esse gosto no perfil reforça a silhueta;
+   * de dia, volta ao normal. Quem foi dirigido por roteiro não é tocado.
+   */
+  applyAftersEvent(event: AftersCityEvent, force = false): void {
+    if (event === this.aftersEvent && !force) return;
+    this.aftersEvent = event;
+    if (!this.afters) return;
+    for (const citizen of this.citizens) {
+      const id = citizenAftersId(citizen.profile.seed);
+      if (this.aftersOverrides.has(id)) continue;
+      const actor = this.afters.findActor(id);
+      if (!actor) continue;
+      actor.setBody(this.eventBody(citizen.profile.afters, citizen.profile.aftersNight, event));
+    }
+  }
+
+  /** Ids dos habitantes dirigidos por roteiro (para rede e salvamento). */
+  aftersOverrideIds(): string[] {
+    return [...this.aftersOverrides.keys()];
+  }
+
+  /** Estado dos habitantes dirigidos por roteiro, para o salvamento. */
+  aftersOverridesData(): Record<string, AftersBody> {
+    const out: Record<string, AftersBody> = {};
+    for (const [id, body] of this.aftersOverrides) out[id] = body;
+    return out;
+  }
+
+  /** Recarrega do salvamento os habitantes dirigidos por roteiro. */
+  restoreAftersOverrides(data: Record<string, AftersBody> | undefined | null): void {
+    this.aftersOverrides.clear();
+    if (!data) return;
+    for (const [id, raw] of Object.entries(data)) {
+      const body = sanitizeAftersBody(raw);
+      this.aftersOverrides.set(id, body);
+      this.afters?.findActor(id)?.setBody(body, false);
+    }
+  }
+
+  /** Liga o ator do habitante ao avatar que ele acabou de ocupar. */
+  private bindSlotAfters(slot: VisualSlot, citizen: CitizenSim): void {
+    if (!this.afters || !slot.avatar) return;
+    const id = citizenAftersId(citizen.profile.seed);
+    if (slot.aftersId && slot.aftersId !== id) this.afters.unbindAvatar(slot.aftersId);
+    slot.aftersId = id;
+    this.afters.bindAvatar(id, slot.avatar, citizen.profile.afters);
+  }
+
+  /** Solta o ator do avatar — e zera a silhueta, porque o avatar é reusado. */
+  private releaseSlotAfters(slot: VisualSlot): void {
+    if (!slot.aftersId) return;
+    this.afters?.unbindAvatar(slot.aftersId);
+    slot.aftersId = null;
+  }
+
+  /** Configuração de perfil (sem evento e sem roteiro) de um habitante. */
+  private profileAfters(id: string): AftersBody {
+    for (const citizen of this.citizens) {
+      if (citizenAftersId(citizen.profile.seed) === id) {
+        return this.eventBody(citizen.profile.afters, citizen.profile.aftersNight, this.aftersEvent);
+      }
+    }
+    for (const deity of this.deities) {
+      if (deity.aftersId === id && deity.character.afters) return { ...deity.character.afters };
+    }
+    return { bust: 0, curve: 0, bustActive: false, curveActive: false, duration: 1.6, preset: null };
+  }
+
+  /** Perfil + evento da cidade, sem mexer no estado guardado da pessoa. */
+  private eventBody(base: AftersBody, night: boolean, event: AftersCityEvent): AftersBody {
+    if (event === 'desligado') return { ...base, bustActive: false, curveActive: false };
+    const boost = event === 'palco' ? 75 : event === 'noite' && night ? 50 : 0;
+    if (boost === 0) return { ...base };
+    const lift = (value: number, active: boolean): number =>
+      active && value > 0 ? clampIntensity(fromPercent(Math.min(250, toPercent(value) + boost))) : value;
+    return {
+      ...base,
+      bust: lift(base.bust, base.bustActive),
+      curve: lift(base.curve, base.curveActive),
+      preset: null,
+    };
   }
 
   /* ---------------------------- Consultas ---------------------------- */
@@ -282,6 +483,11 @@ export class NpcSystem implements GameSystem {
     return this.citizens.length;
   }
 
+  /** Habitantes simulados — leitura para roteiro, depuração e testes. */
+  get people(): readonly CitizenSim[] {
+    return this.citizens;
+  }
+
   /* ---------------------------- Simulação ---------------------------- */
 
   setFocus(x: number, y: number, z: number): void {
@@ -306,6 +512,7 @@ export class NpcSystem implements GameSystem {
     for (let i = this.maxVisible; i < this.slots.length; i++) {
       const slot = this.slots[i];
       slot.citizen = null;
+      this.releaseSlotAfters(slot);
       slot.interactable.enabled = false;
       slot.avatar?.dispose();
       slot.avatar = null;
@@ -356,6 +563,9 @@ export class NpcSystem implements GameSystem {
     if (next && next.slot.citizen === next.citizen) {
       const avatar = this.ensureAvatar(next.slot);
       avatar.setAppearance(next.citizen.profile.appearance);
+      // Mesmo quadro da aparência: a silhueta entra junto, de uma vez, sem
+      // reconstruir malha nenhuma e sem ninguém ver a transformação crescer.
+      this.bindSlotAfters(next.slot, next.citizen);
       avatar.root.visible = true;
       next.slot.interactable.name = next.citizen.profile.name;
       next.slot.interactable.enabled = true;
@@ -401,6 +611,7 @@ export class NpcSystem implements GameSystem {
     for (const slot of this.slots) {
       if (slot.citizen && !wanted.has(slot.citizen)) {
         slot.citizen = null;
+        this.releaseSlotAfters(slot);
         if (slot.avatar) slot.avatar.root.visible = false;
         slot.interactable.enabled = false;
       }
@@ -412,6 +623,8 @@ export class NpcSystem implements GameSystem {
       const slot = this.slots.slice(0, this.maxVisible).find((candidate) => candidate.citizen === null);
       if (!slot) break;
       slot.citizen = entry.citizen;
+      // O avatar é reaproveitado: zera a silhueta de quem estava nele.
+      this.releaseSlotAfters(slot);
       if (slot.avatar) slot.avatar.root.visible = false;
       slot.interactable.enabled = false;
       assigned.add(entry.citizen);
@@ -427,6 +640,10 @@ export class NpcSystem implements GameSystem {
       if (active && !deity.avatar) this.materializeDeity(deity);
       if (!deity.avatar) continue;
       deity.avatar.root.visible = active;
+      if (deity.aftersId) {
+        const actor = this.afters?.findActor(deity.aftersId);
+        if (actor) actor.visible = active;
+      }
       if (deity.aura) deity.aura.visible = active;
       if (deity.label) {
         deity.label.visible = active && distance < LABEL_RANGE;
@@ -474,6 +691,7 @@ export class NpcSystem implements GameSystem {
     avatar.setShadows(this.shadows);
     this.group.add(avatar.root);
     deity.avatar = avatar;
+    if (deity.aftersId) this.afters?.bindAvatar(deity.aftersId, avatar, deity.character.afters);
 
     const aura = new THREE.Mesh(this.auraGeometry, auraMaterial(deity.character.aura));
     aura.renderOrder = 2;
@@ -488,7 +706,14 @@ export class NpcSystem implements GameSystem {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
-    for (const slot of this.slots) slot.avatar?.dispose();
+    for (const slot of this.slots) {
+      this.releaseSlotAfters(slot);
+      slot.avatar?.dispose();
+    }
+    for (const deity of this.deities) {
+      if (deity.aftersId) this.afters?.unbindAvatar(deity.aftersId);
+    }
+    this.afters = null;
     this.slots.length = 0;
     for (const deity of this.deities) {
       deity.avatar?.dispose();

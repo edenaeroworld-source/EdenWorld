@@ -9,7 +9,7 @@ import { CHARACTER_JOURNAL, PANTHEON, getCharacter } from '../characters/Pantheo
 import { EdenSocial } from '../edenos/EdenSocial';
 import { libraryFor } from '../edenos/Library';
 import { citizenGreeting } from '../npc/CitizenData';
-import { NpcSystem } from '../npc/NpcSystem';
+import { type AftersCityEvent, NpcSystem } from '../npc/NpcSystem';
 import { DialogueScreen } from '../interface/DialogueScreen';
 import { AREAS, BUILDINGS, PLAZA, SPAWN, areaAt, coastRadius } from '../cities/aurora-city/Layout';
 import { type EdenConnectService, OfflineEdenConnect } from '../eden-connect/EdenConnect';
@@ -384,6 +384,11 @@ export class Engine {
     );
     this.aftersBody.setAvatars([this.player.avatar]);
     this.aftersBody.setBody(this.save.afters.body, false);
+    // A população usa a mesma tecnologia pelo mesmo sistema: cada habitante
+    // ganha um ator com a configuração do próprio perfil.
+    this.npcs.attachAfters(this.aftersBody);
+    this.npcs.restoreAftersOverrides(this.save.afters.citizens);
+    this.npcs.applyAftersEvent(this.cityAftersEvent(), true);
 
     // Registros do diário: uma entrada por placa com `entryId`.
     const seen = new Set<string>();
@@ -630,6 +635,7 @@ export class Engine {
     this.edenSocial = new EdenSocial(this.save.social);
     this.afters.setConfig(this.save.afters, false);
     this.aftersBody.setBody(this.save.afters.body, false);
+    this.npcs.restoreAftersOverrides(this.save.afters.citizens);
     this.collectibles.reset(() => false);
     this.world.city.sphere?.setMode(0);
     this.player.setAppearance(this.save.profile.appearance);
@@ -1199,7 +1205,7 @@ export class Engine {
     save.progress = this.progress.toData();
     save.flags = [...this.story.all];
     save.social = this.edenSocial.toData();
-    save.afters = { ...this.afters.current, body: this.aftersBody.current };
+    save.afters = { ...this.afters.current, body: this.aftersBody.current, citizens: this.npcs.aftersOverridesData() };
     if (this.graphicsChosen && !this.qualityOverride) save.settings.graphics = { ...this.quality.graphics };
     const ok = this.saveSystem.save(save);
     // Armazenamento cheio ou bloqueado no meio da sessão: avisa uma única vez.
@@ -1425,6 +1431,17 @@ export class Engine {
   /* Quadro                                                              */
   /* ------------------------------------------------------------------ */
 
+  /**
+   * Evento de cidade que a população responde com a silhueta.
+   *
+   * No Palco Aurora a cidade sobe o tom; à noite, quem tem esse gosto no
+   * perfil reforça um pouco. Fora disso, cada um com a própria configuração.
+   */
+  private cityAftersEvent(): AftersCityEvent {
+    if (this.currentAreaId === 'palco') return 'palco';
+    return this.world.environment.clock.isNight ? 'noite' : 'normal';
+  }
+
   private updateArea(showBanner: boolean): void {
     const p = this.player.position;
     const area = areaAt(p.x, p.z);
@@ -1542,6 +1559,13 @@ export class Engine {
       this.slowTimer = 0;
       if (mode !== 'menu') {
         this.hud.setClock(env.clock.label, env.clock.isNight, env.weather.label);
+        // Evento de cidade: show no Palco Aurora, ou a noite chegando.
+        this.npcs.applyAftersEvent(this.cityAftersEvent());
+        // Multijogador (quando houver servidor): viaja só quem saiu do padrão.
+        if (this.social.online) {
+          this.aftersBody.applyNetStates(this.social.npcAfters);
+          this.social.publishNpcAfters(this.aftersBody.netStates(this.npcs.aftersOverrideIds()));
+        }
         const graphics = this.quality.graphics;
         this.hud.setFps(graphics.showFps ? `${Math.round(this.loop.fps)} FPS · ${Math.round(this.quality.current.resolutionScale * 100)}%` : null);
       }
@@ -1643,6 +1667,24 @@ export class Engine {
       },
       bandeiras: () => [...this.story.all],
       afters: () => ({ ...this.afters.current, body: this.aftersBody.current, silhueta: this.aftersBody.status }),
+      /** Silhueta da cidade: quantos usam, quem está fora do padrão. */
+      aftersCidade: () => ({
+        evento: this.cityAftersEvent(),
+        atores: this.aftersBody.actorCount,
+        comTransformacao: this.aftersBody.activeActorCount,
+        roteiro: this.npcs.aftersOverrideIds(),
+      }),
+      /** Roteiro: `__eden.aftersNpc('cidadao:12', { bust: 150 })`. */
+      aftersNpc: (id: string, patch: { bust?: number; curve?: number; bustActive?: boolean; curveActive?: boolean; duration?: number }) => this.npcs.setAftersFor(id, patch),
+      /** Roteiro: liga/desliga a transformação de um habitante. */
+      aftersNpcAtivo: (id: string, active: boolean) => this.npcs.setAftersActiveFor(id, active),
+      /** Roteiro: aplica um preset (`'aurora'`, `'palco'`, …) a um habitante. */
+      aftersNpcPreset: (id: string, presetId: string) => this.npcs.setAftersPresetFor(id, presetId),
+      /** Roteiro: força um evento de cidade (`'noite'`, `'palco'`, `'desligado'`). */
+      aftersEvento: (event: AftersCityEvent) => {
+        this.npcs.applyAftersEvent(event, true);
+        return event;
+      },
     };
     (window as unknown as Record<string, unknown>).__eden = api;
   }

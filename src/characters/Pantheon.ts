@@ -1,3 +1,4 @@
+import { type AftersBody, fromPercent } from '../afters/AftersState';
 import { getBuilding } from '../cities/aurora-city/Layout';
 import type { AvatarAppearance } from '../player/AvatarAppearance';
 import type { DialogueTree } from './Dialogue';
@@ -52,6 +53,13 @@ export interface EdenCharacter {
   dialogue: DialogueTree;
   /** Registro adicionado ao diário ao conhecer o personagem. */
   journal: { id: string; title: string; paragraphs: readonly string[] };
+  /**
+   * Configuração Afters® do personagem, quando ele usa a tecnologia.
+   *
+   * Usa exatamente o mesmo estado do jogador e dos habitantes. Sem o campo,
+   * o personagem aparece com a silhueta original — que é o caso da maioria.
+   */
+  afters?: AftersBody;
   /** Observação honesta sobre o que ainda depende do cânone oficial. */
   canonNote?: string;
 }
@@ -510,6 +518,9 @@ const LUMA: EdenCharacter = {
   place: inFrontOf('atelie-aero'),
   appearance: look('#ffe0c8', 'longo', '#ff8fc0', '#7a5cc9', 'vestido', '#ffc1d6', '#f0588c', '#f4f6fb', 'flor', 1.01),
   aura: 0xff9ec6,
+  // Quem assina a tecnologia usa a tecnologia: a silhueta da Luma é a
+  // referência que ela mostra no Ateliê, nos dois canais.
+  afters: { bust: fromPercent(125), curve: fromPercent(150), bustActive: true, curveActive: true, duration: 1.8, preset: null },
   contact: {
     handle: '@luma',
     status: 'Afters® — presença é linguagem.',

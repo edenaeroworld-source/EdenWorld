@@ -24,6 +24,7 @@ describe('grafo de módulos', () => {
       import('../../src/edenos/Library'),
       import('../../src/afters/AftersSystem'),
       import('../../src/afters/AftersCatalog'),
+      import('../../src/afters/AftersActor'),
       import('../../src/afters/AftersBodySystem'),
       import('../../src/afters/AftersMorph'),
       import('../../src/afters/AftersNet'),

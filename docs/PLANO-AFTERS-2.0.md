@@ -168,3 +168,97 @@ E o que entrou:
 
 Os ids gravados no salvamento (`afterbust`, `aftercurve`, …) **não mudaram**:
 salvamentos anteriores continuam válidos, inclusive com a luz ligada.
+
+## 8. A cidade também usa — Afters nos habitantes
+
+Até aqui a tecnologia era do jogador. Faltava o óbvio: se AfterBust® e
+AfterCurve® existem no mundo, **a cidade usa**. A exigência era clara — nada
+de demonstração separada; a silhueta dos habitantes tinha que entrar pela
+arquitetura que já existe, tanto a dos Afters quanto a dos NPCs.
+
+### 8.1 Um ator, dois tipos de dono
+
+O coração da mudança é uma extração. Tudo que o jogador tinha — estado,
+dois canais animados, avatares ligados — saiu de `AftersBodySystem` e virou
+`src/afters/AftersActor.ts`. **A mesma classe** serve o jogador e cada
+habitante:
+
+```
+AftersActor ── id, bust, curve, avatars[], visible
+   ├── o jogador        → AftersBodySystem.player
+   └── cada habitante   → AftersBodySystem.actor('cidadao:41')
+```
+
+`AftersBodySystem` passou a ser duas coisas: a **fachada** do ator do jogador
+(a API antiga continua idêntica, ninguém de fora precisou mudar) e o
+**registro** dos atores da cidade. Não existe caminho de código "de NPC":
+transformar o jogador e transformar um morador chamam os mesmos métodos, com
+os mesmos limites de 0% a 250%, a mesma animação suavizada e a mesma regra de
+canal isolado ou combinado.
+
+| Id do ator | Quem é |
+| --- | --- |
+| *(nenhum)* | o jogador, em `system.player` |
+| `cidadao:<semente>` | morador simulado de Aurora City |
+| `divino:<personagem>` | figura do panteão que usa a tecnologia (hoje, Luma) |
+
+### 8.2 Quem usa, e quanto
+
+Cada arquétipo de habitante ganhou um **gosto** (`CitizenArchetype.afters`):
+probabilidade de usar, quais presets combinam com a pessoa e se ela reforça a
+silhueta à noite. A artista usa muito (60%, até o preset `vice`); o cuidador
+quase não usa (15%, só `suave`).
+
+O sorteio é determinístico a partir da semente do habitante — a mesma cidade
+em toda sessão e em toda máquina, sem gravar nada. Dentro do preset ainda há
+variação de ±25 pontos, para que duas pessoas não fiquem com o mesmo número.
+E, detalhe que custou atenção: **o sorteio novo entra por último** na
+sequência de números aleatórios, senão todo habitante trocaria de nome, de
+roupa e de velocidade. Um teste trava isso (`npc.test.ts`, seis sementes com
+nome e passo conferidos).
+
+### 8.3 O que a cidade exige e o jogador não
+
+| Exigência | Como foi resolvida |
+| --- | --- |
+| Dezenas de pessoas, poucos avatares | os avatares vêm de um conjunto reutilizável de até 18; o ator vive separado do avatar e sobrevive a ele |
+| Avatar reciclado | ao soltar, `AftersActor.release()` devolve a silhueta original ao avatar — ninguém herda o volume do morador anterior |
+| Entrar no campo de visão | `bindAvatar()` **salta** para o estado (`snap`), no mesmo quadro de `setAppearance()`: nada de ver gente inflando na rua |
+| Gente longe | quem não tem avatar à vista é atualizado em fatias de 8 atores a cada 0,25 s, com o tempo acumulado — o destino é o mesmo, só o caminho é mais barato |
+| Sem reconstruir malha | escrever silhueta é escrever dois `float` por avatar; um teste compara os `uuid` de geometria e material antes e depois da transformação |
+
+### 8.4 Eventos, roteiro e persistência
+
+- **Evento de cidade** (`NpcSystem.applyAftersEvent`): `'noite'` reforça em
+  50 pontos quem tem esse gosto, `'palco'` sobe 75 para todo mundo que usa
+  (o Palco Aurora é um lugar de verdade no mapa, e o Engine dispara o evento
+  ao entrar nele), `'desligado'` apaga a cidade inteira, `'normal'` devolve.
+  Nada passa de 250% e nada liga um canal que estava desligado.
+- **Roteiro**: `setAftersFor`, `setAftersActiveFor`, `setAftersPresetFor` e
+  `clearAftersOverride` mudam um habitante específico. Quem foi mudado por
+  roteiro fica **imune** aos eventos automáticos até ser liberado.
+- **Persistência**: só viaja para o salvamento quem saiu do próprio perfil
+  (`AftersConfig.citizens`, no máximo 128 pessoas). O resto da cidade é
+  reconstruído da semente. Salvamento antigo, sem esse campo, carrega com a
+  cidade padrão — nenhum id mudou.
+
+### 8.5 Multijogador
+
+Mesma lógica: como a população é determinística, o habitante comum já nasce
+igual em todas as máquinas. O que precisa trafegar é a **exceção**.
+`AftersActorNetState` é o instantâneo de um habitante (`AftersNetState` mais
+o id do ator); `netStates()` monta só os que fugiram do padrão e
+`applyNetStates()` os aplica no outro cliente, usando `seek()` para entrar no
+**mesmo ponto** da transição — quem chega no meio vê o mesmo que os demais.
+`SocialService` ganhou `npcAfters` e `publishNpcAfters()`. Continua sem
+servidor: `LocalSocial.online` é `false` e nada sai do navegador.
+
+### 8.6 Verificação
+
+| Verificação | Resultado |
+| --- | --- |
+| `npm run typecheck` | limpo |
+| `npm test` | 309 testes em 18 arquivos, todos passando (eram 274); mais 1 pulado, o gerador de imagem |
+| `tests/unit/npc-afters.test.ts` | 32 testes novos: ator compartilhado, faixa 0–250%, independência, perfis, vínculo de avatar, reciclagem, ausência de reconstrução de malha, atualização em fatias, eventos, roteiro, persistência e rede |
+| `npm run build` | sem erro |
+| Navegador real | **não verificado**: continua sem Chrome/Chromium no ambiente |
