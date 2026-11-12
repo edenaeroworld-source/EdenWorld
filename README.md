@@ -18,7 +18,10 @@
 - **Habitantes de Aurora City**: 54 moradores simulados ao mesmo tempo (até 18 visíveis, conforme a qualidade), cada um com nome, ocupação, roupa, velocidade e rotina que muda de madrugada, manhã, tarde e noite. Dá para conversar com qualquer um.
 - **O panteão em pessoa**: Aérion, Haru, Nexara, Suki‑Chan, Luma, Lilly, Akemi‑Chan, Saturno, Maze, Júpiter e Amara estão em pontos fixos da cidade, com aura, plaquinha de nome, diálogo em árvore, registro no diário e contato no EdenPhone.
 - **EdenOS no EdenPhone**, com 14 aplicativos: mapa com viagem rápida, diário, jornada, câmera (foto em PNG), céu, **Pessoas**, **EdenTalk**, **EdenGram**, **EdenFeed**, **EdenReads**, **Afters**, **EdenMusic**, eventos e ajustes.
-- **Afters (Body Expansion Tech)**: seis produtos do cânone — AfterBust®, AfterCurve®, GelGrow®, CandyGrow®, AfterLove e AfterVelvet — liberados por Luma no Ateliê Aero. São **efeitos visuais abstratos** (aura, brilho e partículas em volta do avatar), com cor, intensidade, partículas, som de confirmação, desligamento manual e persistência no salvamento.
+- **Afters 2.0 (Body Expansion Tech)**: seis produtos do cânone — AfterBust®, AfterCurve®, GelGrow®, CandyGrow®, AfterLove e AfterVelvet — liberados por Luma no Ateliê Aero.
+  - **AfterBust®** e **AfterCurve®** transformam a **silhueta do próprio avatar**, de **0% a 250%**, cada um com seu controle e sua leitura numérica. Podem ser usados separados ou **combinados**, ligados e desligados de forma independente, e ajustados **enquanto você anda, corre ou conversa** — sem recarregar a cena, sem teleporte e sem trocar de avatar. A duração da transição é um controle à parte da intensidade. Em 0% a silhueta original volta exatamente como era.
+  - Os demais produtos continuam como **assinatura estética** (anel de presença, halo e partículas em volta do corpo), com cor, intensidade, som de confirmação e desligamento manual.
+  - Intensidades, ativações, duração e preset são gravados no salvamento.
 - **Dia e noite** (um dia dura 24 minutos reais) e clima variável: céu limpo, brisa e neblina.
 - **Três formas de jogar**, com troca automática entre elas: teclado e mouse, tela de toque e controle. Teclas e botões podem ser remapeados.
 - **Configurações** de gráficos (três níveis de qualidade, sombras, reflexos, escala de resolução, resolução dinâmica), áudio, controles e jogo.
@@ -167,7 +170,7 @@ npm test            # 202 testes unitários (lógica pura, sistemas e telas do E
 npm run test:e2e    # cinco cenários de ponta a ponta sobre o build de produção
 ```
 
-Os **testes unitários** (`tests/unit/`) cobrem matemática, colisão, movimento do personagem, relógio do mundo, aparência do avatar, configuração de controles, níveis de qualidade, interações e salvamento (incluindo a migração da versão 1 para a 2). Desde a Genesis 0.2 também cobrem a rede de caminhada e a rotina dos habitantes, a coerência do panteão e das árvores de diálogo, o acervo do EdenReads, o estado social do aparelho e o catálogo Afters — e, em um DOM de teste (`happy-dom`), **as telas dos aplicativos**: cada botão precisa chamar o jogo de verdade, nenhum é enfeite.
+Os **testes unitários** (`tests/unit/`) cobrem matemática, colisão, movimento do personagem, relógio do mundo, aparência do avatar, configuração de controles, níveis de qualidade, interações e salvamento (incluindo a migração da versão 1 para a 2). Desde a Genesis 0.2 também cobrem a rede de caminhada e a rotina dos habitantes, a coerência do panteão e das árvores de diálogo, o acervo do EdenReads, o estado social do aparelho, o catálogo Afters e a transformação de silhueta do Afters 2.0 (0%, mínimo, máximo, valores intermediários, canais separados, modo combinado, desligamento independente, mudança ao vivo, persistência e compatibilidade com salvamentos antigos) — e, em um DOM de teste (`happy-dom`), **as telas dos aplicativos**: cada botão precisa chamar o jogo de verdade, nenhum é enfeite.
 
 Os **testes de ponta a ponta** (`tests/e2e/`) abrem o jogo em um Chromium sem interface e o usam como um jogador:
 
@@ -202,7 +205,7 @@ src/
   npc/                   rede de caminhada, rotina dos habitantes e desenho dos moradores
   characters/            panteão do Éden (dados, lugares e árvores de diálogo)
   edenos/                acervo do EdenReads e estado social do aparelho
-  afters/                catálogo Afters e os efeitos visuais em volta do avatar
+  afters/                catálogo, transformação de silhueta e efeitos em volta do avatar
   physics/               colisão e consultas ao cenário (sem biblioteca externa)
   player/                avatar, animação, aparência e movimento
   camera/                câmera em terceira pessoa
@@ -241,7 +244,7 @@ Modelos, texturas, céu, água, vegetação, sons e música são gerados em temp
 | `?skipmenu` | Pula o menu e entra direto no jogo |
 | `?debug` | Expõe `window.__eden` (estado e atalhos usados pelos testes) e aceita `x`, `z`, `heading`, `yaw`, `pitch`, `dist` e `h` para posicionar o jogador, a câmera e a hora |
 
-Com `?debug`, além do que já existia: `__eden.npcs()` lista a população e onde está cada figura do panteão, `__eden.irPara('haru')` leva você até ela, `__eden.bandeiras()` mostra as marcas de história e `__eden.afters()` mostra o estado do painel Afters.
+Com `?debug`, além do que já existia: `__eden.npcs()` lista a população e onde está cada figura do panteão, `__eden.irPara('haru')` leva você até ela, `__eden.bandeiras()` mostra as marcas de história e `__eden.afters()` mostra o estado do painel Afters, incluindo `body` (intensidades e ativações) e `silhueta` (o que o avatar mostra neste instante, com a transição em andamento).
 
 ## Limites conhecidos
 
@@ -250,6 +253,6 @@ Com `?debug`, além do que já existia: `__eden.npcs()` lista a população e on
 - **O salvamento é local.** Para continuar em outro navegador ou aparelho é preciso exportar o arquivo de salvamento e importá-lo manualmente.
 - **Só Aurora City.** Bitnara, SkyStones, Rosas Park, Cidade da Liberdade, Noureja Nether e o Jardim Proibido existem por enquanto como lore no EdenReads e nas conversas — não dá para viajar até elas.
 - **As conversas não têm resposta por mensagem.** O EdenTalk mostra o que cada figura do panteão já disse e diz, na própria tela, que responder depende do Éden Connect; para conversar de verdade é preciso procurar a pessoa na cidade.
-- **Afters é só visual.** A tecnologia muda a aura, o brilho e as partículas em volta do avatar. Não há alteração anatômica nem câmera voltada para o corpo, e o desligamento manual está sempre à mão.
+- **Afters muda a silhueta, não a anatomia.** O avatar é estilizado, feito de primitivas, e continua assim: AfterBust® e AfterCurve® mudam o **volume suave** de uma região (com a roupa acompanhando), nunca detalhe anatômico. Não há câmera voltada para o corpo, o painel sempre mostra a porcentagem exata e o desligamento manual — inclusive "Desligar tudo" — está sempre à mão.
 - **A noite ainda não é a Era Vice Éden.** O EdenFeed já reconhece o período, mas a identidade visual própria da noite (néon, pôr do sol tropical) entra numa etapa seguinte.
 - **Funciona só on-line.** Há manifesto de aplicativo web (ícone e tela cheia ao adicionar à tela inicial), mas não há modo off-line.

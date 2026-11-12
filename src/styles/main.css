@@ -2222,6 +2222,167 @@ input[type='range']::-moz-range-thumb {
   background: rgba(27, 130, 234, 0.9);
 }
 
+/* ----------------------- Afters® 2.0 — silhueta ------------------------ */
+
+/* Vidro líquido: o painel Afters é o cartão mais "EdenOS" do aparelho. */
+.card--glass {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(214, 242, 255, 0.78)),
+    radial-gradient(120% 80% at 10% -10%, rgba(41, 200, 255, 0.4), transparent 60%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 8px 20px rgba(4, 40, 100, 0.22);
+  backdrop-filter: blur(14px) saturate(1.3);
+}
+
+.card--glass::after {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 42%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.5), transparent);
+  pointer-events: none;
+}
+
+.afters__status {
+  text-align: center;
+}
+
+.afters__status h3 {
+  font-size: 1.02rem;
+}
+
+.afters__status.is-on {
+  border-color: rgba(41, 200, 255, 0.9);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 0 0 2px rgba(41, 200, 255, 0.35),
+    0 10px 24px rgba(4, 40, 100, 0.26);
+}
+
+.afters__gauges {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin: 8px 0 6px;
+}
+
+.afters__gauge {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.85), rgba(190, 231, 255, 0.6));
+}
+
+.afters__gauge small {
+  color: var(--ink-soft);
+  font-size: 0.68rem;
+}
+
+.afters__gauge b {
+  color: var(--deep);
+  font-size: 1.22rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.afters__channel.is-on {
+  border-color: rgba(41, 200, 255, 0.85);
+}
+
+.afters__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.afters__badge {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 13px;
+  box-shadow: 0 4px 10px rgba(4, 40, 100, 0.28);
+  color: #fff;
+}
+
+.afters__badge--bust {
+  background: linear-gradient(145deg, #ffb3d4, #ff8fc0);
+}
+
+.afters__badge--curve {
+  background: linear-gradient(145deg, #d9bcff, #c9a2ff);
+}
+
+.afters__title {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.afters__title b {
+  color: var(--ink);
+}
+
+.afters__title small {
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+}
+
+.afters__readout {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 8px 0 2px;
+}
+
+.afters__percent {
+  color: var(--deep);
+  font-size: 1.7rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.afters__readout small {
+  color: var(--ink-soft);
+}
+
+.afters__live {
+  margin-left: auto;
+  color: var(--blue);
+  font-weight: 650;
+}
+
+.slider--afters {
+  max-width: none;
+}
+
+.afters__steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.afters__steps .chip {
+  min-height: 30px;
+  padding: 2px 9px;
+  font-size: 0.74rem;
+}
+
+.tagdot--muted {
+  background: linear-gradient(180deg, #8fe6ff, #1f95ea);
+  font-variant-numeric: tabular-nums;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .bubbles i,
   .touch-btn--interact {
@@ -2234,5 +2395,15 @@ input[type='range']::-moz-range-thumb {
   .hud__prompt {
     animation-duration: 0.01s;
     animation-delay: 0s;
+  }
+
+  /* Afters: o brilho do painel para; a transformação do avatar continua,
+     porque a duração dela é escolhida pelo jogador no próprio aplicativo. */
+  .card--glass::after {
+    display: none;
+  }
+
+  .swatch--pick.is-on {
+    transform: none;
   }
 }

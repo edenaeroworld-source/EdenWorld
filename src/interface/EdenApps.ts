@@ -1,5 +1,4 @@
-import type { AftersConfig } from '../afters/AftersCatalog';
-import { AFTERS_PRODUCTS } from '../afters/AftersCatalog';
+import { type AftersAppHost, buildAftersApp } from './AftersApp';
 import { PANTHEON } from '../characters/Pantheon';
 import type { EdenPhoto, FeedPost, TalkThread } from '../edenos/EdenSocial';
 import type { LibraryDocument } from '../edenos/Library';
@@ -14,7 +13,7 @@ import { icon } from './icons';
  * forma explícita em vez de simular serviços on-line que ainda não existem.
  */
 
-export interface EdenAppsHost {
+export interface EdenAppsHost extends AftersAppHost {
   playerName(): string;
   clockLabel(): string;
   areaName(): string;
@@ -29,8 +28,6 @@ export interface EdenAppsHost {
   openGramCamera(): void;
   feed(): readonly FeedPost[];
   library(): readonly LibraryDocument[];
-  afters(): AftersConfig;
-  setAfters(patch: Partial<AftersConfig>): void;
   musicEnabled(): boolean;
   musicVolume(): number;
   setMusic(patch: { enabled?: boolean; volume?: number }): void;
@@ -253,92 +250,12 @@ export function buildReads(host: EdenAppsHost, content: HTMLElement, selected: s
 
 /* --------------------------------- Afters ------------------------------ */
 
+/**
+ * O painel Afters mora em `AftersApp.ts` — é grande o bastante para ter
+ * arquivo próprio. Esta função mantém a assinatura usada pelo EdenPhone.
+ */
 export function buildAfters(host: EdenAppsHost, content: HTMLElement, refresh: () => void): void {
-  const config = host.afters();
-  content.append(head('Afters', 'Body Expansion Tech · assinatura Luma'));
-  if (!config.unlocked) {
-    content.appendChild(
-      h(
-        'div',
-        { class: 'card' },
-        h('h3', { text: 'Painel bloqueado' }),
-        h('p', { text: 'A tecnologia Afters é liberada por Luma, no Ateliê Aero, a sudoeste da Praça Central.' }),
-        h('p', { class: 'muted', text: 'Converse com ela para ativar o painel no seu EdenPhone.' }),
-      ),
-    );
-    return;
-  }
-
-  const active = config.productId;
-  content.appendChild(
-    h(
-      'div',
-      { class: 'card' },
-      h('h3', { text: active ? (AFTERS_PRODUCTS.find((product) => product.id === active)?.name ?? 'Afters') : 'Tudo desligado' }),
-      h('p', { text: active ? (AFTERS_PRODUCTS.find((product) => product.id === active)?.description ?? '') : 'Escolha um produto abaixo para ativar a sua assinatura visual.' }),
-      h('p', { class: 'muted', text: 'Efeito estético: aura, brilho e partículas em volta do avatar. Desligamento manual a qualquer momento.' }),
-    ),
-  );
-
-  const list = h('ul', { class: 'list', attrs: { 'aria-label': 'Produtos Afters' } });
-  for (const product of AFTERS_PRODUCTS) {
-    const selected = product.id === active;
-    const swatch = h('span', { class: 'swatch' });
-    swatch.style.background = product.color;
-    const item = h(
-      'button',
-      { class: selected ? 'list-btn is-on' : 'list-btn', attrs: { type: 'button', 'aria-pressed': String(selected) } },
-      swatch,
-      h('span', {}, product.name, h('small', { text: product.tagline })),
-    );
-    item.addEventListener('click', () => {
-      host.setAfters({ productId: selected ? null : product.id, color: selected ? config.color : product.color });
-      refresh();
-    });
-    list.appendChild(h('li', {}, item));
-  }
-  content.appendChild(list);
-
-  if (active) {
-    content.appendChild(
-      h('div', { class: 'row', attrs: { style: 'margin-top:10px' } }, button({ class: 'btn btn--ghost btn--small', icon: icon('close', 18), label: 'Desligar tudo', onClick: () => {
-        host.setAfters({ productId: null });
-        refresh();
-      } })),
-    );
-  }
-
-  const colors = ['#ff8fc0', '#c9a2ff', '#7fd6ff', '#ffd84a', '#ff6f91', '#9a7bff', '#24e08a', '#ffffff'];
-  const palette = h('div', { class: 'palette', attrs: { role: 'group', 'aria-label': 'Cor do efeito' } });
-  for (const color of colors) {
-    const swatch = h('button', { class: config.color === color ? 'swatch swatch--pick is-on' : 'swatch swatch--pick', attrs: { type: 'button', 'aria-label': `Cor ${color}`, 'aria-pressed': String(config.color === color) } });
-    swatch.style.background = color;
-    swatch.addEventListener('click', () => {
-      host.setAfters({ color });
-      refresh();
-    });
-    palette.appendChild(swatch);
-  }
-
-  content.appendChild(
-    h(
-      'div',
-      { class: 'card' },
-      h('h3', { text: 'Ajustes' }),
-      palette,
-      slider({
-        label: 'Intensidade',
-        min: 0,
-        max: 1,
-        step: 0.05,
-        value: config.intensity,
-        format: (value) => `${Math.round(value * 100)}%`,
-        onInput: (value) => host.setAfters({ intensity: value }),
-      }),
-      h('div', { class: 'row' }, h('span', { text: 'Partículas' }), toggle('Partículas', config.particles, (value) => host.setAfters({ particles: value }))),
-      h('div', { class: 'row' }, h('span', { text: 'Som de confirmação' }), toggle('Som de confirmação', config.sound, (value) => host.setAfters({ sound: value }))),
-    ),
-  );
+  buildAftersApp(host, content, refresh);
 }
 
 /* ------------------------------- EdenMusic ----------------------------- */

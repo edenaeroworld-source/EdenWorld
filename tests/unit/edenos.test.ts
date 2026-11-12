@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { AFTERS_PRODUCTS, defaultAftersConfig, getAftersProduct, sanitizeAftersConfig } from '../../src/afters/AftersCatalog';
+import { defaultAftersBody } from '../../src/afters/AftersState';
 import { PANTHEON } from '../../src/characters/Pantheon';
 import { EdenSocial, emptySocialData, type FeedContext, sanitizeSocialData } from '../../src/edenos/EdenSocial';
 import { LIBRARY, getDocument, libraryFor } from '../../src/edenos/Library';
@@ -250,7 +251,7 @@ describe('catálogo Afters', () => {
   });
 
   it('mantém uma configuração boa intacta', () => {
-    const good = { unlocked: true, productId: AFTERS_PRODUCTS[2].id, color: '#7fd6ff', intensity: 0.5, particles: false, sound: true };
+    const good = { unlocked: true, productId: AFTERS_PRODUCTS[2].id, color: '#7fd6ff', intensity: 0.5, particles: false, sound: true, body: defaultAftersBody() };
     expect(sanitizeAftersConfig(good)).toEqual(good);
   });
 });
