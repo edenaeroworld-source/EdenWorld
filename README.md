@@ -2,11 +2,11 @@
   <img src="public/assets/ui/logo-edenworld-480.webp" alt="EDENWORLD" width="280" />
 </p>
 
-# EDENWORLD — Genesis 0.1
+# EDENWORLD — Genesis 0.2 · “A cidade ganha gente”
 
 **A World Beyond Imagination.** Um mundo aberto em 3D do universo Éden Aero que roda direto no navegador — no computador, no celular e no tablet, sem instalar nada.
 
-A Genesis 0.1 apresenta **Aurora City**, uma cidade-jardim à beira-mar para explorar a pé com um avatar criado por você.
+**Aurora City** é uma cidade-jardim à beira-mar para explorar a pé com um avatar criado por você — agora habitada: moradores com rotina própria, as onze figuras do panteão do Éden em seus lugares, um EdenOS com aplicativos que funcionam de verdade e a tecnologia **Afters** liberada por Luma.
 
 ## O que há nesta versão
 
@@ -15,14 +15,17 @@ A Genesis 0.1 apresenta **Aurora City**, uma cidade-jardim à beira-mar para exp
 - **Exploração em terceira pessoa**: andar, correr, pular, nadar, sentar e acenar, com câmera que desvia de obstáculos.
 - **128 pontos de interação**: a Esfera Aurora, fontes, bancos, placas, holomapa, painel de eventos, telescópios, portais e o ateliê.
 - **Coisas para encontrar**: 24 Cristais de Luz, 31 anotações no diário e 8 portais que, depois de ativados, permitem viagem rápida.
-- **EdenPhone**: mapa com viagem rápida, diário, jornada (seu progresso), câmera (modo foto, salva em PNG), céu (hora do dia e clima), avatar e ajustes.
+- **Habitantes de Aurora City**: 54 moradores simulados ao mesmo tempo (até 18 visíveis, conforme a qualidade), cada um com nome, ocupação, roupa, velocidade e rotina que muda de madrugada, manhã, tarde e noite. Dá para conversar com qualquer um.
+- **O panteão em pessoa**: Aérion, Haru, Nexara, Suki‑Chan, Luma, Lilly, Akemi‑Chan, Saturno, Maze, Júpiter e Amara estão em pontos fixos da cidade, com aura, plaquinha de nome, diálogo em árvore, registro no diário e contato no EdenPhone.
+- **EdenOS no EdenPhone**, com 14 aplicativos: mapa com viagem rápida, diário, jornada, câmera (foto em PNG), céu, **Pessoas**, **EdenTalk**, **EdenGram**, **EdenFeed**, **EdenReads**, **Afters**, **EdenMusic**, eventos e ajustes.
+- **Afters (Body Expansion Tech)**: seis produtos do cânone — AfterBust®, AfterCurve®, GelGrow®, CandyGrow®, AfterLove e AfterVelvet — liberados por Luma no Ateliê Aero. São **efeitos visuais abstratos** (aura, brilho e partículas em volta do avatar), com cor, intensidade, partículas, som de confirmação, desligamento manual e persistência no salvamento.
 - **Dia e noite** (um dia dura 24 minutos reais) e clima variável: céu limpo, brisa e neblina.
 - **Três formas de jogar**, com troca automática entre elas: teclado e mouse, tela de toque e controle. Teclas e botões podem ser remapeados.
 - **Configurações** de gráficos (três níveis de qualidade, sombras, reflexos, escala de resolução, resolução dinâmica), áudio, controles e jogo.
 - **Salvamento automático** no próprio navegador, com opções de continuar, novo jogo, exportar, importar e apagar.
 - **Interface em português do Brasil**, navegável por mouse, toque, teclado e controle.
 
-Os recursos on-line e sociais planejados para o universo Éden (Éden Connect, EdenStore, EdenReads, EdenPawl e os eventos) aparecem no jogo somente como **“em breve”**: nenhum deles simula algo que ainda não existe.
+Os recursos que ainda dependem de servidor, loja ou catálogo licenciado (Éden Connect, EdenStore, EdenTV, EdenGame, EdenPawl e os eventos com data) continuam aparecendo apenas como **“em breve”**: nenhum deles simula algo que não existe. Os aplicativos sociais que **existem** dizem, dentro da própria tela, que tudo fica guardado só naquele aparelho — não há conta, servidor nem outras pessoas on‑line.
 
 ## Como jogar
 
@@ -160,11 +163,11 @@ Este arquivo não faz parte do repositório: a escolha da hospedagem fica com qu
 
 ```bash
 npm run typecheck   # tipos
-npm test            # 96 testes unitários da lógica pura
+npm test            # 202 testes unitários (lógica pura, sistemas e telas do EdenOS)
 npm run test:e2e    # cinco cenários de ponta a ponta sobre o build de produção
 ```
 
-Os **testes unitários** (`tests/unit/`) cobrem matemática, colisão, movimento do personagem, relógio do mundo, aparência do avatar, configuração de controles, níveis de qualidade, interações e salvamento.
+Os **testes unitários** (`tests/unit/`) cobrem matemática, colisão, movimento do personagem, relógio do mundo, aparência do avatar, configuração de controles, níveis de qualidade, interações e salvamento (incluindo a migração da versão 1 para a 2). Desde a Genesis 0.2 também cobrem a rede de caminhada e a rotina dos habitantes, a coerência do panteão e das árvores de diálogo, o acervo do EdenReads, o estado social do aparelho e o catálogo Afters — e, em um DOM de teste (`happy-dom`), **as telas dos aplicativos**: cada botão precisa chamar o jogo de verdade, nenhum é enfeite.
 
 Os **testes de ponta a ponta** (`tests/e2e/`) abrem o jogo em um Chromium sem interface e o usam como um jogador:
 
@@ -175,6 +178,8 @@ Os **testes de ponta a ponta** (`tests/e2e/`) abrem o jogo em um Chromium sem in
 | `celular` | Tela de toque em retrato (390×844) e paisagem (844×390) |
 | `controle` | Jogo e menus só com o controle, incluindo conectar e desconectar |
 | `robustez` | Navegador sem WebGL2, armazenamento bloqueado, salvamento corrompido ou adulterado, perda do contexto gráfico e limite do mapa |
+
+> **Atenção:** os cenários de ponta a ponta da Genesis 0.2 **não foram executados** nesta máquina — não há Chrome/Chromium instalado e o download está bloqueado. Rode-os localmente antes de publicar.
 
 ```bash
 node tests/e2e/run.mjs celular controle                   # só alguns cenários (exige "npm run build" antes)
@@ -194,6 +199,10 @@ src/
   core/                  Engine (orquestra tudo), laço do jogo, renderizador, configuração
   world/                 terreno, céu, água, luz, clima, relógio, vegetação, partículas
   cities/aurora-city/    planta, prédios, praça, parques e decoração de Aurora City
+  npc/                   rede de caminhada, rotina dos habitantes e desenho dos moradores
+  characters/            panteão do Éden (dados, lugares e árvores de diálogo)
+  edenos/                acervo do EdenReads e estado social do aparelho
+  afters/                catálogo Afters e os efeitos visuais em volta do avatar
   physics/               colisão e consultas ao cenário (sem biblioteca externa)
   player/                avatar, animação, aparência e movimento
   camera/                câmera em terceira pessoa
@@ -218,7 +227,8 @@ Modelos, texturas, céu, água, vegetação, sons e música são gerados em temp
 
 ### Dados e privacidade
 
-- O progresso e as preferências ficam apenas no `localStorage` do navegador, na chave `edenworld.save.v1`.
+- O progresso e as preferências ficam apenas no `localStorage` do navegador, na chave `edenworld.save.v1` (formato na versão 2; salvamentos da versão 1 continuam sendo aceitos).
+- As fotos do EdenGram, os contatos, as conversas lidas e os ajustes de Afters são gravados nesse mesmo salvamento, no próprio aparelho. O EdenGram guarda no máximo 12 fotos, em miniatura, para não estourar o armazenamento do navegador.
 - O jogo não faz nenhuma requisição de rede depois de carregado: não há conta, anúncios, telemetria nem fontes externas.
 - Limpar os dados do navegador apaga o progresso. Em **Configurações → Jogo** é possível exportar o salvamento para um arquivo e importá-lo depois, inclusive em outro navegador ou aparelho. A importação traz o avatar e o progresso; as configurações de cada aparelho são mantidas.
 
@@ -231,10 +241,15 @@ Modelos, texturas, céu, água, vegetação, sons e música são gerados em temp
 | `?skipmenu` | Pula o menu e entra direto no jogo |
 | `?debug` | Expõe `window.__eden` (estado e atalhos usados pelos testes) e aceita `x`, `z`, `heading`, `yaw`, `pitch`, `dist` e `h` para posicionar o jogador, a câmera e a hora |
 
+Com `?debug`, além do que já existia: `__eden.npcs()` lista a população e onde está cada figura do panteão, `__eden.irPara('haru')` leva você até ela, `__eden.bandeiras()` mostra as marcas de história e `__eden.afters()` mostra o estado do painel Afters.
+
 ## Limites conhecidos
 
 - **Ainda não testado em aparelhos reais.** Toda a verificação foi automatizada em um Chromium sem interface, com renderização por software. O desempenho em celulares e placas de vídeo reais não foi medido, e o áudio nunca foi ouvido por uma pessoa.
 - **Um jogador por vez.** Não há multijogador, contas nem serviços on-line nesta versão.
 - **O salvamento é local.** Para continuar em outro navegador ou aparelho é preciso exportar o arquivo de salvamento e importá-lo manualmente.
-- **Só Aurora City.** As outras regiões do universo Éden ficam para as próximas versões.
+- **Só Aurora City.** Bitnara, SkyStones, Rosas Park, Cidade da Liberdade, Noureja Nether e o Jardim Proibido existem por enquanto como lore no EdenReads e nas conversas — não dá para viajar até elas.
+- **As conversas não têm resposta por mensagem.** O EdenTalk mostra o que cada figura do panteão já disse e diz, na própria tela, que responder depende do Éden Connect; para conversar de verdade é preciso procurar a pessoa na cidade.
+- **Afters é só visual.** A tecnologia muda a aura, o brilho e as partículas em volta do avatar. Não há alteração anatômica nem câmera voltada para o corpo, e o desligamento manual está sempre à mão.
+- **A noite ainda não é a Era Vice Éden.** O EdenFeed já reconhece o período, mas a identidade visual própria da noite (néon, pôr do sol tropical) entra numa etapa seguinte.
 - **Funciona só on-line.** Há manifesto de aplicativo web (ícone e tela cheia ao adicionar à tela inicial), mas não há modo off-line.

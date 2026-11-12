@@ -22,6 +22,7 @@
   "devDependencies": {
     "@types/node": "^26.6.6",
     "@types/three": "^0.187.0",
+    "happy-dom": "^21.0.4",
     "puppeteer-core": "^25.17.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.8",

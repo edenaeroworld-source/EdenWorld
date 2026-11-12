@@ -1,11 +1,26 @@
 import { FUTURE_EVENTS, FUTURE_FEATURES, type FutureFeature } from '../shared/FutureFeatures';
 import type { TimePaceSetting } from '../systems/SaveSystem';
 import { button, choiceGroup, clear, h } from './dom';
+import { type EdenAppsHost, buildAfters, buildFeed, buildGram, buildMusic, buildPeople, buildReads, buildTalk } from './EdenApps';
 import { type IconName, icon } from './icons';
 import { type MapMarker, drawMap } from './MapRenderer';
 import type { Screen } from './UIManager';
 
-export type PhoneApp = 'home' | 'mapa' | 'diario' | 'jornada' | 'ceu' | 'eventos' | `recurso:${string}`;
+export type PhoneApp =
+  | 'home'
+  | 'mapa'
+  | 'diario'
+  | 'jornada'
+  | 'ceu'
+  | 'eventos'
+  | 'pessoas'
+  | 'talk'
+  | 'gram'
+  | 'feed'
+  | 'reads'
+  | 'afters'
+  | 'musica'
+  | `recurso:${string}`;
 
 export interface PhonePortal {
   id: string;
@@ -37,7 +52,7 @@ export interface PhoneStats {
 
 export type WeatherChoice = 'auto' | 'limpo' | 'brisa' | 'neblina';
 
-export interface PhoneHost {
+export interface PhoneHost extends EdenAppsHost {
   playerName(): string;
   clockLabel(): string;
   weatherLabel(): string;
@@ -66,6 +81,8 @@ interface AppDef {
   icon: IconName;
   colors: readonly [string, string];
   soon?: boolean;
+  /** Selo curto no canto do ícone (ex.: "novo"). */
+  badge?: string;
   open(): void;
 }
 
@@ -81,6 +98,10 @@ export class EdenPhoneUI implements Screen {
   /** Aplicativo em que o celular foi aberto (ex.: o mapa, ao usar um portal). */
   private entryApp: PhoneApp = 'home';
   private mapCanvas: HTMLCanvasElement | null = null;
+  /** Conversa aberta no EdenTalk (null = lista). */
+  private talkThread: string | null = null;
+  /** Texto aberto no EdenReads (null = acervo). */
+  private readDoc: string | null = null;
   private mapMarkers: MapMarker[] = [];
   private lastMapDraw = 0;
   private lastClock = '';
@@ -116,6 +137,17 @@ export class EdenPhoneUI implements Screen {
   }
 
   onBack(): void {
+    // Dentro de um aplicativo com subtela, "voltar" sobe um nível antes de sair.
+    if (this.app === 'talk' && this.talkThread !== null) {
+      this.talkThread = null;
+      this.show('talk', true);
+      return;
+    }
+    if (this.app === 'reads' && this.readDoc !== null) {
+      this.readDoc = null;
+      this.show('reads', true);
+      return;
+    }
     // "Voltar" fecha o celular na tela inicial e também no aplicativo em que
     // ele foi aberto direto pelo mundo (portal, holomapa, painel de eventos).
     if (this.app !== 'home' && this.app !== this.entryApp) this.show('home', true);
@@ -156,9 +188,26 @@ export class EdenPhoneUI implements Screen {
     else if (app === 'jornada') this.buildJourney();
     else if (app === 'ceu') this.buildSky();
     else if (app === 'eventos') this.buildEvents();
+    else if (app === 'pessoas') buildPeople(this.host, this.content, (id) => this.openThread(id));
+    else if (app === 'talk') buildTalk(this.host, this.content, this.talkThread, (id) => this.openThread(id));
+    else if (app === 'gram') buildGram(this.host, this.content, () => this.show('gram'));
+    else if (app === 'feed') buildFeed(this.host, this.content);
+    else if (app === 'reads')
+      buildReads(this.host, this.content, this.readDoc, (id) => {
+        this.readDoc = id;
+        this.show('reads', true);
+      });
+    else if (app === 'afters') buildAfters(this.host, this.content, () => this.show('afters'));
+    else if (app === 'musica') buildMusic(this.host, this.content, () => this.show('musica'));
     else this.buildFeature(app.slice('recurso:'.length));
     this.content.scrollTop = 0;
     if (focus) (this.content.querySelector<HTMLElement>('button') ?? this.homeButton).focus({ preventScroll: true });
+  }
+
+  /** Abre uma conversa do EdenTalk (ou a lista, com `null`). */
+  private openThread(id: string | null): void {
+    this.talkThread = id;
+    this.show('talk', true);
   }
 
   private head(title: string): HTMLDivElement {
@@ -176,6 +225,27 @@ export class EdenPhoneUI implements Screen {
       { id: 'camera', label: 'Câmera', icon: 'camera', colors: ['#e6eef6', '#7d93aa'], open: () => this.host.openCamera() },
       { id: 'ceu', label: 'Céu', icon: 'sun', colors: ['#ffe98a', '#ff9f43'], open: () => this.show('ceu', true) },
       { id: 'avatar', label: 'Avatar', icon: 'avatar', colors: ['#ffc1d6', '#f0588c'], open: () => this.host.openAvatar() },
+      { id: 'pessoas', label: 'Pessoas', icon: 'people', colors: ['#ffd9a6', '#ef9a2e'], open: () => this.show('pessoas', true) },
+      {
+        id: 'talk',
+        label: 'EdenTalk',
+        icon: 'chat',
+        colors: ['#a8d8ff', '#2f6fe0'],
+        badge: this.host.threads().some((thread) => thread.unread) ? 'novo' : undefined,
+        open: () => this.openThread(null),
+      },
+      { id: 'gram', label: 'EdenGram', icon: 'camera', colors: ['#ffc1d6', '#f0588c'], open: () => this.show('gram', true) },
+      { id: 'feed', label: 'EdenFeed', icon: 'feed', colors: ['#bfe9ff', '#1b82ea'], open: () => this.show('feed', true) },
+      { id: 'reads', label: 'EdenReads', icon: 'book', colors: ['#a8f0c0', '#22b577'], open: () => this.show('reads', true) },
+      {
+        id: 'afters',
+        label: 'Afters',
+        icon: 'sparkle',
+        colors: ['#ffc1d6', '#c0398c'],
+        badge: this.host.afters().unlocked ? undefined : 'bloqueado',
+        open: () => this.show('afters', true),
+      },
+      { id: 'musica', label: 'EdenMusic', icon: 'music', colors: ['#d6b8ff', '#7a3fe0'], open: () => this.show('musica', true) },
       { id: 'eventos', label: 'Eventos', icon: 'ticket', colors: ['#d6b8ff', '#8a5be0'], soon: true, open: () => this.show('eventos', true) },
       { id: 'ajustes', label: 'Ajustes', icon: 'settings', colors: ['#dfe8f0', '#6f8296'], open: () => this.host.openSettings() },
       ...FUTURE_FEATURES.map(
@@ -195,6 +265,7 @@ export class EdenPhoneUI implements Screen {
       iconBox.style.setProperty('--a', app.colors[0]);
       iconBox.style.setProperty('--b', app.colors[1]);
       if (app.soon) iconBox.appendChild(h('span', { class: 'app__badge', text: 'EM BREVE' }));
+      else if (app.badge) iconBox.appendChild(h('span', { class: 'app__badge app__badge--info', text: app.badge.toUpperCase() }));
       const element = h('button', { class: app.soon ? 'app is-soon' : 'app', attrs: { type: 'button', 'aria-label': app.soon ? `${app.label} (em breve)` : app.label } }, iconBox, h('span', { text: app.label }));
       element.addEventListener('click', () => app.open());
       grid.appendChild(element);

@@ -271,3 +271,85 @@ describe('ProgressSystem', () => {
     expect(progress.toData().areas).toEqual(['praca']);
   });
 });
+
+describe('salvamento v2 (EdenOS, Afters e bandeiras)', () => {
+  it('cria um salvamento novo já na versão 2, com os campos novos vazios', () => {
+    const save = createNewSave(NOW);
+    expect(save.version).toBe(2);
+    expect(SAVE_VERSION).toBe(2);
+    expect(save.flags).toEqual([]);
+    expect(save.social).toEqual({ contacts: [], citizens: [], photos: [], readThreads: [] });
+    expect(save.afters.unlocked).toBe(false);
+    expect(save.afters.productId).toBeNull();
+  });
+
+  it('aceita um salvamento v1 antigo e completa os campos novos', () => {
+    const v1 = {
+      version: 1,
+      createdAt: NOW,
+      profile: { name: 'Antigo', created: true, appearance: DEFAULT_APPEARANCE },
+      player: { x: 2, y: 0, z: 3, heading: 1 },
+      world: { hours: 10, day: 4 },
+      progress: { ...emptyProgress(), crystals: ['cristal-01'] },
+    };
+    const save = sanitizeSave(v1, NOW);
+    expect(save).not.toBeNull();
+    expect(save?.profile.name).toBe('Antigo');
+    expect(save?.progress.crystals).toEqual(['cristal-01']);
+    // Campos novos aparecem com o padrão, sem perder o progresso antigo.
+    expect(save?.flags).toEqual([]);
+    expect(save?.social.contacts).toEqual([]);
+    expect(save?.afters.unlocked).toBe(false);
+  });
+
+  it('preserva bandeiras, contatos e Afters de um salvamento v2', () => {
+    const save = sanitizeSave(
+      {
+        version: 2,
+        flags: ['conheceu-haru', 'sabe-bluebloom'],
+        social: { contacts: ['haru'], citizens: ['Nina Aurora'], photos: [], readThreads: ['haru'] },
+        afters: { unlocked: true, productId: 'aftercurve', color: '#c9a2ff', intensity: 0.4, particles: true, sound: false },
+      },
+      NOW,
+    );
+    expect(save?.flags).toEqual(['conheceu-haru', 'sabe-bluebloom']);
+    expect(save?.social.contacts).toEqual(['haru']);
+    expect(save?.social.citizens).toEqual(['Nina Aurora']);
+    expect(save?.afters.productId).toBe('aftercurve');
+    expect(save?.afters.intensity).toBeCloseTo(0.4, 5);
+  });
+
+  it('limpa bandeiras e dados sociais inválidos sem descartar o salvamento', () => {
+    const save = sanitizeSave(
+      {
+        version: 2,
+        flags: ['ok-1', '', 'x'.repeat(200), 42, { a: 1 }],
+        social: { contacts: ['haru', 'intruso'], citizens: 'não é lista', photos: 'nada', readThreads: [] },
+        afters: 'quebrado',
+      },
+      NOW,
+    );
+    expect(save).not.toBeNull();
+    expect(save?.flags).toContain('ok-1');
+    expect(save?.flags.every((flag) => flag.length > 0 && flag.length <= 64)).toBe(true);
+    expect(save?.social.contacts).toEqual(['haru']);
+    expect(save?.social.citizens).toEqual([]);
+    expect(save?.social.photos).toEqual([]);
+    expect(save?.afters.unlocked).toBe(false);
+  });
+
+  it('grava e relê o salvamento completo pelo SaveSystem', () => {
+    const storage = new MemoryStorage();
+    const system = new SaveSystem(storage);
+    const save = createNewSave(NOW);
+    save.flags = ['conheceu-luma'];
+    save.social = { contacts: ['luma'], citizens: ['Gael Brisa'], photos: [], readThreads: [] };
+    save.afters = { unlocked: true, productId: 'afterlove', color: '#ff6f91', intensity: 0.8, particles: false, sound: true };
+    expect(system.save(save)).toBe(true);
+    const loaded = system.load();
+    expect(loaded.status).toBe('carregado');
+    expect(loaded.data.flags).toEqual(['conheceu-luma']);
+    expect(loaded.data.social.contacts).toEqual(['luma']);
+    expect(loaded.data.afters.productId).toBe('afterlove');
+  });
+});
