@@ -64,7 +64,7 @@ void main() {
   float calm = mix(0.55, 1.0, smoothstep(0.0, 2.5, depth));
   // Atenua as ondas ao longe para evitar cintilação (aliasing) no horizonte.
   float viewDist = length(cameraPosition - vWorldPos);
-  float farFade = mix(0.22, 1.0, 1.0 - smoothstep(120.0, 800.0, viewDist));
+  float farFade = mix(0.1, 1.0, 1.0 - smoothstep(90.0, 620.0, viewDist));
   vec2 slope = (n1 + n2 * 0.6) * uWaveStrength * calm * farFade;
   vec3 normal = normalize(vec3(slope.x, 1.0, slope.y));
 

@@ -248,7 +248,44 @@ function spiral(cx: number, cz: number, r0: number, r1: number, a0: number, turn
 const ringEdge = RING.radius + RING.width / 2 - 0.5;
 const D = Math.SQRT1_2;
 
+/** Caminhos de acesso aos edifícios do núcleo (a partir da praça ou da avenida mais próxima). */
+function coreAccessPaths(): TerrainPath[] {
+  const paths: TerrainPath[] = [];
+  for (const b of BUILDINGS) {
+    const r = Math.hypot(b.x, b.z);
+    if (r > CORE_FLAT_RADIUS) continue;
+    const angle = Math.atan2(b.z, b.x);
+    const axis = Math.round(angle / (Math.PI / 2)) * (Math.PI / 2);
+    if (Math.abs(angle - axis) > 0.6) {
+      // Edifício na diagonal: alameda direta a partir da praça.
+      const from = PLAZA.radius - 1;
+      const to = r - forecourtRadius(b) + 1.5;
+      paths.push({
+        id: `acesso-${b.id}`,
+        points: [
+          { x: Math.cos(angle) * from, z: Math.sin(angle) * from },
+          { x: Math.cos(angle) * to, z: Math.sin(angle) * to },
+        ],
+        width: 4.2,
+      });
+    } else {
+      // Edifício ao lado de uma avenida: travessa perpendicular.
+      const along = b.x * Math.cos(axis) + b.z * Math.sin(axis);
+      paths.push({
+        id: `acesso-${b.id}`,
+        points: [
+          { x: Math.cos(axis) * along, z: Math.sin(axis) * along },
+          { x: b.x, z: b.z },
+        ],
+        width: 3.6,
+      });
+    }
+  }
+  return paths;
+}
+
 export const TERRAIN_PATHS: readonly TerrainPath[] = [
+  ...coreAccessPaths(),
   { id: 'lago-volta', points: lakeLoop(), width: 3.2 },
   {
     id: 'parque-entrada',
