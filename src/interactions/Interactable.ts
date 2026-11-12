@@ -26,7 +26,7 @@ export type InteractionPayload =
   | { type: 'portal'; portalId: string }
   | { type: 'esfera' }
   | { type: 'telescopio'; view: ScenicView }
-  | { type: 'atelie' }
+  | { type: 'atelie'; stand?: { x: number; z: number; heading: number } }
   | { type: 'holomapa' }
   | { type: 'eventos' };
 

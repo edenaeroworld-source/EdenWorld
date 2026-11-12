@@ -282,15 +282,18 @@ export class PhysicsWorld {
   /**
    * Lança um raio contra colisores e terreno. Retorna a distância livre
    * (≤ maxDistance). Usado pela câmera de terceira pessoa.
+   *
+   * @param includeAll considera também colisores que não bloqueiam a câmera
+   *   (postes, grades...), para testes de linha de visão.
    */
-  raycast(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxDistance: number): number {
+  raycast(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxDistance: number, includeAll = false): number {
     let best = maxDistance;
     const ex = ox + dx * maxDistance;
     const ez = oz + dz * maxDistance;
     const list = this.gather(Math.min(ox, ex), Math.max(ox, ex), Math.min(oz, ez), Math.max(oz, ez));
     for (let i = 0; i < list.length; i++) {
       const c = list[i];
-      if (!c.blocksCamera) continue;
+      if (!includeAll && !c.blocksCamera) continue;
       const t = raycastCollider(c, ox, oy, oz, dx, dy, dz, best);
       if (t < best) best = t;
     }
