@@ -37,6 +37,19 @@ describe('PlayerMotor', () => {
     expect(motor.state).toBe('idle');
   });
 
+  it('teleporte nunca ultrapassa o limite jogável do mundo', () => {
+    const physics = flatWorld();
+    physics.boundaryRadius = 50;
+    const motor = new PlayerMotor(physics);
+    motor.teleport(400, -300, 0);
+    expect(Math.hypot(motor.position.x, motor.position.z)).toBeCloseTo(50 - PLAYER.radius, 5);
+    // Mantém a direção do ponto pedido.
+    expect(motor.position.x / motor.position.z).toBeCloseTo(400 / -300, 5);
+    motor.teleport(10, 20, 0);
+    expect(motor.position.x).toBe(10);
+    expect(motor.position.z).toBe(20);
+  });
+
   it('vira o corpo para a direção do movimento', () => {
     const motor = new PlayerMotor(flatWorld());
     motor.teleport(0, 0, 0);

@@ -7,6 +7,19 @@ export interface ProgressTotals {
   portals: number;
 }
 
+/** Identificadores que existem no mundo desta versão do jogo. */
+export interface KnownProgressIds {
+  crystals: Iterable<string>;
+  entries: Iterable<string>;
+  areas: Iterable<string>;
+  portals: Iterable<string>;
+}
+
+function retain(set: Set<string>, known: Iterable<string>): void {
+  const valid = new Set(known);
+  for (const id of set) if (!valid.has(id)) set.delete(id);
+}
+
 /**
  * Progresso de exploração do jogador: Cristais de Luz, registros do
  * diário, áreas visitadas e portais ativados. Mantém conjuntos para
@@ -34,6 +47,17 @@ export class ProgressSystem {
     this.distance = data.distance;
     this.playSeconds = data.playSeconds;
     this.sphereMode = data.sphereMode;
+  }
+
+  /**
+   * Descarta registros que não existem neste mundo (salvamento editado à mão
+   * ou vindo de outra versão), para que as contagens nunca passem do total.
+   */
+  retainKnown(known: KnownProgressIds): void {
+    retain(this.crystals, known.crystals);
+    retain(this.entries, known.entries);
+    retain(this.areas, known.areas);
+    retain(this.portals, known.portals);
   }
 
   hasCrystal(id: string): boolean {

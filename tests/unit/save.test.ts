@@ -51,12 +51,11 @@ describe('sanitizeSave', () => {
   });
 
   it('limpa valores fora do esperado', () => {
-    const half = WORLD.terrainSize / 2;
     const save = sanitizeSave(
       {
         version: 1,
         profile: { name: '  <script>Ana</script>  ', appearance: { outfit: 'armadura', height: -3 }, created: 'sim' },
-        player: { x: 1e9, y: Number.NaN, z: -1e9, heading: 100 },
+        player: { x: 12.5, y: Number.NaN, z: -30, heading: 100 },
         world: { hours: 99, day: -4 },
         progress: {
           crystals: ['cristal-1', 'cristal-1', 42, '', 'com espaço', '<img>', 'a'.repeat(200), 'ok.id:2'],
@@ -80,7 +79,7 @@ describe('sanitizeSave', () => {
     expect(save.profile.appearance.outfit).toBe(DEFAULT_APPEARANCE.outfit);
     expect(save.profile.appearance.height).toBe(0.9);
     expect(save.profile.created).toBe(false);
-    expect(save.player).toEqual({ x: half, y: 0, z: -half, heading: Math.PI * 2 });
+    expect(save.player).toEqual({ x: 12.5, y: 0, z: -30, heading: Math.PI * 2 });
     expect(save.world).toEqual({ hours: 23.999, day: 1 });
     expect(save.progress.crystals).toEqual(['cristal-1', 'ok.id:2']);
     expect(save.progress.entries).toEqual([]);
@@ -99,6 +98,14 @@ describe('sanitizeSave', () => {
   it('descarta posição do jogador incompleta', () => {
     expect(sanitizeSave({ version: 1, player: { x: 4 } })?.player).toBeNull();
     expect(sanitizeSave({ version: 1, player: 'aqui' })?.player).toBeNull();
+  });
+
+  it('descarta posição fora do limite jogável (o jogador recomeça na praça)', () => {
+    const edge = WORLD.boundaryRadius;
+    expect(sanitizeSave({ version: 1, player: { x: edge - 1, y: 0, z: 0, heading: 0 } })?.player).toEqual({ x: edge - 1, y: 0, z: 0, heading: 0 });
+    expect(sanitizeSave({ version: 1, player: { x: edge + 1, y: 0, z: 0, heading: 0 } })?.player).toBeNull();
+    expect(sanitizeSave({ version: 1, player: { x: 1e12, y: -1e9, z: -1e12, heading: 0 } })?.player).toBeNull();
+    expect(sanitizeSave({ version: 1, player: { x: Number.POSITIVE_INFINITY, y: 0, z: 0, heading: 0 } })?.player).toBeNull();
   });
 
   it('ignora chaves perigosas ou desconhecidas', () => {
@@ -244,5 +251,23 @@ describe('ProgressSystem', () => {
     // O salvamento exportado não compartilha referências com o sistema.
     data.crystals.push('intruso');
     expect(progress.hasCrystal('intruso')).toBe(false);
+  });
+
+  it('descarta registros que não existem no mundo desta versão', () => {
+    const progress = new ProgressSystem({
+      ...emptyProgress(),
+      crystals: ['cristal-praca', 'cristal-de-outra-versao'],
+      entries: ['placa-1', 'placa-2', 'placa-apagada'],
+      areas: ['praca', 'lua'],
+      portals: ['praca', 'portal-inventado'],
+    });
+    progress.totals = { crystals: 1, entries: 2, areas: 1, portals: 1 };
+    progress.retainKnown({ crystals: ['cristal-praca'], entries: new Set(['placa-1', 'placa-2']), areas: ['praca'], portals: ['praca', 'mirante'] });
+    expect([progress.crystalCount, progress.entryCount, progress.areaCount, progress.portalCount]).toEqual([1, 2, 1, 1]);
+    expect(progress.hasCrystal('cristal-de-outra-versao')).toBe(false);
+    expect(progress.hasPortal('portal-inventado')).toBe(false);
+    expect(progress.hasPortal('mirante')).toBe(false);
+    expect(progress.completion).toBe(100);
+    expect(progress.toData().areas).toEqual(['praca']);
   });
 });

@@ -167,17 +167,18 @@ export function sanitizeSave(raw: unknown, now: number = Date.now()): SaveData |
   const world = isRecord(raw.world) ? raw.world : {};
   const progress = isRecord(raw.progress) ? raw.progress : {};
   const settings = isRecord(raw.settings) ? raw.settings : {};
-  const limit = WORLD.terrainSize / 2;
 
+  // Uma posição fora do limite jogável só pode vir de dados danificados ou
+  // adulterados: nesse caso o jogador recomeça no ponto inicial da cidade.
   let player: SaveData['player'] = null;
   if (isRecord(raw.player)) {
-    const p = raw.player;
-    if (typeof p.x === 'number' && typeof p.z === 'number' && Number.isFinite(p.x) && Number.isFinite(p.z)) {
+    const { x, z } = raw.player;
+    if (typeof x === 'number' && typeof z === 'number' && Number.isFinite(x) && Number.isFinite(z) && Math.hypot(x, z) <= WORLD.boundaryRadius) {
       player = {
-        x: clamp(p.x, -limit, limit),
-        y: num(p.y, 0, -50, 500),
-        z: clamp(p.z, -limit, limit),
-        heading: num(p.heading, 0, -Math.PI * 2, Math.PI * 2),
+        x,
+        y: num(raw.player.y, 0, -50, 500),
+        z,
+        heading: num(raw.player.heading, 0, -Math.PI * 2, Math.PI * 2),
       };
     }
   }

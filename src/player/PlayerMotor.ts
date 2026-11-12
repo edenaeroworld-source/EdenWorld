@@ -79,6 +79,13 @@ export class PlayerMotor {
   /** Coloca o personagem em um ponto do mundo, apoiado no chão sob ele. */
   teleport(x: number, z: number, heading: number, y?: number): void {
     this.seat = null;
+    // Nenhum teleporte coloca o personagem além do limite jogável do mundo.
+    const limit = this.physics.boundaryRadius - PLAYER.radius;
+    const distance = Math.hypot(x, z);
+    if (this.physics.boundaryRadius > 0 && distance > limit) {
+      x *= limit / distance;
+      z *= limit / distance;
+    }
     this.position.x = x;
     this.position.z = z;
     const probeY = y ?? 1e4;

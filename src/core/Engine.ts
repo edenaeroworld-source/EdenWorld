@@ -298,6 +298,12 @@ export class Engine {
       this.journalEntries.push({ id: item.payload.entryId, title: item.payload.title, paragraphs: item.payload.paragraphs });
     }
     this.progress.totals = { crystals: city.collectibles.length, entries: this.journalEntries.length, areas: AREAS.length, portals: city.portals.length };
+    this.progress.retainKnown({
+      crystals: city.collectibles.map((spot) => spot.id),
+      entries: this.journalEntries.map((entry) => entry.id),
+      areas: AREAS.map((area) => area.id),
+      portals: city.portals.map((portal) => portal.id),
+    });
 
     this.interactions = new InteractionSystem(city.interactables);
     this.registerInteractions();
@@ -376,6 +382,8 @@ export class Engine {
     window.addEventListener('pagehide', this.onPageHide);
 
     this.renderer.onContextLost = () => {
+      // Grava antes de parar: a mensagem abaixo promete que o progresso está salvo.
+      this.persist();
       this.loop.stop();
       showErrorScreen(this.uiRoot, 'Os gráficos foram interrompidos', ['O navegador suspendeu o contexto gráfico do jogo. Seu progresso está salvo.', 'Recarregue a página para continuar.']);
     };
