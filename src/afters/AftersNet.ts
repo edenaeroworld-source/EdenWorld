@@ -84,6 +84,44 @@ export function sampleNetState(state: AftersNetState, now = Date.now()): { bust:
   };
 }
 
+/**
+ * Instantâneo de um habitante da cidade (ou do panteão).
+ *
+ * A população é determinística: todo cliente gera os mesmos habitantes a
+ * partir da mesma semente, com a mesma configuração de silhueta. Por isso
+ * **só trafega o que fugiu do perfil** — um habitante mudado por roteiro,
+ * por evento da cidade ou por outro jogador. O resto da cidade se reproduz
+ * sozinha, idêntica, em cada máquina.
+ */
+export interface AftersActorNetState extends AftersNetState {
+  /** Identificador do ator: `cidadao:<semente>` ou `divino:<personagem>`. */
+  id: string;
+}
+
+/** Limite de habitantes por pacote: a cidade inteira nunca é enviada. */
+const MAX_ACTOR_STATES = 64;
+
+/** Monta o instantâneo de um habitante a partir do estado local dele. */
+export function toActorNetState(id: string, body: AftersBody, options: Parameters<typeof toNetState>[1] = {}): AftersActorNetState {
+  return { id, ...toNetState(body, options) };
+}
+
+/** Valida uma lista de instantâneos de habitantes recebida pela rede. */
+export function sanitizeActorNetStates(raw: unknown, now = Date.now()): AftersActorNetState[] {
+  if (!Array.isArray(raw)) return [];
+  const out: AftersActorNetState[] = [];
+  const seen = new Set<string>();
+  for (const entry of raw) {
+    if (out.length >= MAX_ACTOR_STATES) break;
+    if (typeof entry !== 'object' || entry === null) continue;
+    const id = (entry as Record<string, unknown>).id;
+    if (typeof id !== 'string' || id.length === 0 || id.length > 64 || seen.has(id)) continue;
+    seen.add(id);
+    out.push({ id, ...sanitizeNetState(entry, now) });
+  }
+  return out;
+}
+
 /** `true` quando a transição remota já terminou (pode parar de amostrar). */
 export function isNetStateSettled(state: AftersNetState, now = Date.now()): boolean {
   if (state.duration <= 0) return true;

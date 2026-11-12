@@ -1,4 +1,4 @@
-import type { AftersNetState } from '../afters/AftersNet';
+import type { AftersActorNetState, AftersNetState } from '../afters/AftersNet';
 import type { GameSystem } from '../core/GameSystem';
 import type { AvatarAppearance } from '../player/AvatarAppearance';
 
@@ -43,8 +43,19 @@ export interface SocialService extends GameSystem {
   readonly online: boolean;
   /** Jogadores visíveis na região atual. */
   readonly nearby: readonly RemotePlayerState[];
+  /**
+   * Silhueta dos habitantes que fugiram da configuração padrão.
+   *
+   * Aurora City é gerada pela mesma semente em todas as máquinas, então o
+   * habitante comum já nasce igual para todo mundo. O que precisa viajar é
+   * a exceção: alguém mudado por roteiro, por evento ou por outro jogador.
+   * Com isso, o mesmo habitante não aparece diferente para cada um.
+   */
+  readonly npcAfters: readonly AftersActorNetState[];
   /** Publica o estado do jogador local (ignorado quando off-line). */
   publish(state: LocalPlayerState): void;
+  /** Publica a silhueta dos habitantes mudados (ignorado quando off-line). */
+  publishNpcAfters(states: readonly AftersActorNetState[]): void;
   /** Envia um aceno ou emote aos jogadores próximos. */
   sendEmote(emote: string): void;
 }
@@ -54,8 +65,13 @@ export class LocalSocial implements SocialService {
   readonly id = 'social';
   readonly online = false;
   readonly nearby: readonly RemotePlayerState[] = [];
+  readonly npcAfters: readonly AftersActorNetState[] = [];
 
   publish(_state: LocalPlayerState): void {
+    /* off-line: nada é enviado */
+  }
+
+  publishNpcAfters(_states: readonly AftersActorNetState[]): void {
     /* off-line: nada é enviado */
   }
 

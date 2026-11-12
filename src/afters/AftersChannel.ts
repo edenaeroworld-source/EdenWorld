@@ -149,6 +149,20 @@ export class AftersChannel {
     }
   }
 
+  /**
+   * Coloca a transição em um ponto escolhido, mantendo o destino.
+   *
+   * Usado pela rede: um jogador que chega no meio de uma transformação
+   * remota começa de onde ela já está, em vez de refazer o caminho todo.
+   */
+  seek(value: number): void {
+    const point = clampIntensity(value);
+    this.currentValue = point;
+    this.fromValue = point;
+    this.elapsed = 0;
+    this.running = Math.abs(this.targetValue - point) > 1e-4 && this.durationValue > 0;
+  }
+
   /** Salta para o destino (teleporte, carregamento, trocar de avatar). */
   snap(): void {
     this.currentValue = this.targetValue;

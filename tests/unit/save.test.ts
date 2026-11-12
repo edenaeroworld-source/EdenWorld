@@ -320,6 +320,33 @@ describe('salvamento v2 (EdenOS, Afters e bandeiras)', () => {
     expect(save?.afters.intensity).toBeCloseTo(0.4, 5);
   });
 
+  it('guarda a silhueta dos habitantes mudados por roteiro', () => {
+    const save = sanitizeSave(
+      {
+        version: 2,
+        afters: {
+          unlocked: true,
+          productId: 'afterbust',
+          body: { bust: 2, curve: 0, bustActive: true, curveActive: false, duration: 1.6, preset: null },
+          citizens: {
+            'cidadao:12': { bust: 1.5, curve: 0.5, bustActive: true, curveActive: true, duration: 2, preset: null },
+            'divino:luma': { bust: 1.25, curve: 1.5, bustActive: true, curveActive: true, duration: 1.8, preset: null },
+            '': { bust: 1 },
+          },
+        },
+      },
+      NOW,
+    );
+    expect(Object.keys(save?.afters.citizens ?? {}).sort()).toEqual(['cidadao:12', 'divino:luma']);
+    expect(save?.afters.citizens['cidadao:12'].bust).toBeCloseTo(1.5, 5);
+    expect(save?.afters.citizens['divino:luma'].curveActive).toBe(true);
+  });
+
+  it('salvamento sem a lista de habitantes carrega com a cidade padrão', () => {
+    const save = sanitizeSave({ version: 2, afters: { unlocked: true, productId: 'afterbust' } }, NOW);
+    expect(save?.afters.citizens).toEqual({});
+  });
+
   it('limpa bandeiras e dados sociais inválidos sem descartar o salvamento', () => {
     const save = sanitizeSave(
       {
@@ -345,7 +372,7 @@ describe('salvamento v2 (EdenOS, Afters e bandeiras)', () => {
     const save = createNewSave(NOW);
     save.flags = ['conheceu-luma'];
     save.social = { contacts: ['luma'], citizens: ['Gael Brisa'], photos: [], readThreads: [] };
-    save.afters = { unlocked: true, productId: 'afterlove', color: '#ff6f91', intensity: 0.8, particles: false, sound: true, body: defaultAftersBody() };
+    save.afters = { unlocked: true, productId: 'afterlove', color: '#ff6f91', intensity: 0.8, particles: false, sound: true, body: defaultAftersBody(), citizens: {} };
     expect(system.save(save)).toBe(true);
     const loaded = system.load();
     expect(loaded.status).toBe('carregado');

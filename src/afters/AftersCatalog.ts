@@ -148,6 +148,14 @@ export interface AftersConfig {
   sound: boolean;
   /** Transformação de silhueta: AfterBust® e AfterCurve®. */
   body: AftersBody;
+  /**
+   * Silhueta dos habitantes mudados por roteiro, por identificador de ator
+   * (`cidadao:<semente>`, `divino:<personagem>`).
+   *
+   * Só entram aqui os que fugiram do próprio perfil: o restante da cidade é
+   * recriado a partir da semente, sem ocupar espaço no salvamento.
+   */
+  citizens: Record<string, AftersBody>;
 }
 
 export function defaultAftersConfig(): AftersConfig {
@@ -159,6 +167,7 @@ export function defaultAftersConfig(): AftersConfig {
     particles: true,
     sound: true,
     body: defaultAftersBody(),
+    citizens: {},
   };
 }
 
@@ -181,5 +190,24 @@ export function sanitizeAftersConfig(raw: unknown): AftersConfig {
     // Salvamentos anteriores à versão 2.0 dos Afters não têm este bloco:
     // carregam com a silhueta original, sem perder o resto do progresso.
     body: sanitizeAftersBody(source.body),
+    citizens: sanitizeAftersCitizens(source.citizens),
   };
+}
+
+/** Limite de habitantes guardados: evita salvamentos inchados. */
+const MAX_SAVED_CITIZENS = 128;
+
+/** Valida o mapa de silhuetas de habitantes vindo do salvamento. */
+export function sanitizeAftersCitizens(raw: unknown): Record<string, AftersBody> {
+  const out: Record<string, AftersBody> = {};
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return out;
+  let count = 0;
+  for (const [id, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (count >= MAX_SAVED_CITIZENS) break;
+    if (typeof id !== 'string' || id.length === 0 || id.length > 64) continue;
+    if (typeof value !== 'object' || value === null) continue;
+    out[id] = sanitizeAftersBody(value);
+    count += 1;
+  }
+  return out;
 }

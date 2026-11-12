@@ -81,6 +81,23 @@ describe('cidadãos', () => {
     expect(names.size).toBeGreaterThan(20);
   });
 
+  it('mantém a identidade de quem já morava na cidade', () => {
+    // O sorteio da silhueta entrou **depois** dos demais na sequência de
+    // números: quem já existia continua com o mesmo nome e o mesmo passo.
+    const expected: Record<number, string> = {
+      0: 'Otávio Aurora|atleta|2.4925',
+      1: 'Noor Zênite|atleta|2.1681',
+      7: 'Alícia Brisa|jardineiro|1.1554',
+      23: 'Suri Cristal|tecnica|1.4574',
+      41: 'Aiko Nimbus|viajante|1.2502',
+      53: 'Nina Nimbus|artista|1.1724',
+    };
+    for (const [seed, signature] of Object.entries(expected)) {
+      const citizen = makeCitizen(Number(seed));
+      expect(`${citizen.name}|${citizen.archetype.id}|${citizen.speed.toFixed(4)}`).toBe(signature);
+    }
+  });
+
   it('dá nome, arquétipo e velocidade plausíveis', () => {
     for (let seed = 0; seed < 60; seed++) {
       const citizen = makeCitizen(seed);

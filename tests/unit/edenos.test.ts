@@ -273,7 +273,7 @@ describe('catálogo Afters', () => {
   });
 
   it('mantém uma configuração boa intacta', () => {
-    const good = { unlocked: true, productId: AFTERS_PRODUCTS[2].id, color: '#7fd6ff', intensity: 0.5, particles: false, sound: true, body: defaultAftersBody() };
+    const good = { unlocked: true, productId: AFTERS_PRODUCTS[2].id, color: '#7fd6ff', intensity: 0.5, particles: false, sound: true, body: defaultAftersBody(), citizens: {} };
     expect(sanitizeAftersConfig(good)).toEqual(good);
   });
 });
