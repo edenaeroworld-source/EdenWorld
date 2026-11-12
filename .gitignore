@@ -1,0 +1,32 @@
+# Dependências
+node_modules/
+
+# Build de produção
+dist/
+dist-ssr/
+
+# Vite / caches
+.vite/
+*.local
+.cache/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Ambiente — nunca versionar credenciais
+.env
+.env.*
+!.env.example
+
+# Editor / SO
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# Artefatos de teste
+coverage/
+tests/e2e/artifacts/

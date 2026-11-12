@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>EDENWORLD — A World Beyond Imagination</title>
+    <meta name="description" content="EDENWORLD Genesis 0.1 — explore Aurora City, a primeira região do universo Éden Aero, direto no navegador." />
+    <meta name="theme-color" content="#0b84d8" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="64x64" href="./icons/favicon-64.png" />
+    <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="game-canvas" aria-label="Mundo 3D de EDENWORLD"></canvas>
+      <div id="ui-root"></div>
+    </div>
+    <noscript>
+      <div style="position: fixed; inset: 0; display: grid; place-items: center; background: #0b84d8; color: #fff; font-family: sans-serif; text-align: center; padding: 24px">
+        EDENWORLD precisa de JavaScript e WebGL2 para funcionar. Ative o JavaScript no seu navegador.
+      </div>
+    </noscript>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
