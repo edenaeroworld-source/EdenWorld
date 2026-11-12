@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { AFTERS_PRODUCTS, defaultAftersConfig, getAftersProduct, sanitizeAftersConfig } from '../../src/afters/AftersCatalog';
+import {
+  AFTERS_PRODUCTS,
+  SUPPLEMENTARY_PRODUCTS,
+  TRANSFORM_PRODUCTS,
+  defaultAftersConfig,
+  getAftersProduct,
+  productForChannel,
+  sanitizeAftersConfig,
+} from '../../src/afters/AftersCatalog';
 import { defaultAftersBody } from '../../src/afters/AftersState';
 import { PANTHEON } from '../../src/characters/Pantheon';
 import { EdenSocial, emptySocialData, type FeedContext, sanitizeSocialData } from '../../src/edenos/EdenSocial';
@@ -219,12 +227,26 @@ describe('catálogo Afters', () => {
     }
   });
 
-  it('descreve só efeitos visuais abstratos, sem anatomia', () => {
+  it('separa os dois produtos que transformam dos que só acendem luz', () => {
+    expect(TRANSFORM_PRODUCTS.map((product) => product.channel)).toEqual(['bust', 'curve']);
+    expect(TRANSFORM_PRODUCTS.map((product) => product.id)).toEqual(['afterbust', 'aftercurve']);
+    expect(SUPPLEMENTARY_PRODUCTS.length).toBe(AFTERS_PRODUCTS.length - 2);
+    for (const product of SUPPLEMENTARY_PRODUCTS) expect(product.channel).toBeUndefined();
+    expect(productForChannel('bust').name).toBe('AfterBust®');
+    expect(productForChannel('curve').name).toBe('AfterCurve®');
+  });
+
+  it('descreve transformação de silhueta, sem vocabulário anatômico', () => {
     const text = JSON.stringify(AFTERS_PRODUCTS).toLowerCase();
-    for (const forbidden of ['seio', 'busto', 'peito', 'bunda', 'nádega', 'quadril', 'cintura', 'decote']) {
+    for (const forbidden of ['seio', 'busto', 'peito', 'bunda', 'nádega', 'decote']) {
       expect(text).not.toContain(forbidden);
     }
-    expect(text).toMatch(/aura|brilho|partícula|luz/);
+    // Os dois produtos principais dizem o que fazem de verdade…
+    expect(JSON.stringify(TRANSFORM_PRODUCTS).toLowerCase()).toMatch(/silhueta/);
+    expect(JSON.stringify(TRANSFORM_PRODUCTS)).toContain('250%');
+    // …e os complementares continuam sendo só luz.
+    expect(JSON.stringify(SUPPLEMENTARY_PRODUCTS).toLowerCase()).toMatch(/aura|brilho|partícula|luz/);
+    expect(JSON.stringify(SUPPLEMENTARY_PRODUCTS).toLowerCase()).not.toContain('silhueta');
   });
 
   it('começa trancado, sem produto ativo', () => {

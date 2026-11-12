@@ -1343,6 +1343,8 @@ export class Engine {
         const preset = getAftersPreset(id);
         if (preset) this.aftersBody.applyPreset(preset);
       },
+      resetAfters: (channel) => this.aftersBody.reset(channel),
+      resetAftersAll: () => this.aftersBody.resetAll(),
       aftersAllOff: () => {
         this.aftersBody.turnOff();
         this.afters.setConfig({ ...this.afters.current, productId: null });

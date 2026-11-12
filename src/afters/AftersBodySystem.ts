@@ -20,6 +20,7 @@ import {
   defaultAftersBody,
   effectiveIntensity,
   matchingPreset,
+  resetChannel,
   statusLabel,
 } from './AftersState';
 
@@ -173,6 +174,30 @@ export class AftersBodySystem implements GameSystem {
   /** Desliga os dois canais sem perder os valores escolhidos. */
   turnOff(): void {
     this.setCombined(false);
+  }
+
+  /**
+   * Reinicia um canal: 0% e desligado, apagando a porcentagem guardada.
+   *
+   * O outro canal não é tocado — reiniciar o AfterBust® não mexe em nada do
+   * AfterCurve®, nem na duração da transição, nem no efeito de luz.
+   */
+  reset(channel: AftersChannelId): void {
+    const before = channel === 'bust' ? this.bust.target : this.curve.target;
+    this.body = resetChannel(this.body, channel);
+    if (channel === 'bust') this.bust.apply(0, false);
+    else this.curve.apply(0, false);
+    if (Math.abs(before) > 1e-4) this.callbacks.onTransition?.(channel, before, 0);
+    this.callbacks.onChange?.(this.current);
+  }
+
+  /** Reinicia os dois canais e a duração: volta tudo ao padrão de fábrica. */
+  resetAll(): void {
+    const bustBefore = this.bust.target;
+    const curveBefore = this.curve.target;
+    this.setBody(defaultAftersBody(), true);
+    if (Math.abs(bustBefore) > 1e-4) this.callbacks.onTransition?.('bust', bustBefore, 0);
+    if (Math.abs(curveBefore) > 1e-4) this.callbacks.onTransition?.('curve', curveBefore, 0);
   }
 
   private afterEdit(channel: AftersChannelId, before: number): void {

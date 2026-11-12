@@ -141,3 +141,30 @@ A verificação visual no navegador continua pendente por falta de navegador no
 ambiente de desenvolvimento — não por falta de implementação. O servidor de
 desenvolvimento sobe, e todos os módulos novos são transformados e servidos
 sem erro.
+
+## 7. Revisão: os dois produtos passam a ser o assunto da tela
+
+A primeira entrega já transformava o avatar, mas a tela ainda tratava
+AfterBust® e AfterCurve® como **duas coisas ao mesmo tempo**: uma seção de
+silhueta e, mais abaixo, os mesmos nomes de novo numa lista de auras. Isso é
+rótulo duplicado. O que mudou:
+
+| Removido | Em lugar de quê |
+| --- | --- |
+| AfterBust® e AfterCurve® da lista de auras | cada um virou **seção de produto**, no topo da tela |
+| Rótulo "Assinatura estética" para os seis | "Efeitos complementares", só com os quatro que não transformam |
+| Texto da Luma e do diário dizendo que Afters é "estética: aura, contorno, presença" | agora explicam a transformação de 0% a 250% e dizem que os outros quatro são só luz |
+
+E o que entrou:
+
+- **Botão Reiniciar por produto** (`resetAfters`), que volta o canal ao padrão
+  0% e apaga a porcentagem guardada — diferente de desligar, que a preserva.
+- **Reiniciar tudo** (`resetAftersAll`), que também devolve a duração padrão.
+- **Luz de assinatura** como interruptor dentro da seção de cada produto, em
+  vez de um item de lista concorrente.
+- `AftersProduct.channel`, `TRANSFORM_PRODUCTS`, `SUPPLEMENTARY_PRODUCTS` e
+  `productForChannel()`: a separação entre "transforma" e "só acende" passa a
+  existir no catálogo, não no desenho da tela.
+
+Os ids gravados no salvamento (`afterbust`, `aftercurve`, …) **não mudaram**:
+salvamentos anteriores continuam válidos, inclusive com a luz ligada.
