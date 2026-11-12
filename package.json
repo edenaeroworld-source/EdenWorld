@@ -4,6 +4,9 @@
   "private": true,
   "description": "EDENWORLD — Genesis 0.1. Mundo aberto 3D do universo Éden Aero para navegadores (TypeScript + Three.js + WebGL2).",
   "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
