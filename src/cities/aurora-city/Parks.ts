@@ -164,7 +164,8 @@ function telescope(ctx: CityContext, batch: GeometryBatcher, id: string, name: s
     y: y + 1.2,
     z,
     range: 2.4,
-    payload: { type: 'telescopio', view: { eye: { x, y: y + 1.7, z }, yaw: heading, pitch } },
+    // O ponto de vista fica à frente da lente e acima do tubo, para o instrumento não tapar a paisagem.
+    payload: { type: 'telescopio', view: { eye: { x: x + f.x * 0.6, y: y + 1.95, z: z + f.z * 0.6 }, yaw: heading, pitch } },
   });
 }
 
@@ -642,7 +643,9 @@ function buildWaterfront(ctx: CityContext, props: Props): void {
     const z = endZ + Math.sin(a) * 3.0;
     props.bench(x, z, headingTo(PIER.x, endZ, x, z), deckY);
   }
-  telescope(ctx, batch, 'telescopio-pier', 'Telescópio — Vista do Mar', PIER.x, deckY, endZ + 5.4, Math.PI, 0.06);
+  // Na borda leste do pavilhão, entre duas colunas, apontado para os veleiros ao largo.
+  const scopeX = PIER.x + 5.4;
+  telescope(ctx, batch, 'telescopio-pier', 'Telescópio — Vista da Baía', scopeX, deckY, endZ, headingTo(scopeX, endZ, 52, 239), -0.02);
   ctx.lightSpots.push({ x: PIER.x, y: deckY + 0.05, z: endZ, radius: 7, color: 0x9fefff });
 
   /* ----- Guarda-sóis e espreguiçadeiras ----- */

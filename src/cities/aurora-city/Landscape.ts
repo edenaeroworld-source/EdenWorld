@@ -9,7 +9,7 @@ import { PLAZA_Y } from './CentralPlaza';
 import type { CityContext } from './CityContext';
 import { type Props, headingTo, headingVector } from './Decorations';
 import { crystalShard, cyl, disc, torus } from './Kit';
-import { AVENUES, CORE_FLAT_RADIUS, HANGING_GARDENS, LAKE_ISLAND, MIRANTE, PIER, RING, STAGE, coastRadius } from './Layout';
+import { AVENUES, CORE_FLAT_RADIUS, H0, HANGING_GARDENS, LAKE_ISLAND, MIRANTE, PIER, RING, STAGE, coastRadius } from './Layout';
 import type { GardenBed } from './Zones';
 
 /* ------------------------------------------------------------------ */
@@ -278,6 +278,9 @@ function plantBeds(ctx: CityContext, beds: readonly GardenBed[]): void {
 /* Arborização livre                                                    */
 /* ------------------------------------------------------------------ */
 
+/** Acima desta altitude, a encosta do Mirante só recebe arbustos e flores. */
+const MIRANTE_TREE_LINE = H0 + MIRANTE.height * 0.34;
+
 function plantTrees(ctx: CityContext): void {
   const rng = createRng(4242);
   const zones = ctx.zones;
@@ -294,7 +297,11 @@ function plantTrees(ctx: CityContext): void {
     else if (kind === 'frondosa' && rng() < 0.16) color = pick(rng, BLOSSOM_COLORS);
     else color = pick(rng, LEAF_GREENS);
     const scale = kind === 'bananeira' ? randRange(rng, 0.9, 1.5) : randRange(rng, 0.82, 1.28);
-    vegetation.addTree({ kind, x, z, scale, rotation: rng() * TAU, color: new THREE.Color(color) });
+    const rotation = rng() * TAU;
+    // O alto do Mirante Celeste fica sem copas, para não tapar a vista panorâmica.
+    // (O sorteio acima é mantido para não alterar o restante da arborização.)
+    if (h > MIRANTE_TREE_LINE && Math.hypot(x - MIRANTE.x, z - MIRANTE.z) < MIRANTE.radius) return false;
+    vegetation.addTree({ kind, x, z, scale, rotation, color: new THREE.Color(color) });
     return true;
   };
   const choose = (table: readonly [TreeKind, number][]): TreeKind => {

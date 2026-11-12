@@ -696,6 +696,43 @@ const EXTRA_INFO: Record<string, string> = {
   observatorio: 'À noite, procure a aurora e o planeta anelado no céu de Aurora City.',
 };
 
+/** Estação de estilo do Ateliê Aero: um espelho holográfico onde o jogador recria o avatar. */
+function buildStyleStation(kit: BuildingKit, forecourt: number): void {
+  const { ctx } = kit;
+  const m = ctx.materials;
+  const lx = -3.6;
+  const lz = forecourt - 1.8;
+  kit.detail.add(cyl(0.95, 1.1, 0.16, 28), m.white, kit.at(lx, 0, lz));
+  kit.detail.add(cyl(0.82, 0.82, 0.05, 28), m.aquaGlow, kit.at(lx, 0.16, lz));
+  kit.detail.add(cyl(0.07, 0.09, 0.5, 10), m.metal, kit.at(lx - 0.62, 0.16, lz - 0.5));
+  kit.detail.add(cyl(0.07, 0.09, 0.5, 10), m.metal, kit.at(lx + 0.62, 0.16, lz - 0.5));
+  // Espelho oval atrás da plataforma, voltado para quem chega.
+  const frame = new THREE.TorusGeometry(0.86, 0.06, 10, 40);
+  frame.scale(1, 1.32, 1);
+  kit.detail.add(frame, m.aquaGlow, kit.at(lx, 1.72, lz - 0.52));
+  const mirror = new THREE.CircleGeometry(0.84, 36);
+  mirror.scale(1, 1.32, 1);
+  kit.detail.add(mirror, m.glass, kit.at(lx, 1.72, lz - 0.53));
+  kit.detail.add(new THREE.SphereGeometry(0.11, 12, 8), m.lampGlow, kit.at(lx, 3.02, lz - 0.52));
+  const p = kit.world(lx, lz);
+  const back = kit.world(lx, lz - 0.55);
+  ctx.physics.addCylinder({ x: back.x, z: back.z, radius: 0.3, yMin: H0 - 1, yMax: H0 + 2.9, walkable: false, blocksCamera: false, tag: 'estacao-estilo' });
+  ctx.physics.addCylinder({ x: p.x, z: p.z, radius: 1.0, yMin: H0 - 0.5, yMax: H0 + 0.21, surface: 'glass', blocksCamera: false, tag: 'estacao-estilo-base' });
+  ctx.reserve(p.x, p.z, 1.6);
+  ctx.lightSpots.push({ x: p.x, y: H0 + 0.3, z: p.z, radius: 4, color: 0x7ff0ff });
+  ctx.addInteractable({
+    id: 'estacao-estilo',
+    name: 'Estação de Estilo',
+    action: 'Mudar visual',
+    x: p.x,
+    y: H0 + 1.1,
+    z: p.z,
+    range: 2.4,
+    // O jogador sobe na plataforma, de costas para o espelho, e a câmera o vê de frente.
+    payload: { type: 'atelie', stand: { x: p.x, z: p.z, heading: Math.atan2(p.x - back.x, p.z - back.z) } },
+  });
+}
+
 /** Constrói todos os edifícios de Aurora City a partir dos lotes do layout. */
 export function buildBuildings(ctx: CityContext, props: Props, lots: readonly BuildingLot[]): void {
   for (const lot of lots) {
@@ -736,6 +773,8 @@ export function buildBuildings(ctx: CityContext, props: Props, lots: readonly Bu
       z: position.z,
       payload: { type: 'placa', title: lot.name, paragraphs, entryId: `edificio-${lot.id}` },
     });
+
+    if (lot.id === 'atelie-aero') buildStyleStation(kit, fr);
 
     // Arbustos ao redor do pátio.
     const bushes = Math.round(fr * 1.3);
