@@ -257,6 +257,7 @@ function renderInterior(id: string, floor: number, file: string): void {
 
 const outDir = process.argv[2] ?? 'docs';
 const targets: [string, number, string][] = [
+  ['atelie-aero', 0, 'interior-atelie-aero'],
   ['apto-aurora-12', 0, 'interior-apartamento-aurora'],
   ['torre-zenite', 0, 'interior-zenite-recepcao'],
   ['torre-zenite', 1, 'interior-edentech'],
@@ -265,5 +266,8 @@ const targets: [string, number, string][] = [
   ['mercado-eden', 1, 'interior-edenstore-galeria'],
   ['edenpawl-aurora', 0, 'interior-edenpawl'],
   ['centro-edenconnect', 0, 'interior-centro-connect'],
+  // Rosas Park, a região de referência: entra na mesma lista para a
+  // comparação entre as duas ser feita com a mesma régua.
+  ['casa-de-cha', 0, 'interior-casa-de-cha'],
 ];
 for (const [id, floor, name] of targets) renderInterior(id, floor, `${outDir.replace(/\/$/, '')}/${name}.png`);

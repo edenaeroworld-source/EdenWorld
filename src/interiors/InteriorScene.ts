@@ -20,6 +20,17 @@
  * −7 m e o limite circular da região fica a 5 km, então o jogador
  * nadava e era arrancado da sala no primeiro passo. `physics.setIndoor`
  * desliga as duas regras enquanto se está dentro.
+ *
+ * **A física é pedida a cada uso, nunca guardada.** Viajar de região
+ * destrói o mundo e monta outro — `World.build` cria uma `PhysicsWorld`
+ * nova. Esta cena nasce uma vez e vive a sessão inteira; enquanto ela
+ * guardava a física recebida no construtor, o primeiro prédio aberto
+ * depois de uma viagem subia inteiro na física **morta**: as paredes
+ * iam para um mundo que ninguém mais consulta, `setIndoor` ligava o
+ * modo interior onde ninguém mais olha, e o jogador — ainda sujeito ao
+ * limite circular — era atirado a 5 km dali, para o meio do oceano,
+ * com o exterior escondido. É exatamente a cena de "entrei na casa e
+ * caí nadando no vazio". Por isso `physics` aqui é uma função.
  */
 
 import * as THREE from 'three';
@@ -31,6 +42,7 @@ import { createRng, randRange } from '../utils/math';
 import type { MaterialLibrary } from '../world/Materials';
 import type { InteriorDef, InteriorProp, InteriorRoom } from './Interior';
 import { roomsOnFloor } from './Interior';
+import { dressRoom } from './InteriorDressing';
 import { FLOOR_HEIGHT, InteriorBuild } from './InteriorKit';
 import type { InteriorLoader } from './InteriorManager';
 import { InteriorPalette } from './InteriorPalette';
@@ -42,11 +54,14 @@ import { buildBackdrop, buildShell, buildStaircase, footprintOf, stairwellOf } f
 import { getFitout } from './fitouts';
 
 /**
- * Os materiais do mundo de que um interior ainda se serve.
+ * Os materiais do mundo que um interior poderia querer emprestados.
  *
- * A mobília e os acabamentos vêm da paleta própria dos interiores
- * (`InteriorPalette`); estes continuam aqui porque alguns elementos
- * devem combinar com a cidade lá fora.
+ * Hoje nenhum: a mobília e os acabamentos saem todos da paleta própria
+ * dos interiores (`InteriorPalette`), que não pertence a região
+ * nenhuma. O tipo fica porque descreve o empréstimo — mas a cena **não
+ * guarda** materiais do mundo, e é de propósito: `World.dispose()` os
+ * destrói a cada viagem, e uma cena que vive a sessão inteira não pode
+ * segurar nada que morra antes dela.
  */
 export type InteriorMaterials = Pick<MaterialLibrary, 'wood' | 'stone' | 'white' | 'facade' | 'glass' | 'crystal' | 'metal'>;
 
@@ -81,8 +96,15 @@ interface OfficialResident {
 
 export interface InteriorSceneOptions {
   scene: THREE.Scene;
-  materials: InteriorMaterials;
-  physics: PhysicsWorld;
+  /**
+   * A física **viva** do mundo.
+   *
+   * Aceita uma função justamente porque o mundo é trocado a cada
+   * viagem: guardar a referência de hoje é guardar a física de ontem.
+   * Passar o objeto direto continua valendo para quem não viaja (os
+   * testes), mas o motor deve passar `() => world.physics`.
+   */
+  physics: PhysicsWorld | (() => PhysicsWorld);
   /** Chamado quando a cena muda, para o motor reapontar os interativos. */
   onInteractables: (items: readonly Interactable[]) => void;
   /** Resolve o id de um morador no interativo de conversa correspondente. */
@@ -112,12 +134,27 @@ export class InteriorScene implements InteriorLoader {
   private spawn: InteriorSpawn | null = null;
   private floorY = 0;
   private quality: QualityProfile | null = null;
+  /**
+   * A física em que o prédio **aberto agora** foi montado.
+   *
+   * Desmontar tem de desfazer exatamente onde se fez. Se uma viagem
+   * acontecesse com um prédio aberto, pedir a física de novo na hora
+   * de sair devolveria a nova — e as paredes ficariam para sempre na
+   * antiga, junto com o modo interior ligado.
+   */
+  private bound: PhysicsWorld | null = null;
 
   constructor(options: InteriorSceneOptions) {
     this.options = options;
     this.group.name = 'Interior';
     this.group.visible = false;
     options.scene.add(this.group);
+  }
+
+  /** A física viva do mundo, perguntada agora. */
+  private get physics(): PhysicsWorld {
+    const source = this.options.physics;
+    return typeof source === 'function' ? source() : source;
   }
 
   get active(): InteriorDef | null {
@@ -150,6 +187,10 @@ export class InteriorScene implements InteriorLoader {
     if (this.current) this.unload(this.current);
     this.current = interior;
     this.floorY = 0;
+    // Tudo que este prédio tocar na física — colisores e modo
+    // interior — vai para esta, e é desta que sairá ao fechar.
+    const physics = this.physics;
+    this.bound = physics;
 
     const origin = INTERIOR_ORIGIN;
     const climate = LIGHTING[interior.lighting];
@@ -163,7 +204,7 @@ export class InteriorScene implements InteriorLoader {
       const build = new InteriorBuild({
         origin,
         palette: this.palette,
-        physics: this.options.physics,
+        physics,
         baseY: floor * FLOOR_HEIGHT,
         tag: 'interior',
       });
@@ -184,10 +225,12 @@ export class InteriorScene implements InteriorLoader {
       if (fitout) {
         fitout({ b: build, interior, floor, people, room: (id) => interior.rooms.find((room) => room.id === id) });
       } else {
-        for (const prop of interior.props) {
-          if (prop.floor !== floor) continue;
-          this.buildGenericProp(build, prop);
-        }
+        // Sem acabamento próprio: cada cômodo ganha o básico que o
+        // faz parecer um cômodo, e depois os móveis declarados. A
+        // decoração se afasta do que já está ali.
+        const declared = interior.props.filter((prop) => prop.floor === floor);
+        for (const room of rooms) dressRoom(build, room, declared);
+        for (const prop of declared) this.buildGenericProp(build, prop);
       }
       for (let i = before; i < people.length; i += 1) peopleFloors.push(floor);
 
@@ -251,7 +294,7 @@ export class InteriorScene implements InteriorLoader {
 
     // A física passa a servir o interior: sem relevo, sem limite
     // circular. É o que impede o jogador de "nadar" dentro do prédio.
-    this.options.physics.setIndoor(this.floorY);
+    physics.setIndoor(this.floorY);
 
     if (this.quality) this.applyQuality(this.quality);
     this.group.visible = true;
@@ -260,8 +303,11 @@ export class InteriorScene implements InteriorLoader {
 
   unload(_interior: InteriorDef): void {
     this.group.visible = false;
-    this.options.physics.setIndoor(null);
-    for (const collider of this.colliders) this.options.physics.remove(collider);
+    // Desfaz onde se fez — ver `bound`.
+    const physics = this.bound ?? this.physics;
+    physics.setIndoor(null);
+    for (const collider of this.colliders) physics.remove(collider);
+    this.bound = null;
     this.colliders.length = 0;
     for (const light of this.lights) {
       light.removeFromParent();
@@ -346,7 +392,7 @@ export class InteriorScene implements InteriorLoader {
     const build = new InteriorBuild({
       origin: INTERIOR_ORIGIN,
       palette: this.palette,
-      physics: this.options.physics,
+      physics: this.bound ?? this.physics,
       baseY: 0,
       tag: 'interior',
     });

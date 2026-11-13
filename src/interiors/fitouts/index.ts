@@ -20,6 +20,7 @@ import type { InteriorDef, InteriorRoom } from '../Interior';
 import type { InteriorBuild } from '../InteriorKit';
 import type { PersonSpec } from '../InteriorPeople';
 import { apartamentoAurora } from './ApartamentoAurora';
+import { atelieAero } from './AtelieAero';
 import { centroCivico } from './CentroCivico';
 import { edenpawl } from './EdenPawl';
 import { edenstore } from './EdenStore';
@@ -40,6 +41,7 @@ export type Fitout = (ctx: FitoutContext) => void;
 
 const FITOUTS: Record<string, Fitout> = {
   'apartamento-aurora': apartamentoAurora,
+  'atelie-aero': atelieAero,
   edentech,
   edenstore,
   edenpawl,
