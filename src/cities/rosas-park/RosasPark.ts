@@ -20,6 +20,7 @@ import type { Vegetation } from '../../world/Vegetation';
 import { Zone, type ZoneMap } from '../../world/ZoneMap';
 import { CityContext, type CityFrame, type CollectibleSpot, type JetEmitter, type LightSpot, type PortalStation, type SphereController, type WaterSoundSource } from '../aurora-city/CityContext';
 import { annulus, box, cyl, disc, dome, lathe, sphere, torus } from '../aurora-city/Kit';
+import { buildTravelStation } from '../shared/TravelStation';
 import {
   BASIN,
   BRIDGES,
@@ -74,6 +75,7 @@ export class RosasPark {
     this.buildLakeIsland(ctx);
     this.buildGroves(ctx);
     this.buildLandmarks(ctx);
+    this.buildStation(ctx);
     this.buildAmbience(ctx);
   }
 
@@ -569,6 +571,17 @@ export class RosasPark {
   }
 
   /* ------------------------------- ambiente ----------------------------- */
+
+  /**
+   * Estação do Éden, ao lado do portão.
+   *
+   * Fica onde o jogador chega e por onde ele sai: quem entra no parque
+   * passa por ela antes de qualquer outra coisa, e quem quer ir embora
+   * não precisa procurar.
+   */
+  private buildStation(ctx: CityContext): void {
+    buildTravelStation(ctx, { id: 'estacao-rosas', name: 'Estação do Éden · Rosas Park', x: 8, z: 104, color: 0xb9f5c4 });
+  }
 
   private buildAmbience(ctx: CityContext): void {
     // Som e bolhas do lago e da lagoa.

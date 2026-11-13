@@ -29,6 +29,8 @@ export type InteractionPayload =
   | { type: 'telescopio'; view: ScenicView }
   | { type: 'atelie'; stand?: { x: number; z: number; heading: number } }
   | { type: 'holomapa' }
+  /** Estação do Éden: abre o Mapa do Éden para viajar entre regiões. */
+  | { type: 'estacao' }
   /** Porta de um interior: entra na cena interna e guarda o caminho de volta. */
   | { type: 'porta'; interiorId: string; exit: ExitPoint }
   | { type: 'eventos' }

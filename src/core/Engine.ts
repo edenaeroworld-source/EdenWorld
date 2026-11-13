@@ -393,7 +393,7 @@ export class Engine {
     this.collectibles = new Collectibles(city.collectibles, (id) => this.progress.hasCrystal(id));
     this.scene.add(this.collectibles.group);
 
-    loading.setProgress(0.92, 'Chamando os habitantes de Aurora…');
+    loading.setProgress(0.92, `Chamando os habitantes de ${this.world.regionName}…`);
     await nextFrame();
     // Lê do mundo a cada chamada, e não de um instantâneo: quando a
     // região é reconstruída, os habitantes acompanham o terreno novo.
@@ -1105,6 +1105,8 @@ export class Engine {
 
     interactions.register('atelie', (_item, payload) => this.openCreator(true, payload.stand));
     interactions.register('holomapa', () => this.openPhone('mapa'));
+    // Estação do Éden: abre o mapa das regiões já na lista de destinos.
+    interactions.register('estacao', () => this.openPhone('atlas'));
 
     // Portas: o mesmo interativo serve para entrar e para sair. Dentro,
     // é a porta do interior; fora, é a porta do prédio.

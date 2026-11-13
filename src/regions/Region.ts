@@ -98,7 +98,7 @@ export const REGIONS: readonly WorldRegion[] = Object.freeze([
     colors: ['#8fe6ff', '#1b82ea'] as readonly [string, string],
     radius: 268,
     population: 54,
-    arrival: { x: 0, z: 18, heading: Math.PI },
+    arrival: { x: 0, z: 30, heading: Math.PI },
     places: Object.freeze([
       { id: 'praca-central', name: 'Praça Central', x: 0, z: 0, kind: 'praca' as const, note: 'O coração da cidade. Todo caminho passa por aqui.' },
       { id: 'mirante-celeste', name: 'Mirante Celeste', x: 176, z: 60, kind: 'natureza' as const, note: 'O ponto mais alto. Amara costuma estar aqui.' },
@@ -178,7 +178,7 @@ export const REGIONS: readonly WorldRegion[] = Object.freeze([
     colors: ['#b9f5c4', '#2f9e5e'] as readonly [string, string],
     radius: 200,
     population: 24,
-    arrival: { x: 0, z: 20, heading: Math.PI },
+    arrival: { x: 0, z: 96, heading: Math.PI },
     places: Object.freeze([
       { id: 'roseiral-maior', name: 'Roseiral Maior', x: 0, z: -24, kind: 'natureza' as const, note: 'Onze mil roseiras. Alguém contou uma vez.' },
       { id: 'lago-das-lontras', name: 'Lago das Lontras', x: -96, z: 70, kind: 'natureza' as const, note: 'As lontras daqui não têm o menor medo de ninguém.' },

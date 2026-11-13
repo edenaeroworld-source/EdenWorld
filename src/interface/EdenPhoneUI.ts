@@ -337,10 +337,22 @@ export class EdenPhoneUI implements Screen {
       item.addEventListener('click', () => this.host.travel(portal.id));
       list.appendChild(h('li', {}, item));
     }
+    // Este mapa é o da região em que o jogador está — e dizer o nome
+    // dela importa agora que existe mais de uma.
+    const regionName = this.host.universe().regions.current.name;
+    const toAtlas = h(
+      'button',
+      { class: 'list-btn', attrs: { type: 'button', 'aria-label': 'Abrir o Mapa do Éden para viajar para outra região' } },
+      h('span', { html: icon('map', 22) }),
+      h('span', {}, 'Viajar para outra região', h('small', { text: 'Abre o Mapa do Éden' })),
+    );
+    toAtlas.addEventListener('click', () => this.show('atlas', true));
+
     this.content.append(
-      this.head('Mapa de Aurora City'),
+      this.head(`Mapa de ${regionName}`),
       canvas,
       h('div', { class: 'card', attrs: { style: 'margin-top:10px' } }, h('h3', { text: `Portais ativados: ${unlocked}/${portals.length}` }), h('p', { text: 'Encontre um portal na cidade e interaja com ele para ativá-lo. Depois, viaje para ele quando quiser.' })),
+      h('ul', { class: 'list', attrs: { 'aria-label': 'Viagem entre regiões' } }, h('li', {}, toAtlas)),
       list,
     );
   }

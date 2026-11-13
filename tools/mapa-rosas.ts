@@ -184,6 +184,10 @@ for (const pavilion of PAVILIONS) {
 for (const garden of FLOATING_GARDENS) disc(garden.x, garden.z, garden.radius, 166, 255, 228);
 for (const landmark of LANDMARKS) disc(landmark.x, landmark.z, 2.6, landmark.hidden ? 255 : 255, landmark.hidden ? 210 : 150, landmark.hidden ? 100 : 190);
 
+// Estação do Éden, ao lado do portão, e o ponto de chegada.
+disc(8, 104, 3.8, 255, 240, 160);
+disc(0, 96, 1.6, 255, 90, 140);
+
 // Limite jogável.
 for (let i = 0; i <= 900; i += 1) {
   const angle = (i / 900) * Math.PI * 2;
