@@ -142,6 +142,10 @@ export class Environment {
 
   dispose(): void {
     resetSceneAtmosphere(this.scene);
+    // O céu e as nuvens foram acrescentados à cena aqui no construtor;
+    // saem aqui. Sem isto, cada viagem deixava para trás mais uma
+    // cúpula de céu, desenhada por cima da seguinte.
+    this.scene.remove(this.sky.group, this.sky.clouds);
     this.pmremTarget?.dispose();
     this.cubeTarget.dispose();
     this.pmrem.dispose();

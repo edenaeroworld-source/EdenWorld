@@ -22,7 +22,7 @@ export class Lighting {
   private readonly lightMatrix = new THREE.Matrix4();
   private readonly lightMatrixInverse = new THREE.Matrix4();
 
-  constructor(scene: THREE.Scene) {
+  constructor(private readonly scene: THREE.Scene) {
     this.sun = new THREE.DirectionalLight(0xffffff, 2.5);
     this.sun.name = 'SunLight';
     this.sun.castShadow = false;
@@ -94,8 +94,26 @@ export class Lighting {
     this.sun.target.updateMatrixWorld();
   }
 
+  /**
+   * Apaga esta iluminação do mundo — inclusive da cena.
+   *
+   * O `dispose()` do Three.js **não** tira o objeto do grafo: ele
+   * libera recursos de GPU e mais nada. Uma luz descartada sem ser
+   * removida continua pendurada na cena, com a última cor e a última
+   * intensidade que recebeu, e continua iluminando.
+   *
+   * Como a cena sobrevive à troca de região e a `Lighting` não, era
+   * isso que acontecia a cada viagem: o sol e a luz hemisférica da
+   * região anterior ficavam para trás e **somavam-se** aos da região
+   * seguinte. Uma viagem dobrava a luz, duas triplicavam. Era o
+   * "brilho excessivo" ao chegar — e quem chegava brilhava, fosse
+   * Rosas Park ou Aurora City.
+   *
+   * Por isso a cena é guardada: quem acende é quem apaga.
+   */
   dispose(): void {
     this.sun.shadow.map?.dispose();
+    this.scene.remove(this.sun, this.sun.target, this.ambient);
     this.sun.dispose();
     this.ambient.dispose();
   }
