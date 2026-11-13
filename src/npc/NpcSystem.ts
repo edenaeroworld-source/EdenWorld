@@ -12,8 +12,9 @@ import { createRng, type Rng } from '../utils/math';
 import type { DayPeriod } from '../world/WorldClock';
 import { citizenAftersId, makeCitizen } from './CitizenData';
 import { CitizenSim } from './CitizenSim';
+import { getRegion } from '../regions/Region';
 import { NpcLife } from './NpcLife';
-import { buildAuroraWalkNetwork, type WalkNetwork } from './WalkNetwork';
+import { buildAuroraWalkNetwork, buildRosasWalkNetwork, type WalkNetwork } from './WalkNetwork';
 
 /**
  * A população de Aurora City.
@@ -153,7 +154,7 @@ function nameSprite(name: string, title: string, color: string): THREE.Sprite {
 export class NpcSystem implements GameSystem {
   readonly id = 'npcs';
   readonly group = new THREE.Group();
-  readonly network: WalkNetwork;
+  network: WalkNetwork;
   /** Pontos de conversa (cidadãos próximos + panteão). */
   readonly interactables: Interactable[] = [];
   /** Desligado em menus e no criador de avatar. */
@@ -161,6 +162,8 @@ export class NpcSystem implements GameSystem {
 
   private readonly scene: THREE.Scene;
   private readonly ground: (x: number, z: number) => number;
+  private readonly blocked: (x: number, z: number) => boolean;
+  private regionId = 'aurora-city';
   private readonly rng: Rng;
   private readonly citizens: CitizenSim[] = [];
   private readonly slots: VisualSlot[] = [];
@@ -204,10 +207,35 @@ export class NpcSystem implements GameSystem {
     this.auraGeometry = new THREE.RingGeometry(0.62, 1.05, 32);
     this.auraGeometry.rotateX(-Math.PI / 2);
 
+    this.blocked = options.blocked;
     this.network = buildAuroraWalkNetwork({ blocked: options.blocked });
     this.spawnCitizens(CITIZEN_COUNT);
     this.createSlots();
     this.spawnPantheon();
+  }
+
+  /**
+   * Muda a região em que a população vive.
+   *
+   * Reconstrói a rede de caminhada e reposiciona habitantes e panteão
+   * sobre ela. Os cidadãos são os mesmos — identidade, nome e perfil
+   * são estáveis por semente, e não dependem da região. Quem muda de
+   * lugar são eles, não quem eles são.
+   */
+  setRegion(regionId: string): void {
+    this.network = regionId === 'rosas-park' ? buildRosasWalkNetwork({ blocked: this.blocked }) : buildAuroraWalkNetwork({ blocked: this.blocked });
+    this.regionId = regionId;
+    for (const slot of this.slots) {
+      this.resetSlotFace(slot);
+      slot.citizen = null;
+      this.releaseSlotAfters(slot);
+      if (slot.avatar) slot.avatar.root.visible = false;
+      slot.interactable.enabled = false;
+    }
+    this.pending.length = 0;
+    this.citizens.length = 0;
+    this.spawnCitizens(CITIZEN_COUNT);
+    this.placePantheon();
   }
 
   /* ----------------------------- Criação ----------------------------- */
@@ -218,6 +246,50 @@ export class NpcSystem implements GameSystem {
       const profile = makeCitizen(i + 1);
       const node = this.network.randomNode(this.rng);
       this.citizens.push(new CitizenSim(profile, this.network, node, createRng(i * 977 + 31), { ground: this.ground }));
+    }
+  }
+
+  /**
+   * Reposiciona o panteão na região atual.
+   *
+   * Em Aurora cada deus tem o seu ponto oficial. Fora dela, só aparecem
+   * os que a região reconhece como seus (`patrons`), e no lugar da
+   * região que mais combina com eles. Um deus não é teleportado para
+   * uma região que não é dele só porque o jogador viajou.
+   */
+  private placePantheon(): void {
+    const region = getRegion(this.regionId);
+    const places = region?.places ?? [];
+    for (const deity of this.deities) {
+      const isHome = this.regionId === 'aurora-city' || (region?.patrons.includes(deity.character.id) ?? false);
+      deity.interactable.enabled = isHome;
+      if (!isHome) {
+        if (deity.avatar) deity.avatar.root.visible = false;
+        if (deity.label) deity.label.visible = false;
+        if (deity.aura) deity.aura.visible = false;
+        continue;
+      }
+      let x = deity.character.place.x;
+      let z = deity.character.place.z;
+      if (this.regionId !== 'aurora-city' && places.length > 0) {
+        // Escolha estável: o mesmo deus cai sempre no mesmo lugar.
+        const place = places[deity.character.id.length % places.length];
+        x = place.x;
+        z = place.z;
+      }
+      const nodeId = this.network.nearest(x, z);
+      if (nodeId >= 0) {
+        const node = this.network.node(nodeId);
+        if (Math.hypot(node.x - x, node.z - z) > 18) {
+          x = node.x;
+          z = node.z;
+        }
+      }
+      const y = this.ground(x, z);
+      deity.x = x;
+      deity.y = y;
+      deity.z = z;
+      deity.interactable.position.set(x, y, z);
     }
   }
 

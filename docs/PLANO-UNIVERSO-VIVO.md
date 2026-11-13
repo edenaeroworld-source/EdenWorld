@@ -99,11 +99,11 @@ Isto é a parte importante deste documento.
 | Pedido | Situação |
 | --- | --- |
 | Cenário 3D das 6 regiões novas | **Não construído.** Só Aurora City tem mundo tridimensional. As outras existem como regiões de verdade (mapa, lojas, fauna, atividades, imóveis), e a tela diz isso com todas as letras em vez de levar o jogador para o vazio |
-| Geometria dos interiores | **Não construída.** A definição, o streaming e o caminho de volta funcionam e têm teste; falta a camada que monta a malha. `InteriorManager.setLoader` é o encaixe pronto para ela |
+| Geometria dos interiores | **Pronta no marco H** (`InteriorScene`). Ver `PLANO-ROSAS-3D.md` |
 | Decoração de casa na tela | A lógica de colocar/mover/tirar móvel está completa e testada; falta o editor visual. Hoje dá para comprar e a casa guarda, mas a colocação não tem interface |
 | Objetos de casa que abrem telas | `Housing.interactables` já identifica o computador e o console colocados; falta ligar ao `EdenPhone` |
 | IA de bicho no mundo 3D | `PetManager` guarda estado e posse; o bicho ainda não é desenhado seguindo o jogador |
-| Fauna no mundo 3D | `populateRegion` decide quem e onde, com orçamento por qualidade; falta desenhar |
+| Fauna no mundo 3D | **Pronta no marco H** (`CreatureMesh` + `WildlifeView`). Ver `PLANO-ROSAS-3D.md` |
 | Multijogador | Fora do alcance desta etapa, como nas anteriores |
 
 ## Desempenho
@@ -134,9 +134,11 @@ regiões são lidas **antes** da posição.
 
 ## Próximos passos sugeridos
 
-1. Cenário 3D de Rosas Park — é a região mais simples (natureza, sem
-   arquitetura complexa) e já é conhecida desde o início.
-2. `InteriorLoader` concreto, começando pelo Ateliê Aero (um salão e uma
-   cabine).
+1. ~~Cenário 3D de Rosas Park~~ — **feito** no marco H.
+2. ~~`InteriorLoader` concreto~~ — **feito** no marco H: `InteriorScene`
+   monta qualquer `InteriorDef`, incluindo o Ateliê Aero.
 3. Editor de decoração, aproveitando a grade que já existe.
-4. Bichos e fauna desenhados, reaproveitando o pool de avatares.
+4. ~~Fauna desenhada~~ — **feita** no marco H. Falta o bicho de
+   estimação seguindo o jogador.
+
+Ver `PLANO-ROSAS-3D.md`.

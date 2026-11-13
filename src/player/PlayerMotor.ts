@@ -65,7 +65,17 @@ export class PlayerMotor {
   private readonly ground: GroundInfo = { height: 0, surface: 'stone', onPlatform: false };
   private readonly safe = { x: 0, y: 0, z: 0, valid: false };
 
-  constructor(private readonly physics: PhysicsWorld) {}
+  constructor(private physics: PhysicsWorld) {}
+
+  /**
+   * Troca o mundo físico sob os pés do jogador.
+   *
+   * Usado ao mudar de região: o avatar, o inventário e o progresso são
+   * os mesmos; o chão é que é outro.
+   */
+  setPhysics(physics: PhysicsWorld): void {
+    this.physics = physics;
+  }
 
   /** Último ponto firme e seco em que o personagem pisou. */
   get lastSafePosition(): { x: number; y: number; z: number } | null {

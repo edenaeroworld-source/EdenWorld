@@ -64,7 +64,7 @@ export const PROPERTIES: readonly Property[] = Object.freeze([
     name: 'Casa 7 — Rosas Park',
     kind: 'casa' as PropertyKind,
     regionId: 'rosas-park',
-    placeId: 'casa-de-cha',
+    placeId: 'casa-rosas-7',
     price: 7400,
     rent: 95,
     rooms: Object.freeze([
