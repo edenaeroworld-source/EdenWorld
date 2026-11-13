@@ -1,18 +1,20 @@
 import { AVENUES, BUILDINGS, PLAZA, RING, TERRAIN_PATHS, forecourtRadius } from '../cities/aurora-city/Layout';
+import { BRIDGES as ROSAS_BRIDGES, PATHS as ROSAS_PATHS, PAVILIONS as ROSAS_PAVILIONS, ROSE_GARDEN as ROSAS_ROSE_GARDEN } from '../cities/rosas-park/RosasLayout';
 import { TAU, type Point2, type Rng } from '../utils/math';
 
 /**
- * Rede de caminhada de Aurora City.
+ * Rede de caminhada das regiões.
  *
  * Um grafo de nós (pontos de passagem) e arestas (trechos caminháveis)
- * derivado da própria planta da cidade: praça, avenidas, anel viário e
- * trilhas do terreno. É usado pelos cidadãos para andar pela cidade sem
- * atravessar prédios, canteiros ou água.
+ * derivado da própria planta da região: em Aurora, praça, avenidas,
+ * anel viário e trilhas; em Rosas Park, os caminhos do parque, as
+ * pontes e os anéis do roseiral. É o que permite aos habitantes andar
+ * sem atravessar prédios, canteiros ou água.
  *
  * Módulo puro: não depende de Three.js nem do DOM (testável).
  */
 
-export type WalkKind = 'praca' | 'avenida' | 'anel' | 'caminho';
+export type WalkKind = 'praca' | 'avenida' | 'anel' | 'caminho' | 'ponte';
 
 export interface WalkNode {
   id: number;
@@ -320,10 +322,67 @@ function largestComponent(nodeCount: number, adjacency: number[][]): Set<number>
  * @param options.blocked consulta do mundo (água, declive, zona proibida).
  */
 export function buildAuroraWalkNetwork(options: WalkNetworkOptions = {}): WalkNetwork {
+  return buildWalkNetwork(auroraChains, { ...options, insideLot: insideBuilding });
+}
+
+/** Trechos caminháveis de Rosas Park: os caminhos, as pontes e o roseiral. */
+function rosasChains(spacing: number): RawNode[][] {
+  const chains: RawNode[][] = [];
+
+  for (const path of ROSAS_PATHS) {
+    chains.push(resample([...path], spacing).map((p) => ({ x: p.x, z: p.z, kind: 'caminho' as const })));
+  }
+
+  // As pontes são o único trecho que passa por cima d'água — por isso
+  // têm tipo próprio: quem olhar a malha depois sabe que ali embaixo
+  // não há chão.
+  for (const bridge of ROSAS_BRIDGES) {
+    chains.push(resample([bridge.from, bridge.to], spacing * 0.6).map((p) => ({ x: p.x, z: p.z, kind: 'ponte' as const })));
+  }
+
+  // Anéis do roseiral: é onde as pessoas se juntam.
+  for (const radius of ROSAS_ROSE_GARDEN.tiers) {
+    const steps = Math.max(10, Math.round((TAU * radius) / spacing));
+    const ring: RawNode[] = [];
+    for (let i = 0; i <= steps; i++) {
+      const angle = (i / steps) * TAU;
+      ring.push({ x: ROSAS_ROSE_GARDEN.x + Math.cos(angle) * radius, z: ROSAS_ROSE_GARDEN.z + Math.sin(angle) * radius, kind: 'praca' });
+    }
+    chains.push(ring);
+  }
+
+  // Um raio de cada pavilhão para o caminho mais próximo, para ninguém
+  // ficar preso no pátio.
+  for (const pavilion of ROSAS_PAVILIONS) {
+    const dx = Math.cos(pavilion.doorAngle);
+    const dz = Math.sin(pavilion.doorAngle);
+    const from = pavilion.radius + 2;
+    chains.push([
+      { x: pavilion.x + dx * from, z: pavilion.z + dz * from, kind: 'caminho' },
+      { x: pavilion.x + dx * (from + spacing), z: pavilion.z + dz * (from + spacing), kind: 'caminho' },
+      { x: pavilion.x + dx * (from + spacing * 2), z: pavilion.z + dz * (from + spacing * 2), kind: 'caminho' },
+    ]);
+  }
+
+  return chains;
+}
+
+export function buildRosasWalkNetwork(options: WalkNetworkOptions = {}): WalkNetwork {
+  return buildWalkNetwork(rosasChains, {
+    ...options,
+    insideLot: (x, z, margin = 0.5) => ROSAS_PAVILIONS.some((pavilion) => Math.hypot(x - pavilion.x, z - pavilion.z) < pavilion.radius + margin),
+  });
+}
+
+/** A rede de caminhada de qualquer região: os trechos é que mudam. */
+function buildWalkNetwork(
+  chainsOf: (spacing: number) => RawNode[][],
+  options: WalkNetworkOptions & { insideLot: (x: number, z: number, margin?: number) => boolean },
+): WalkNetwork {
   const spacing = options.spacing ?? 9;
   const joinRadius = options.joinRadius ?? 11;
   const blocked = options.blocked ?? (() => false);
-  const isFree = (x: number, z: number): boolean => !insideBuilding(x, z) && !blocked(x, z);
+  const isFree = (x: number, z: number): boolean => !options.insideLot(x, z) && !blocked(x, z);
 
   const nodes: WalkNode[] = [];
   const adjacency: number[][] = [];
@@ -357,7 +416,7 @@ export function buildAuroraWalkNetwork(options: WalkNetworkOptions = {}): WalkNe
     return true;
   };
 
-  for (const chain of auroraChains(spacing)) {
+  for (const chain of chainsOf(spacing)) {
     let previous = -1;
     for (const raw of chain) {
       if (!isFree(raw.x, raw.z)) {

@@ -281,10 +281,10 @@ describe('ProgressSystem', () => {
 });
 
 describe('salvamento v2 (EdenOS, Afters e bandeiras)', () => {
-  it('cria um salvamento novo já na versão 2, com os campos novos vazios', () => {
+  it('cria um salvamento novo na versão corrente, com os campos novos vazios', () => {
     const save = createNewSave(NOW);
-    expect(save.version).toBe(2);
-    expect(SAVE_VERSION).toBe(2);
+    expect(save.version).toBe(SAVE_VERSION);
+    expect(SAVE_VERSION).toBe(3);
     expect(save.flags).toEqual([]);
     expect(save.social).toEqual({ contacts: [], citizens: [], photos: [], readThreads: [] });
     expect(save.afters.unlocked).toBe(false);

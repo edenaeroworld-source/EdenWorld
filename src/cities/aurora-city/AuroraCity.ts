@@ -12,6 +12,7 @@ import { Props } from './Decorations';
 import { buildLandscape } from './Landscape';
 import { BUILDINGS } from './Layout';
 import { buildParks } from './Parks';
+import { interiorsInRegion } from '../../interiors/Interior';
 import type { GardenBed } from './Zones';
 
 export interface AuroraCityOptions {
@@ -46,7 +47,38 @@ export class AuroraCity {
     buildBuildings(ctx, props, BUILDINGS);
     buildParks(ctx, props);
     buildLandscape(ctx, props, options.beds);
+    this.buildDoors(ctx);
     props.finalize();
+  }
+
+  /**
+   * Portas dos prédios que têm interior construído.
+   *
+   * A posição vem do próprio lote: a porta fica na face voltada para a
+   * praça, que é de onde todo mundo chega. Um interior novo declarado
+   * em `Interior.ts` ganha porta sozinho.
+   */
+  private buildDoors(ctx: CityContext): void {
+    for (const interior of interiorsInRegion('aurora-city')) {
+      const lot = BUILDINGS.find((candidate) => candidate.id === interior.placeId);
+      if (!lot) continue;
+      // Virada para o centro da cidade.
+      const angle = Math.atan2(-lot.z, -lot.x);
+      const x = lot.x + Math.cos(angle) * (lot.radius + 1.6);
+      const z = lot.z + Math.sin(angle) * (lot.radius + 1.6);
+      const y = ctx.ground(x, z);
+      ctx.addInteractable({
+        id: `porta:${interior.id}`,
+        name: interior.name,
+        action: 'Entrar',
+        x,
+        y: y + 1,
+        z,
+        range: 3.2,
+        payload: { type: 'porta', interiorId: interior.id, exit: { regionId: 'aurora-city', x, z, heading: angle } },
+      });
+      ctx.lightSpots.push({ x, y: y + 1.2, z, radius: 9, color: 0xa6ffe4 });
+    }
   }
 
   get interactables(): readonly Interactable[] {

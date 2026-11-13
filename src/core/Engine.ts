@@ -13,7 +13,11 @@ import type { CitizenSim } from '../npc/CitizenSim';
 import type { NpcLife } from '../npc/NpcLife';
 import { type AftersCityEvent, NpcSystem } from '../npc/NpcSystem';
 import { DialogueScreen } from '../interface/DialogueScreen';
-import { AREAS, BUILDINGS, PLAZA, SPAWN, areaAt, coastRadius } from '../cities/aurora-city/Layout';
+import { BUILDINGS, PLAZA } from '../cities/aurora-city/Layout';
+import { hasScene } from '../cities';
+import { InteriorScene } from '../interiors/InteriorScene';
+import { populateRegion, wildlifeBudget } from '../creatures/Wildlife';
+import type { ExitPoint } from '../interiors/Interior';
 import { type EdenConnectService, OfflineEdenConnect } from '../eden-connect/EdenConnect';
 import { InputManager } from '../input/InputManager';
 import type { GameAction } from '../input/InputSettings';
@@ -41,6 +45,8 @@ import { CHARACTER_VOICES, VoiceSystem } from '../systems/VoiceSystem';
 import { clamp01, formatDistance, formatDuration, wrapAngle } from '../utils/math';
 import { World } from '../world/World';
 import { Zone } from '../world/ZoneMap';
+import { getRegion } from '../regions/Region';
+import { UniverseSystem } from '../universe/UniverseSystem';
 import { CAMERA, type DebugFlags, GAME, WORLD, readDebugFlags } from './Config';
 import { GameLoop } from './GameLoop';
 import { SystemRegistry } from './GameSystem';
@@ -174,6 +180,8 @@ export class Engine {
   /** Último relatório desta sessão (exposto em `__eden.desempenho()`). */
   private lastBenchmark: BenchmarkReport | null = null;
   private readonly connect: EdenConnectService;
+  /** Regiões, economia, moradia, bichos, fauna e atividades. */
+  private universe: UniverseSystem;
   private readonly social: SocialService;
   private save: SaveData;
   private progress: ProgressSystem;
@@ -216,6 +224,12 @@ export class Engine {
   private baseMapCanvas: HTMLCanvasElement | null = null;
   private weatherChoice: WeatherChoice = 'auto';
   private transitioning = false;
+  /** A camada que monta a geometria dos interiores. */
+  private interiorScene: InteriorScene | null = null;
+  /** Interativos do interior ativo (vazio quando se está na rua). */
+  private interiorInteractables: readonly Interactable[] = [];
+  /** De onde o jogador entrou, para a saída devolvê-lo ao mesmo lugar. */
+  private interiorReturn: { x: number; z: number; heading: number; y: number } | null = null;
   private sitHintShown = false;
   private creatorDrag: { id: number; x: number } | null = null;
   private frames = 0;
@@ -245,6 +259,7 @@ export class Engine {
     this.loadStatus = loaded.status;
     this.edenSocial = new EdenSocial(this.save.social);
     this.story = new MemoryFlags(this.save.flags);
+    this.universe = new UniverseSystem(this.save);
     this.musicMemory = this.save.settings.audio.music > 0 ? this.save.settings.audio.music : 0.55;
     if (loaded.status === 'corrompido') console.warn('[Save] Salvamento inválido: iniciando um novo jogo.');
 
@@ -278,6 +293,7 @@ export class Engine {
     this.input.keyboard.usePointerLock = this.save.settings.gameplay.pointerLock;
     this.rig.autoAlign = this.save.settings.gameplay.autoCamera;
 
+    this.systems.register(this.universe);
     this.connect = this.systems.register(new OfflineEdenConnect(this.save.profile.name));
     this.social = this.systems.register(new LocalSocial());
 
@@ -304,7 +320,8 @@ export class Engine {
       },
       onUnstuck: () => {
         this.ui.close(this.pauseScreen, true);
-        void this.travelTo(SPAWN.x, SPAWN.z, SPAWN.heading, undefined, 'Praça Central');
+        const spawn = this.world.spawn;
+        void this.travelTo(spawn.x, spawn.z, spawn.heading, undefined, this.world.regionName);
       },
       onQuit: () => this.quitToMenu(),
     });
@@ -348,10 +365,12 @@ export class Engine {
     loading.setProgress(0.02, 'Preparando o Éden…');
     await nextFrame();
 
+    // A região carregada é a do salvamento: quem salvou em Rosas Park
+    // acorda em Rosas Park, não em Aurora.
     await this.world.build(async (fraction, label) => {
       loading.setProgress(0.04 + fraction * 0.82, label);
       await nextFrame();
-    });
+    }, this.universe.regions.currentRegionId);
     const city = this.world.city;
 
     loading.setProgress(0.9, 'Despertando seu avatar…');
@@ -368,7 +387,7 @@ export class Engine {
       onStep: (surface, running) => this.audio.step(surface, running),
       onSplash: (strength) => this.audio.splash(strength),
     });
-    this.player.teleport(SPAWN.x, SPAWN.z, SPAWN.heading);
+    this.player.teleport(this.world.spawn.x, this.world.spawn.z, this.world.spawn.heading);
     this.player.visible = false;
 
     this.collectibles = new Collectibles(city.collectibles, (id) => this.progress.hasCrystal(id));
@@ -376,16 +395,16 @@ export class Engine {
 
     loading.setProgress(0.92, 'Chamando os habitantes de Aurora…');
     await nextFrame();
-    const field = this.world.heightField;
-    const zones = this.world.zones;
+    // Lê do mundo a cada chamada, e não de um instantâneo: quando a
+    // região é reconstruída, os habitantes acompanham o terreno novo.
     this.npcs = this.systems.register(
       new NpcSystem({
         scene: this.scene,
-        ground: (x, z) => field.getHeight(x, z),
+        ground: (x, z) => this.world.heightField.getHeight(x, z),
         blocked: (x, z) => {
-          if (Math.hypot(x, z) > WORLD.boundaryRadius - 8) return true;
-          if (field.getHeight(x, z) < WORLD.waterLevel + 0.35) return true;
-          return zones.has(x, z, Zone.Water | Zone.Building);
+          if (Math.hypot(x, z) > this.world.boundaryRadius - 8) return true;
+          if (this.world.heightField.getHeight(x, z) < WORLD.waterLevel + 0.35) return true;
+          return this.world.zones.has(x, z, Zone.Water | Zone.Building);
         },
         quality: this.quality.current,
       }),
@@ -431,11 +450,11 @@ export class Engine {
     }
     // Encontros com o panteão também viram registros do diário.
     for (const entry of CHARACTER_JOURNAL) this.journalEntries.push(entry);
-    this.progress.totals = { crystals: city.collectibles.length, entries: this.journalEntries.length, areas: AREAS.length, portals: city.portals.length };
+    this.progress.totals = { crystals: city.collectibles.length, entries: this.journalEntries.length, areas: this.world.areas.length, portals: city.portals.length };
     this.progress.retainKnown({
       crystals: city.collectibles.map((spot) => spot.id),
       entries: this.journalEntries.map((entry) => entry.id),
-      areas: AREAS.map((area) => area.id),
+      areas: this.world.areas.map((area) => area.id),
       portals: city.portals.map((portal) => portal.id),
     });
 
@@ -445,6 +464,7 @@ export class Engine {
     city.sphere?.setMode(this.progress.sphereMode);
 
     this.applyClockFromSave();
+    this.refreshWildlife();
     this.wireEvents();
 
     this.quality.onChange((profile) => {
@@ -680,6 +700,16 @@ export class Engine {
     this.progress.totals = totals;
     this.story = new MemoryFlags(this.save.flags);
     this.edenSocial = new EdenSocial(this.save.social);
+    // O universo também recomeça: cristais iniciais, nenhuma casa,
+    // nenhum bicho, só as regiões que já são conhecidas de saída.
+    this.save.regions = fresh.regions;
+    this.save.economy = fresh.economy;
+    this.save.housing = fresh.housing;
+    this.save.pets = fresh.pets;
+    this.save.sightings = fresh.sightings;
+    this.save.missions = fresh.missions;
+    this.save.interiors = fresh.interiors;
+    this.universe = new UniverseSystem(this.save);
     this.afters.setConfig(this.save.afters, false);
     this.aftersBody.setBody(this.save.afters.body, false);
     this.npcs.restoreAftersOverrides(this.save.afters.citizens);
@@ -709,7 +739,8 @@ export class Engine {
     this.audio.unlock();
     this.appearanceBeforeEdit = editing ? { ...this.player.avatar.appearance } : null;
     if (!editing) {
-      this.player.teleport(SPAWN.x, SPAWN.z, SPAWN.heading);
+      const spawn = this.world.spawn;
+      this.player.teleport(spawn.x, spawn.z, spawn.heading);
     } else {
       if (this.player.motor.isSitting) this.player.motor.standUp();
       if (stand) this.player.teleport(stand.x, stand.z, stand.heading, this.player.motor.position.y + 0.6);
@@ -791,7 +822,7 @@ export class Engine {
   private enterPlay(first: boolean): void {
     this.ui.closeAll();
     const saved = this.save.player;
-    if (first || !saved) this.player.teleport(SPAWN.x, SPAWN.z, SPAWN.heading);
+    if (first || !saved) this.player.teleport(this.world.spawn.x, this.world.spawn.z, this.world.spawn.heading);
     else this.player.teleport(saved.x, saved.z, saved.heading, saved.y + 0.4);
     this.player.visible = true;
     this.rig.enterFollow();
@@ -1074,6 +1105,13 @@ export class Engine {
 
     interactions.register('atelie', (_item, payload) => this.openCreator(true, payload.stand));
     interactions.register('holomapa', () => this.openPhone('mapa'));
+
+    // Portas: o mesmo interativo serve para entrar e para sair. Dentro,
+    // é a porta do interior; fora, é a porta do prédio.
+    interactions.register('porta', (_item, payload) => {
+      if (this.universe.interiors.isInside) void this.exitInterior();
+      else void this.enterInterior(payload.interiorId, payload.exit);
+    });
     interactions.register('eventos', () => this.openPhone('eventos'));
   }
 
@@ -1087,6 +1125,10 @@ export class Engine {
     const citizen = divino ? null : this.npcs.citizenOf(interactableId);
     const life = divino ? this.npcs.characterLife(personId) : this.npcs.lifeOf(interactableId);
     const player = this.player.position;
+
+    // Conversar é um fato do mundo: as atividades que pediam para falar
+    // com alguém avançam sozinhas, sem o jogador precisar "entregar".
+    if (character) this.universe.talkedTo(character.id);
 
     // O personagem para o que estava fazendo, se vira para quem chamou e
     // cumprimenta. A rotina dele fica guardada para depois.
@@ -1322,6 +1364,265 @@ export class Engine {
     void placeName;
   }
 
+  /**
+   * Viagem entre regiões do universo.
+   *
+   * Aurora City é a única região com cenário tridimensional construído
+   * até agora. Viajar para outra região registra a chegada de verdade
+   * (posição, bichos, atividades, salvamento) e avisa, com todas as
+   * letras, que o cenário dela ainda não existe — em vez de deixar o
+   * jogador numa planície vazia achando que o jogo quebrou.
+   */
+  private requestTravel(regionId: string): void {
+    if (this.transitioning) return;
+    const motor = this.player.motor;
+    const here = { x: motor.position.x, y: motor.position.y, z: motor.position.z, heading: motor.heading };
+    const target = getRegion(regionId);
+    if (!target) return;
+    // Já estamos lá: só reposiciona, sem desmontar o mundo à toa.
+    if (regionId === this.world.regionId) {
+      const entry = this.universe.regions.entryPoint(regionId);
+      void this.travelTo(entry.x, entry.z, entry.heading, undefined, target.name);
+      return;
+    }
+    const event = this.universe.travelTo(regionId, here);
+    if (!event) return;
+
+    this.dirty = true;
+    this.persist();
+
+    if (hasScene(regionId)) {
+      void this.enterRegion(regionId);
+      return;
+    }
+
+    // Região sem cenário ainda: o jogador continua onde estava no mundo
+    // 3D, mas o universo registra que ele está lá. É honesto e é
+    // reversível — o mapa deixa voltar a qualquer momento.
+    this.hud.toast(`${target.name}: ${target.tagline} O cenário desta região ainda está em construção.`, 'info', 7);
+  }
+
+  /**
+   * Troca a região 3D ativa.
+   *
+   * Desmonta o cenário anterior inteiro e monta o novo. O que **não**
+   * é desmontado é o jogador: inventário, cristais, bichos, atividades,
+   * progresso e salvamento atravessam a viagem, porque nada disso vive
+   * no cenário. É o que diferencia uma região de uma fase.
+   */
+  private async enterRegion(regionId: string): Promise<void> {
+    if (this.transitioning) return;
+    this.transitioning = true;
+    this.ui.closeAll();
+    this.syncInputState();
+    this.audio.portal();
+    await this.hud.fade(true);
+
+    // Interior aberto não atravessa viagem.
+    if (this.universe.interiors.isInside) {
+      this.universe.leaveInterior();
+      this.interiorScene?.unload(this.universe.interiors.current?.interior ?? ({} as never));
+    }
+
+    const loading = new LoadingScreen(this.uiRoot);
+    loading.setProgress(0.03, 'Guardando as suas coisas…');
+    await nextFrame();
+
+    this.collectibles.dispose();
+    this.scene.remove(this.collectibles.group);
+    this.world.dispose();
+
+    await this.world.build(async (fraction, label) => {
+      loading.setProgress(0.05 + fraction * 0.88, label);
+      await nextFrame();
+    }, regionId);
+
+    const region = this.world.city;
+    this.player.motor.setPhysics(this.world.physics);
+
+    // Registros do diário da região nova.
+    const known = new Set(this.journalEntries.map((entry) => entry.id));
+    for (const item of region.interactables) {
+      if (item.payload.type !== 'placa' || !item.payload.entryId || known.has(item.payload.entryId)) continue;
+      known.add(item.payload.entryId);
+      this.journalEntries.push({ id: item.payload.entryId, title: item.payload.title, paragraphs: item.payload.paragraphs });
+    }
+
+    this.collectibles = new Collectibles(region.collectibles, (id) => this.progress.hasCrystal(id));
+    this.scene.add(this.collectibles.group);
+    this.progress.totals = { crystals: region.collectibles.length, entries: this.journalEntries.length, areas: this.world.areas.length, portals: region.portals.length };
+
+    this.npcs.setRegion(regionId);
+    this.refreshInteractables();
+    this.baseMapCanvas = null;
+    this.world.applyQuality(this.quality.current);
+    this.refreshWildlife();
+
+    const entry = this.universe.regions.entryPoint(regionId);
+    this.player.teleport(entry.x, entry.z, entry.heading);
+    this.rig.reset(entry.heading, true);
+    this.currentAreaId = null;
+
+    await loading.finish();
+    this.transitioning = false;
+    this.syncInputState();
+    this.updateArea(true);
+    await this.hud.fade(false);
+    this.hud.banner(this.world.regionName, getRegion(regionId)?.tagline ?? '');
+    this.dirty = true;
+    this.persist();
+  }
+
+  /**
+   * Entra num prédio.
+   *
+   * O exterior é escondido, não destruído: voltar é instantâneo e a
+   * região continua simulando. O `InteriorManager` continua sendo a
+   * autoridade sobre haver **um** interior por vez; aqui só se monta a
+   * geometria que ele pede.
+   */
+  private async enterInterior(interiorId: string, exit: ExitPoint): Promise<void> {
+    if (this.transitioning) return;
+    const scene = this.ensureInteriorScene();
+    if (!this.universe.enterInterior(interiorId, exit)) {
+      this.hud.toast('Esta porta ainda não abre.', 'info');
+      return;
+    }
+    this.transitioning = true;
+    this.ui.closeAll();
+    this.syncInputState();
+    await this.hud.fade(true);
+
+    const motor = this.player.motor;
+    this.interiorReturn = { x: exit.x, z: exit.z, heading: exit.heading + Math.PI, y: motor.position.y };
+
+    const spawn = scene.spawnPoint;
+    if (spawn) {
+      this.player.teleport(spawn.x, spawn.z, spawn.heading, spawn.y + 0.4);
+      this.rig.reset(spawn.heading, true);
+    }
+    // O exterior some de vista: nada dele é desenhado lá dentro.
+    this.setExteriorVisible(false);
+    this.interiorInteractables = scene.items;
+    this.refreshInteractables();
+
+    this.transitioning = false;
+    this.syncInputState();
+    const interior = this.universe.interiors.current?.interior;
+    this.hud.setPlace(interior?.name ?? 'Interior', this.world.regionName);
+    this.hud.banner(interior?.name ?? 'Interior', interior?.note ?? '');
+    await this.hud.fade(false);
+    this.dirty = true;
+  }
+
+  /** Sai do prédio e volta exatamente à porta por onde entrou. */
+  private async exitInterior(): Promise<void> {
+    if (this.transitioning) return;
+    const exit = this.universe.leaveInterior();
+    this.transitioning = true;
+    this.syncInputState();
+    await this.hud.fade(true);
+
+    this.interiorInteractables = [];
+    this.setExteriorVisible(true);
+    const back = this.interiorReturn;
+    if (exit) this.player.teleport(exit.x, exit.z, exit.heading + Math.PI, back?.y);
+    else if (back) this.player.teleport(back.x, back.z, back.heading, back.y);
+    this.rig.reset(this.player.motor.heading, true);
+    this.interiorReturn = null;
+    this.currentAreaId = null;
+    this.refreshInteractables();
+
+    this.transitioning = false;
+    this.syncInputState();
+    this.updateArea(true);
+    await this.hud.fade(false);
+    this.dirty = true;
+  }
+
+  /** Cria a camada de interiores na primeira vez que alguém abre uma porta. */
+  private ensureInteriorScene(): InteriorScene {
+    if (this.interiorScene) return this.interiorScene;
+    const scene = new InteriorScene({
+      scene: this.scene,
+      materials: this.world.materials,
+      physics: this.world.physics,
+      onInteractables: (items) => {
+        this.interiorInteractables = items;
+        if (this.universe.interiors.isInside) this.refreshInteractables();
+      },
+      resolvePerson: (residentId) => {
+        const character = PANTHEON.find((person) => person.id === residentId);
+        return character ? { personId: character.id, divino: true } : null;
+      },
+    });
+    this.universe.interiors.setLoader(scene);
+    this.interiorScene = scene;
+    return scene;
+  }
+
+  /** Esconde ou mostra o cenário externo (ao entrar e sair de prédios). */
+  private setExteriorVisible(visible: boolean): void {
+    this.world.terrain.group.visible = visible;
+    this.world.water.mesh.visible = visible;
+    this.world.city.group.visible = visible;
+    this.world.vegetation.group.visible = visible;
+    this.world.particles.group.visible = visible;
+    this.world.wildlife.group.visible = visible;
+    this.collectibles.group.visible = visible;
+    this.npcs.group.visible = visible;
+  }
+
+  /**
+   * Avistar um bicho é um fato do mundo.
+   *
+   * Ver de perto, com os próprios olhos, é o que registra a espécie no
+   * guia — não abrir uma tela. Por isso o avistamento nasce aqui, do
+   * que está realmente desenhado à volta do jogador.
+   */
+  private noticeWildlife(): void {
+    if (!this.world.ready || this.universe.interiors.isInside) return;
+    for (const speciesId of this.world.wildlife.visibleSpecies) {
+      const position = this.firstWildlifeNear(speciesId);
+      if (!position) continue;
+      if (!this.universe.sightSpecies(speciesId)) continue;
+      this.audio.discovery();
+      this.dirty = true;
+    }
+  }
+
+  /** O bicho desta espécie está perto o bastante para contar como avistado? */
+  private firstWildlifeNear(speciesId: string): boolean {
+    const p = this.player.position;
+    const spot = this.world.wildlife.nearest(speciesId, p.x, p.z);
+    return spot !== null && Math.hypot(spot.x - p.x, spot.z - p.z) < 18;
+  }
+
+  /** Reaponta o sistema de interação para o que existe agora. */
+  private refreshInteractables(): void {
+    const inside = this.interiorScene?.active;
+    const items = inside ? this.interiorInteractables : [...this.world.city.interactables, ...this.npcs.interactables];
+    this.interactions.setItems(items);
+  }
+
+  /** Período do dia na última vez que a fauna foi repovoada. */
+  private wildlifePeriod = '';
+
+  /**
+   * Repovoa a fauna visível.
+   *
+   * A quantidade vem do orçamento de qualidade que já existia, e as
+   * espécies da própria região — um bicho não aparece onde não vive.
+   */
+  private refreshWildlife(): void {
+    this.wildlifePeriod = this.world.environment.clock.period;
+    const regionId = this.world.regionId;
+    const hour = this.world.environment.clock.hours;
+    const budget = wildlifeBudget(this.quality.current.level);
+    const animals = populateRegion(regionId, hour, budget, this.save.world.day * 31 + Math.floor(hour / 6));
+    this.world.setWildlife(animals);
+  }
+
   /* ------------------------------------------------------------------ */
   /* Configurações e salvamento                                          */
   /* ------------------------------------------------------------------ */
@@ -1397,6 +1698,9 @@ export class Engine {
     save.flags = [...this.story.all];
     save.social = this.edenSocial.toData();
     save.afters = { ...this.afters.current, body: this.aftersBody.current, citizens: this.npcs.aftersOverridesData() };
+    // O universo inteiro num só lugar: as sete partes saem do mesmo
+    // objeto, então não há risco de salvar metade do estado.
+    Object.assign(save, this.universe.toJSON());
     if (this.graphicsChosen && !this.qualityOverride) save.settings.graphics = { ...this.quality.graphics };
     const ok = this.saveSystem.save(save);
     // Armazenamento cheio ou bloqueado no meio da sessão: avisa uma única vez.
@@ -1481,6 +1785,10 @@ export class Engine {
   private createPhoneHost(): PhoneHost {
     return {
       playerName: () => this.save.profile.name,
+      universe: () => this.universe,
+      worldHour: () => this.world.environment.clock.hours,
+      requestTravel: (regionId) => this.requestTravel(regionId),
+      refresh: () => this.phone.refreshCurrent(),
       clockLabel: () => this.world.environment.clock.label,
       weatherLabel: () => this.world.environment.weather.label,
       areaName: () => this.areaName,
@@ -1635,13 +1943,13 @@ export class Engine {
 
   private updateArea(showBanner: boolean): void {
     const p = this.player.position;
-    const area = areaAt(p.x, p.z);
+    const area = this.world.areaAt(p.x, p.z);
     const id = area?.id ?? 'arredores';
     if (id === this.currentAreaId) return;
     this.currentAreaId = id;
-    this.areaName = area?.name ?? 'Arredores de Aurora';
-    this.hud.setPlace(this.areaName, 'Aurora City');
-    if (showBanner) this.hud.banner('Aurora City', this.areaName);
+    this.areaName = area?.name ?? `Arredores de ${this.world.regionName}`;
+    this.hud.setPlace(this.areaName, this.world.regionName);
+    if (showBanner) this.hud.banner(this.world.regionName, this.areaName);
     if (area && this.progress.visitArea(area.id)) {
       this.dirty = true;
       if (this.progress.areaCount > 1) {
@@ -1702,6 +2010,7 @@ export class Engine {
       if (this.areaTimer > 0.3) {
         this.areaTimer = 0;
         this.updateArea(true);
+        this.noticeWildlife();
       }
     }
 
@@ -1724,7 +2033,14 @@ export class Engine {
     const worldActive = (playing || mode === 'scenic' || mode === 'photo') && !this.ui.isOpen(this.pauseScreen.id);
     // Habitantes: a simulação acompanha o jogador e o horário do mundo.
     this.npcs.setFocus(p.x, p.y, p.z);
-    this.npcs.setPeriod(this.world.environment.clock.period);
+    const period = this.world.environment.clock.period;
+    this.npcs.setPeriod(period);
+    // Vira a noite, vira a fauna: a coruja não espera o jogador
+    // reiniciar a região para aparecer, e o passarinho vai dormir.
+    if (period !== this.wildlifePeriod) {
+      this.wildlifePeriod = period;
+      if (!this.universe.interiors.isInside) this.refreshWildlife();
+    }
     this.npcs.enabled = worldActive;
     // Afters: o brilho acompanha o avatar (ou o manequim do criador).
     this.afters.setTarget(p.x, p.y, p.z, this.player.avatar.appearance.height);
@@ -1736,7 +2052,7 @@ export class Engine {
     const listenerX = mode === 'menu' ? this.rig.camera.position.x : p.x;
     const listenerZ = mode === 'menu' ? this.rig.camera.position.z : p.z;
     const fromCenter = Math.hypot(listenerX, listenerZ);
-    const coast = coastRadius(Math.atan2(listenerZ, listenerX));
+    const coast = this.world.coastRadius(Math.atan2(listenerZ, listenerX));
     this.audio.update({
       x: listenerX,
       z: listenerZ,

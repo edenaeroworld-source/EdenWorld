@@ -1,13 +1,21 @@
 import { type AftersConfig, defaultAftersConfig, sanitizeAftersConfig } from '../afters/AftersCatalog';
 import { STORAGE, WORLD } from '../core/Config';
+import { type EconomySaveData, emptyEconomyData, sanitizeEconomyData } from '../economy/Economy';
 import { type SocialData, emptySocialData, sanitizeSocialData } from '../edenos/EdenSocial';
+import { type HousingSaveData, emptyHousingData, sanitizeHousingData } from '../housing/Housing';
+import { type InteriorSaveData, emptyInteriorData, sanitizeInteriorData } from '../interiors/InteriorManager';
+import { type MissionSaveData, emptyMissionData, sanitizeMissionData } from '../missions/Missions';
+import { type PetSaveData, emptyPetData, sanitizePetData } from '../creatures/PetManager';
+import { type SightingSaveData, emptySightingData, sanitizeSightingData } from '../creatures/Wildlife';
+import { type RegionSaveData, emptyRegionData, sanitizeRegionData } from '../regions/RegionManager';
+import { getRegion } from '../regions/Region';
 import { type InputSettingsData, defaultInputSettings, sanitizeInputSettings } from '../input/InputSettings';
 import { type AvatarAppearance, DEFAULT_APPEARANCE, sanitizeAppearance, sanitizePlayerName } from '../player/AvatarAppearance';
 import { clamp } from '../utils/math';
 import { type GraphicsSettings, isFpsTarget, isQualityLevel } from './QualitySystem';
 import { isVoiceMode, type VoiceMode } from './VoiceSystem';
 
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 
 /** Versões anteriores que ainda são carregadas e convertidas. */
 export const MIN_SAVE_VERSION = 1;
@@ -72,6 +80,20 @@ export interface SaveData {
   social: SocialData;
   /** Preferências dos Afters (BET). */
   afters: AftersConfig;
+  /** Universo: onde o jogador está e o que já descobriu. */
+  regions: RegionSaveData;
+  /** Cristais, inventário e extrato. */
+  economy: EconomySaveData;
+  /** Imóveis e o que está colocado dentro deles. */
+  housing: HousingSaveData;
+  /** Bichos adotados. */
+  pets: PetSaveData;
+  /** Guia de fauna: espécies já avistadas. */
+  sightings: SightingSaveData;
+  /** Atividades aceitas e concluídas. */
+  missions: MissionSaveData;
+  /** Interiores já visitados. */
+  interiors: InteriorSaveData;
   settings: {
     /** `null` = ainda não escolhido (detectar pelo dispositivo). */
     graphics: GraphicsSettings | null;
@@ -107,6 +129,13 @@ export function createNewSave(now: number = Date.now()): SaveData {
     flags: [],
     social: emptySocialData(),
     afters: defaultAftersConfig(),
+    regions: emptyRegionData(),
+    economy: emptyEconomyData(),
+    housing: emptyHousingData(),
+    pets: emptyPetData(),
+    sightings: emptySightingData(),
+    missions: emptyMissionData(),
+    interiors: emptyInteriorData(),
     settings: {
       graphics: null,
       audio: defaultAudioSettings(),
@@ -193,12 +222,19 @@ export function sanitizeSave(raw: unknown, now: number = Date.now()): SaveData |
   const progress = isRecord(raw.progress) ? raw.progress : {};
   const settings = isRecord(raw.settings) ? raw.settings : {};
 
+  // O limite depende da região: cada uma tem o seu raio. Ler as regiões
+  // antes da posição não é detalhe de ordem — é o que impede o jogador
+  // de ser teleportado para o centro de Aurora ao salvar numa região
+  // maior que ela.
+  const regions = sanitizeRegionData(raw.regions);
+  const boundary = getRegion(regions.current)?.radius ?? WORLD.boundaryRadius;
+
   // Uma posição fora do limite jogável só pode vir de dados danificados ou
   // adulterados: nesse caso o jogador recomeça no ponto inicial da cidade.
   let player: SaveData['player'] = null;
   if (isRecord(raw.player)) {
     const { x, z } = raw.player;
-    if (typeof x === 'number' && typeof z === 'number' && Number.isFinite(x) && Number.isFinite(z) && Math.hypot(x, z) <= WORLD.boundaryRadius) {
+    if (typeof x === 'number' && typeof z === 'number' && Number.isFinite(x) && Number.isFinite(z) && Math.hypot(x, z) <= boundary) {
       player = {
         x,
         y: num(raw.player.y, 0, -50, 500),
@@ -237,6 +273,16 @@ export function sanitizeSave(raw: unknown, now: number = Date.now()): SaveData |
     flags: idList(raw.flags, 256),
     social: sanitizeSocialData(raw.social),
     afters: sanitizeAftersConfig(raw.afters),
+    // Campos novos da versão 3 (universo). Um salvamento Genesis não tem
+    // nenhum deles, e cada `sanitize*` devolve o padrão — é por isso que
+    // a migração v1/v2 → v3 não precisa de código de conversão próprio.
+    regions,
+    economy: sanitizeEconomyData(raw.economy),
+    housing: sanitizeHousingData(raw.housing),
+    pets: sanitizePetData(raw.pets),
+    sightings: sanitizeSightingData(raw.sightings),
+    missions: sanitizeMissionData(raw.missions),
+    interiors: sanitizeInteriorData(raw.interiors),
     settings: {
       graphics: sanitizeGraphicsSettings(settings.graphics),
       audio: sanitizeAudioSettings(settings.audio),

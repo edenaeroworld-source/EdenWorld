@@ -1,4 +1,5 @@
 import type * as THREE from 'three';
+import type { ExitPoint } from '../interiors/Interior';
 
 /** Posição e orientação de um assento. */
 export interface SeatSpot {
@@ -28,6 +29,8 @@ export type InteractionPayload =
   | { type: 'telescopio'; view: ScenicView }
   | { type: 'atelie'; stand?: { x: number; z: number; heading: number } }
   | { type: 'holomapa' }
+  /** Porta de um interior: entra na cena interna e guarda o caminho de volta. */
+  | { type: 'porta'; interiorId: string; exit: ExitPoint }
   | { type: 'eventos' }
   /** Conversa com um habitante: `personId` é o id do panteão ou a semente do cidadão. */
   | { type: 'conversa'; personId: string; divino: boolean };
