@@ -1,4 +1,6 @@
+import type { Orientation } from '../core/Platform';
 import { icon } from '../interface/icons';
+import { BrowserGestures } from './BrowserGestures';
 import type { GameAction, InputSettingsData } from './InputSettings';
 
 export interface TouchHost {
@@ -12,8 +14,17 @@ const STICK_RADIUS = 56;
 const TOUCH_RADIANS_PER_PIXEL = 0.0052;
 
 /**
+ * Fração da largura reservada ao analógico virtual. Em pé a tela é
+ * estreita, e o polegar esquerdo precisa de menos área para não roubar
+ * o arrasto de câmera do polegar direito.
+ */
+const STICK_ZONE: Record<Orientation, number> = { paisagem: 0.42, retrato: 0.5 };
+
+/**
  * Controles de toque: analógico virtual dinâmico no lado esquerdo,
- * arrastar para girar a câmera, pinça para zoom e botões de ação.
+ * arrastar para girar a câmera, pinça para zoom e botões de ação —
+ * incluindo os atalhos do EdenPhone e do menu, que no toque precisam de
+ * alvo grande, não do cantinho do HUD.
  */
 export class TouchInput {
   moveX = 0;
@@ -21,12 +32,17 @@ export class TouchInput {
   jumpHeld = false;
   runToggle = false;
 
+  /** Guarda contra zoom/rolagem do navegador — ativa só durante o jogo. */
+  private readonly gestures: BrowserGestures;
+  private orientation: Orientation = 'paisagem';
   private readonly layer: HTMLDivElement;
   private readonly stick: HTMLDivElement;
   private readonly knob: HTMLDivElement;
   private readonly jumpButton: HTMLButtonElement;
   private readonly runButton: HTMLButtonElement;
   private readonly interactButton: HTMLButtonElement;
+  private readonly phoneButton: HTMLButtonElement;
+  private readonly menuButton: HTMLButtonElement;
   private stickPointer = -1;
   private stickX = 0;
   private stickY = 0;
@@ -60,7 +76,15 @@ export class TouchInput {
     this.jumpButton = this.makeButton('touch-btn touch-btn--jump', icon('jump', 34), 'Pular');
     this.interactButton.hidden = true;
     buttons.append(this.interactButton, this.runButton, this.jumpButton);
-    this.layer.append(this.stick, buttons);
+
+    // Atalhos: EdenPhone e menu, com alvo de dedo, acima dos botões de ação.
+    const shortcuts = document.createElement('div');
+    shortcuts.className = 'touch-shortcuts';
+    this.phoneButton = this.makeButton('touch-btn touch-btn--small touch-btn--phone', icon('phone', 22), 'Abrir o EdenPhone');
+    this.menuButton = this.makeButton('touch-btn touch-btn--small touch-btn--menu', icon('menu', 22), 'Pausar e abrir o menu');
+    shortcuts.append(this.phoneButton, this.menuButton);
+
+    this.layer.append(this.stick, shortcuts, buttons);
     uiRoot.appendChild(this.layer);
 
     this.jumpButton.addEventListener('pointerdown', this.onJumpDown);
@@ -69,6 +93,10 @@ export class TouchInput {
     this.jumpButton.addEventListener('pointerleave', this.onJumpUp);
     this.runButton.addEventListener('pointerdown', this.onRunDown);
     this.interactButton.addEventListener('pointerdown', this.onInteractDown);
+    this.phoneButton.addEventListener('pointerdown', this.onShortcut('phone'));
+    this.menuButton.addEventListener('pointerdown', this.onShortcut('pause'));
+
+    this.gestures = new BrowserGestures({ canvas, root: document });
 
     canvas.addEventListener('pointerdown', this.onPointerDown);
     canvas.addEventListener('pointermove', this.onPointerMove);
@@ -90,7 +118,21 @@ export class TouchInput {
     if (this.visible === visible) return;
     this.visible = visible;
     this.layer.hidden = !visible;
+    // Enquanto os controles estão na tela, os gestos do navegador ficam
+    // suspensos; assim que saem, o navegador volta ao normal.
+    this.gestures.setActive(visible);
     if (!visible) this.reset();
+  }
+
+  /** Em pé ou deitado: muda só a área do analógico e o desenho (CSS). */
+  setOrientation(orientation: Orientation): void {
+    this.orientation = orientation;
+    this.layer.dataset.orientation = orientation;
+  }
+
+  /** `true` enquanto a guarda de gestos do navegador está em vigor. */
+  get gesturesBlocked(): boolean {
+    return this.gestures.isActive;
   }
 
   /** Mostra o botão de interação com o texto da ação disponível. */
@@ -165,6 +207,18 @@ export class TouchInput {
     if (this.host.gameplayEnabled) this.host.onAction('interact');
   };
 
+  /**
+   * Atalhos abrem telas, então valem mesmo com o personagem já parado —
+   * é por eles que se sai de uma situação travada no celular.
+   */
+  private readonly onShortcut =
+    (action: GameAction) =>
+    (event: PointerEvent): void => {
+      event.preventDefault();
+      this.host.onActivity();
+      this.host.onAction(action);
+    };
+
   private readonly onPointerDown = (event: PointerEvent): void => {
     if (event.pointerType === 'mouse') return;
     this.host.onActivity();
@@ -178,7 +232,7 @@ export class TouchInput {
     const rect = this.canvas.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
-    const inStickZone = x < rect.width * 0.42 && y > rect.height * 0.3;
+    const inStickZone = x < rect.width * STICK_ZONE[this.orientation] && y > rect.height * 0.3;
     if (inStickZone && this.stickPointer < 0) {
       this.stickPointer = event.pointerId;
       this.stickX = x;
@@ -257,6 +311,7 @@ export class TouchInput {
   };
 
   dispose(): void {
+    this.gestures.dispose();
     this.canvas.removeEventListener('pointerdown', this.onPointerDown);
     this.canvas.removeEventListener('pointermove', this.onPointerMove);
     this.canvas.removeEventListener('pointerup', this.onPointerUp);

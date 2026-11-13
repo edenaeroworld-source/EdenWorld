@@ -45,6 +45,28 @@ describe('grafo de módulos', () => {
     for (const module of modules) expect(Object.keys(module).length).toBeGreaterThan(0);
   });
 
+  it('importa os módulos novos de plataforma e desempenho', async () => {
+    const modules = await Promise.all([
+      import('../../src/core/Platform'),
+      import('../../src/input/BrowserGestures'),
+      import('../../src/input/InputManager'),
+      import('../../src/input/TouchInput'),
+      import('../../src/systems/Benchmark'),
+      import('../../src/systems/QualitySystem'),
+    ]);
+    for (const module of modules) expect(Object.keys(module).length).toBeGreaterThan(0);
+  });
+
+  it('a detecção de plataforma não toca no navegador ao ser importada', async () => {
+    // Importar o módulo não pode ler `navigator`: o Engine decide quando
+    // sondar, e os testes precisam poder injetar um aparelho de mentira.
+    const { detectPlatform, probePlatform } = await import('../../src/core/Platform');
+    expect(typeof detectPlatform).toBe('function');
+    expect(typeof probePlatform).toBe('function');
+    const fake = detectPlatform({ userAgent: 'nada', platform: '', maxTouchPoints: 0, coarsePointer: false, hover: true, screenMin: 900, screenMax: 1600 });
+    expect(fake.form).toBe('computador');
+  });
+
   it('registra os sistemas novos com ids distintos no registro de sistemas', async () => {
     const { NpcSystem } = await import('../../src/npc/NpcSystem');
     const { AftersSystem } = await import('../../src/afters/AftersSystem');

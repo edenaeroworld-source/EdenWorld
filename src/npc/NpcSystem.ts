@@ -35,15 +35,12 @@ export interface NpcSystemOptions {
   seed?: number;
 }
 
-/**
- * Quantos cidadãos aparecem ao mesmo tempo, por nível de qualidade.
- * A simulação roda para todos; a qualidade controla só o desenho.
+/*
+ * Quantos habitantes aparecem ao mesmo tempo, a que distância e com que
+ * frequência a simulação avança **não** se decide aqui: vem tudo do
+ * `QualityProfile`. Já houve uma tabela local com esses números, e ter
+ * dois lugares definindo "qualidade" é como ter dois relógios na parede.
  */
-const POPULATION: Record<string, { visible: number; range: number }> = {
-  baixa: { visible: 7, range: 48 },
-  media: { visible: 12, range: 70 },
-  alta: { visible: 18, range: 95 },
-};
 
 /** População simulada de Aurora City (custo desprezível: é só matemática). */
 const CITIZEN_COUNT = 54;
@@ -61,6 +58,11 @@ const LABEL_RANGE = 46;
 const CHAT_RANGE = 2.6;
 /** Intervalo (s) entre tentativas de formar uma dupla de conversa. */
 const CHAT_INTERVAL = 3.5;
+/**
+ * Folga do raio de desenho: entra em `npcRange`, sai só em `npcRange × isto`.
+ * Impede que quem anda na borda entre e saia de cena a cada segundo.
+ */
+const VISIBLE_HYSTERESIS = 1.3;
 
 interface VisualSlot {
   /** Criado sob demanda (um por quadro, no máximo). */
@@ -170,6 +172,13 @@ export class NpcSystem implements GameSystem {
   private shadows: boolean;
   private assignTimer = 0;
   private chatTimer = 0;
+  /** Passos por segundo da simulação dos habitantes (0 = todo quadro). */
+  private simHz: number;
+  private routinePerFrame: number;
+  /** Tempo acumulado desde o último passo de simulação. */
+  private simAccumulator = 0;
+  /** Habitantes com avatar desenhado neste quadro (reutilizado, sem alocar). */
+  private readonly drawn = new Set<CitizenSim>();
   private period: DayPeriod | null = null;
   private routineCursor = 0;
   /** Reconstruções de avatar pendentes (no máximo uma por quadro). */
@@ -185,9 +194,10 @@ export class NpcSystem implements GameSystem {
     this.scene = options.scene;
     this.ground = options.ground;
     this.rng = createRng(options.seed ?? 20261114);
-    const preset = POPULATION[options.quality.level] ?? POPULATION.media;
-    this.maxVisible = Math.min(MAX_SLOTS, preset.visible);
-    this.visibleRange = preset.range;
+    this.maxVisible = Math.min(MAX_SLOTS, options.quality.npcVisible);
+    this.visibleRange = options.quality.npcRange;
+    this.simHz = options.quality.npcSimHz;
+    this.routinePerFrame = options.quality.npcRoutinePerFrame;
     this.shadows = options.quality.shadows;
     this.group.name = 'habitantes';
     this.scene.add(this.group);
@@ -544,9 +554,10 @@ export class NpcSystem implements GameSystem {
   }
 
   applyQuality(profile: QualityProfile): void {
-    const preset = POPULATION[profile.level] ?? POPULATION.media;
-    this.maxVisible = Math.min(MAX_SLOTS, preset.visible);
-    this.visibleRange = preset.range;
+    this.maxVisible = Math.min(MAX_SLOTS, profile.npcVisible);
+    this.visibleRange = profile.npcRange;
+    this.simHz = profile.npcSimHz;
+    this.routinePerFrame = profile.npcRoutinePerFrame;
     this.shadows = profile.shadows;
     for (const slot of this.slots) slot.avatar?.setShadows(profile.shadows);
     for (const deity of this.deities) deity.avatar?.setShadows(profile.shadows);
@@ -570,15 +581,37 @@ export class NpcSystem implements GameSystem {
     this.group.visible = true;
     const focus = this.focus;
 
-    // 1. Simulação leve de todos os cidadãos.
+    // 1. Simulação dos habitantes, em dois ritmos.
+    //
+    //    Quem está desenhado anda **todo quadro**: qualquer economia ali
+    //    viraria engasgo visível. O resto da cidade — a maioria, que
+    //    ninguém está vendo — avança em passos maiores, na frequência que
+    //    o nível de qualidade pedir. O tempo é acumulado e entregue
+    //    inteiro, então a distância percorrida é a mesma e ninguém perde
+    //    o destino: só dá passos mais longos enquanto está fora de vista.
+    this.drawn.clear();
+    for (const slot of this.slots) {
+      if (slot.citizen && slot.avatar) this.drawn.add(slot.citizen);
+    }
+    const step = this.simHz > 0 ? 1 / this.simHz : 0;
+    let batchDt = 0;
+    if (step > 0) {
+      this.simAccumulator += dt;
+      if (this.simAccumulator >= step) {
+        batchDt = this.simAccumulator;
+        this.simAccumulator = 0;
+      }
+    }
     for (const citizen of this.citizens) {
-      citizen.update(dt);
+      const slice = step <= 0 || this.drawn.has(citizen) ? dt : batchDt;
+      if (slice <= 0) continue;
+      citizen.update(slice);
       // Espaço pessoal: ninguém atravessa o jogador.
       const dx = citizen.x - focus.x;
       const dz = citizen.z - focus.z;
       const distance = Math.hypot(dx, dz);
       if (distance < 0.9 && distance > 1e-3) {
-        const push = (0.9 - distance) * Math.min(1, dt * 12);
+        const push = (0.9 - distance) * Math.min(1, slice * 12);
         citizen.x += (dx / distance) * push;
         citizen.z += (dz / distance) * push;
       }
@@ -586,7 +619,7 @@ export class NpcSystem implements GameSystem {
 
     // 2. Rotinas: alguns cidadãos por quadro, para diluir o custo.
     if (this.period) {
-      for (let i = 0; i < 2 && this.citizens.length > 0; i++) {
+      for (let i = 0; i < this.routinePerFrame && this.citizens.length > 0; i++) {
         const citizen = this.citizens[this.routineCursor % this.citizens.length];
         this.routineCursor += 1;
         if (this.routineCursor <= this.citizens.length) citizen.setRoutine(this.period);
@@ -724,15 +757,36 @@ export class NpcSystem implements GameSystem {
     }
   }
 
+  /**
+   * Decide quem tem avatar.
+   *
+   * O raio de entrada e o de saída são **diferentes** de propósito. Um
+   * morador entra em cena ao cruzar `visibleRange` e só é dispensado
+   * depois de passar de `visibleRange × HYSTERESIS`. Sem essa folga, quem
+   * caminha junto do limite entra e sai a cada segundo — e cada entrada é
+   * uma reconstrução de avatar, de longe a coisa mais cara deste sistema.
+   *
+   * A armadilha é que o problema **piora** na qualidade baixa, onde o raio
+   * é menor e a borda passa mais perto de todo mundo: sem histerese, o
+   * aparelho mais fraco é o que mais reconstrói malha.
+   */
   private assignVisuals(): void {
     const focus = this.focus;
     const range = this.visibleRange;
+    const release = range * VISIBLE_HYSTERESIS;
     const nearby = this.citizens
       .map((citizen) => ({ citizen, distance: citizen.distanceTo(focus.x, focus.z) }))
       .filter((entry) => entry.distance <= range)
       .sort((a, b) => a.distance - b.distance)
       .slice(0, this.maxVisible);
     const wanted = new Set(nearby.map((entry) => entry.citizen));
+    // Quem já está em cena continua enquanto estiver dentro da folga.
+    for (const slot of this.slots) {
+      const citizen = slot.citizen;
+      if (citizen && !wanted.has(citizen) && wanted.size < this.maxVisible && citizen.distanceTo(focus.x, focus.z) <= release) {
+        wanted.add(citizen);
+      }
+    }
 
     // Libera quem saiu do alcance.
     for (const slot of this.slots) {

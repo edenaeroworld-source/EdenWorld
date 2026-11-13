@@ -1,20 +1,10 @@
 import { EventBus } from '../core/EventBus';
+import { type ControlScheme, type PlatformInfo, detectPlatform, resolveScheme } from '../core/Platform';
 import { GamepadInput } from './GamepadInput';
 import { type GameAction, type InputSettingsData, type KeyAction, keyLabel, padButtonGlyph } from './InputSettings';
 import type { GamepadStatus, InputDevice, InputEvents, InputFrame, NavCommand } from './InputTypes';
 import { KeyboardMouseInput } from './KeyboardMouseInput';
 import { TouchInput } from './TouchInput';
-
-function detectInitialDevice(): InputDevice {
-  try {
-    const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
-    const touch = (navigator.maxTouchPoints ?? 0) > 0 || 'ontouchstart' in window;
-    if (coarse && touch) return 'toque';
-  } catch {
-    /* ambiente sem matchMedia */
-  }
-  return 'teclado';
-}
 
 /**
  * Central de comandos: combina teclado/mouse, toque e controle em um
@@ -27,6 +17,8 @@ export class InputManager {
   readonly keyboard: KeyboardMouseInput;
   readonly gamepad: GamepadInput;
   readonly touch: TouchInput;
+  /** Aparelho identificado na abertura (sistema, formato, toque). */
+  readonly platform: PlatformInfo;
   settings: InputSettingsData;
   device: InputDevice;
   /** `true` enquanto os comandos controlam o personagem (sem menus abertos). */
@@ -38,9 +30,10 @@ export class InputManager {
   private readonly look = { x: 0, y: 0 };
   private touchControlsAllowed = false;
 
-  constructor(canvas: HTMLCanvasElement, uiRoot: HTMLElement, settings: InputSettingsData) {
+  constructor(canvas: HTMLCanvasElement, uiRoot: HTMLElement, settings: InputSettingsData, platform: PlatformInfo = detectPlatform()) {
     this.settings = settings;
-    this.device = detectInitialDevice();
+    this.platform = platform;
+    this.device = resolveScheme(settings.scheme, platform);
 
     const base = {
       onAction: (action: GameAction) => this.handleAction(action),
@@ -68,7 +61,7 @@ export class InputManager {
       ...base,
       onActivity: () => this.noteDevice('controle'),
       onStatus: (status: GamepadStatus) => {
-        if (!status.connected && this.device === 'controle') this.noteDevice(detectInitialDevice());
+        if (!status.connected && this.device === 'controle') this.noteDevice(resolveScheme('auto', this.platform));
         this.events.emit('gamepad', status);
       },
     });
@@ -90,7 +83,14 @@ export class InputManager {
     this.noteDevice(event.pointerType === 'mouse' ? 'teclado' : 'toque');
   };
 
+  /** `true` quando o jogador fixou um esquema e a troca automática está desligada. */
+  get schemeLocked(): boolean {
+    return this.settings.scheme !== 'auto';
+  }
+
   private noteDevice(device: InputDevice): void {
+    // Com um esquema fixado, encostar na tela não troca mais a interface.
+    if (this.schemeLocked) return;
     if (device !== this.device) this.pendingDevice = device;
   }
 
@@ -103,8 +103,19 @@ export class InputManager {
   }
 
   applySettings(settings: InputSettingsData): void {
+    const previous = this.settings.scheme;
     this.settings = settings;
     if (!settings.toggleRun) this.runToggled = false;
+    if (settings.scheme !== previous) {
+      // Mudou a preferência: o esquema vale a partir do próximo quadro.
+      const wanted = resolveScheme(settings.scheme, this.platform);
+      if (wanted !== this.device) this.pendingDevice = wanted;
+    }
+  }
+
+  /** Esquema efetivo neste momento (preferência do jogador ou detecção). */
+  get scheme(): Exclude<ControlScheme, 'auto'> {
+    return resolveScheme(this.settings.scheme, this.platform);
   }
 
   setGameplayEnabled(enabled: boolean): void {

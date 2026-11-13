@@ -127,6 +127,7 @@ export class World {
     this.detailDistance = profile.detailDistance;
     this.vegetation.applyQuality(profile.vegetationDensity, profile.detailDistance, profile.lodBias);
     this.particles.setDensity(profile.particleDensity);
+    this.particles.setEnvironmentEffects(profile.environmentEffects);
     this.city.setDetailScale(profile.lodBias);
   }
 

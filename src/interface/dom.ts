@@ -129,13 +129,13 @@ export function slider(options: SliderOptions): HTMLDivElement {
   return h('div', { class: 'slider' }, input, output);
 }
 
-export interface Choice<T extends string> {
+export interface Choice<T extends string | number> {
   value: T;
   label: string;
 }
 
 /** Grupo de opções mutuamente exclusivas (botões segmentados ou "chips"). */
-export function choiceGroup<T extends string>(
+export function choiceGroup<T extends string | number>(
   label: string,
   choices: readonly Choice<T>[],
   value: T,

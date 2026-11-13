@@ -1082,6 +1082,33 @@ button {
   background: radial-gradient(circle at 34% 26%, #fff 0 10%, #ffe98a 34%, #ff9f43 100%);
 }
 
+/*
+ * Atalhos de toque: EdenPhone e menu.
+ *
+ * Existem no canto do HUD, mas lá o alvo é de mouse. No dedo, abrir o
+ * telefone ou pausar o jogo precisa do mesmo tamanho dos outros botões —
+ * é por eles que se sai de qualquer situação sem teclado à mão.
+ */
+.touch-shortcuts {
+  position: absolute;
+  right: calc(16px + var(--safe-r));
+  bottom: calc(190px + var(--safe-b));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.touch-btn--small {
+  width: 52px;
+  height: 52px;
+  border-width: 2px;
+  background: radial-gradient(circle at 34% 26%, rgba(255, 255, 255, 0.88) 0 10%, rgba(190, 236, 255, 0.52) 36%, rgba(27, 130, 234, 0.5) 100%);
+}
+
+.touch-btn--menu {
+  background: radial-gradient(circle at 34% 26%, rgba(255, 255, 255, 0.86) 0 10%, rgba(226, 238, 250, 0.5) 36%, rgba(63, 110, 152, 0.48) 100%);
+}
+
 @keyframes pulse {
   50% {
     box-shadow:
@@ -1902,8 +1929,117 @@ input[type='range']::-moz-range-thumb {
   }
 }
 
+/* ==========================================================================
+   Multiplataforma — o mesmo jogo, no dedo e no mouse
+   ==========================================================================
+
+   O conteúdo não muda de aparelho para aparelho: o que muda é o tamanho
+   do alvo. Um dedo cobre cerca de 9 mm de tela, e o ponteiro grosso
+   (`pointer: coarse`) é exatamente o sinal de que há um dedo do outro
+   lado. Abaixo, tudo o que se arrasta, aperta ou escolhe cresce para pelo
+   menos 44 px — sem mudar o desenho nem esconder nada. */
+
+@media (pointer: coarse) {
+  /* Botões e abas: alvo confortável para o polegar. */
+  .btn,
+  .segmented button,
+  .chip,
+  .tabs button {
+    min-height: 44px;
+  }
+
+  .segmented button {
+    padding: 6px 16px;
+  }
+
+  /* Sliders: trilho mais alto e pegador maior, com área de toque folgada. */
+  input[type='range'] {
+    height: 44px;
+  }
+
+  input[type='range']::-webkit-slider-runnable-track,
+  input[type='range']::-moz-range-track {
+    height: 16px;
+  }
+
+  input[type='range']::-webkit-slider-thumb {
+    width: 36px;
+    height: 36px;
+    margin-top: -11px;
+  }
+
+  input[type='range']::-moz-range-thumb {
+    width: 34px;
+    height: 34px;
+  }
+
+  .slider {
+    max-width: none;
+  }
+
+  /* Listas que rolam: o dedo arrasta só na vertical, e não contagia a página. */
+  .panel__body,
+  .phone__content,
+  .talkbar__log {
+    touch-action: pan-y;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* As abas rolam na horizontal; o resto da página, não. */
+  .tabs {
+    touch-action: pan-x;
+  }
+
+  /* Amostras de cor do criador: alvo de dedo, não de mouse. */
+  .swatch {
+    width: 44px;
+    height: 44px;
+  }
+
+  /* O marcador de interação some no toque: quem interage é o botão redondo. */
+  .hud__prompt .keycap {
+    display: none;
+  }
+}
+
+/* ------------------------------- Retrato -------------------------------- */
+
+/*
+ * Em pé o jogo é o mesmo — só cabe menos mundo na tela. Os controles
+ * descem, as telas viram folhas inferiores e nada fica fora de alcance
+ * do polegar.
+ */
+[data-orientation='retrato'] .touch-shortcuts {
+  bottom: calc(246px + var(--safe-b));
+}
+
+[data-orientation='retrato'] .touch-buttons {
+  bottom: calc(26px + var(--safe-b));
+}
+
+[data-orientation='retrato'] .phone {
+  width: min(460px, 100%);
+}
+
+[data-orientation='retrato'] .talkbar__log {
+  max-height: 18vh;
+}
+
 /* Celulares deitados: pouco espaço vertical. */
 @media (max-height: 480px) {
+  /* Os atalhos viram uma fileira e sobem menos. */
+  .touch-shortcuts {
+    flex-direction: row;
+    right: calc(16px + var(--safe-r));
+    bottom: calc(96px + var(--safe-b));
+  }
+
+  .touch-btn--small {
+    width: 46px;
+    height: 46px;
+  }
+
   .logo {
     max-height: 30vh;
     width: min(300px, 46vw);

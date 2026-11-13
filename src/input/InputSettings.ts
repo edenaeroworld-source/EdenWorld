@@ -1,3 +1,4 @@
+import { type ControlScheme, isControlScheme } from '../core/Platform';
 import { clamp } from '../utils/math';
 
 /**
@@ -144,6 +145,13 @@ export function keyLabel(code: string): string {
 export interface InputSettingsData {
   keys: KeyBindings;
   pad: PadBindings;
+  /**
+   * Esquema de comando. `auto` segue a detecção de plataforma; os demais
+   * fixam a escolha do jogador — um notebook com tela sensível ao toque
+   * pode querer o analógico virtual, e um tablet com teclado Bluetooth
+   * pode querer WASD.
+   */
+  scheme: ControlScheme;
   /** Multiplicadores de sensibilidade (1 = padrão). */
   mouseSensitivity: number;
   padSensitivity: number;
@@ -161,6 +169,7 @@ export function defaultInputSettings(): InputSettingsData {
   return {
     keys: structuredCloneSafe(DEFAULT_KEYS),
     pad: { ...DEFAULT_PAD },
+    scheme: 'auto',
     mouseSensitivity: 1,
     padSensitivity: 1,
     touchSensitivity: 1,
@@ -208,6 +217,7 @@ export function sanitizeInputSettings(raw: unknown): InputSettingsData {
   d.padSensitivity = num(src.padSensitivity, d.padSensitivity, 0.2, 3);
   d.touchSensitivity = num(src.touchSensitivity, d.touchSensitivity, 0.2, 3);
   d.padDeadzone = num(src.padDeadzone, d.padDeadzone, 0.05, 0.5);
+  if (isControlScheme(src.scheme)) d.scheme = src.scheme;
   if (typeof src.invertY === 'boolean') d.invertY = src.invertY;
   if (typeof src.toggleRun === 'boolean') d.toggleRun = src.toggleRun;
   if (typeof src.vibration === 'boolean') d.vibration = src.vibration;

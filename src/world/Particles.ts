@@ -164,6 +164,7 @@ export class Particles {
   private readonly moteMaterial: THREE.ShaderMaterial;
   private readonly moteCount = 520;
   private bubbles: THREE.InstancedMesh | null = null;
+  private environmentEffects = true;
   private bubbleCount = 0;
   private jetMaterial: THREE.ShaderMaterial | null = null;
   private bubbleMaterial: THREE.ShaderMaterial | null = null;
@@ -337,10 +338,21 @@ export class Particles {
     this.applyDensity();
   }
 
+  /**
+   * Efeitos de ambiente: os jatos das fontes e as bolhas submersas. Nos
+   * níveis mais baixos eles saem inteiros — a poeira luminosa fica, porque
+   * é ela que dá o ar do Éden, e custa uma chamada de desenho só.
+   */
+  setEnvironmentEffects(enabled: boolean): void {
+    this.environmentEffects = enabled;
+    this.applyDensity();
+  }
+
   private applyDensity(): void {
     this.motes.geometry.setDrawRange(0, Math.round(this.moteCount * this.density));
-    this.jets?.geometry.setDrawRange(0, Math.round(this.jetCount * (0.4 + 0.6 * this.density)));
-    if (this.bubbles) this.bubbles.count = Math.round(this.bubbleCount * (0.3 + 0.7 * this.density));
+    const extra = this.environmentEffects ? 1 : 0;
+    this.jets?.geometry.setDrawRange(0, Math.round(this.jetCount * (0.4 + 0.6 * this.density) * extra));
+    if (this.bubbles) this.bubbles.count = Math.round(this.bubbleCount * (0.3 + 0.7 * this.density) * extra);
   }
 
   /** Ajusta o tamanho dos pontos à resolução vertical e ao campo de visão. */
