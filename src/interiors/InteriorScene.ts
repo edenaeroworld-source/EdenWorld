@@ -35,6 +35,9 @@ import { FLOOR_HEIGHT, InteriorBuild } from './InteriorKit';
 import type { InteriorLoader } from './InteriorManager';
 import { InteriorPalette } from './InteriorPalette';
 import { InteriorPeople, type PersonSpec } from './InteriorPeople';
+import { createOfficialAvatar } from '../characters/CharacterModels';
+import { AvatarAnimator } from '../player/AvatarAnimator';
+import type { Avatar } from '../player/Avatar';
 import { buildBackdrop, buildShell, buildStaircase, footprintOf, stairwellOf } from './InteriorShell';
 import { getFitout } from './fitouts';
 
@@ -70,6 +73,12 @@ const ACTION_LABEL: Record<InteriorProp['action'], string> = {
   descer: 'Descer',
 };
 
+/** Um personagem oficial parado dentro de um prédio. */
+interface OfficialResident {
+  avatar: Avatar;
+  animator: AvatarAnimator;
+}
+
 export interface InteriorSceneOptions {
   scene: THREE.Scene;
   materials: InteriorMaterials;
@@ -97,6 +106,8 @@ export class InteriorScene implements InteriorLoader {
   private readonly geometries = new Set<THREE.BufferGeometry>();
   private readonly lights: THREE.Light[] = [];
   private people: InteriorPeople | null = null;
+  /** Personagens oficiais presentes neste prédio (modelo completo). */
+  private readonly residents: OfficialResident[] = [];
   private current: InteriorDef | null = null;
   private spawn: InteriorSpawn | null = null;
   private floorY = 0;
@@ -227,10 +238,14 @@ export class InteriorScene implements InteriorLoader {
     };
     this.buildEntrance(interior, entrance);
 
-    // Gente.
+    // Gente. Quem é do panteão ganha o modelo oficial; o resto, a
+    // figura simples da casa — que é barata o bastante para dez por
+    // loja num celular, e é para isso que ela existe.
     this.people = new InteriorPeople(this.palette, origin, 0);
     people.forEach((spec, index) => {
-      this.people?.add({ ...spec, baseY: (peopleFloors[index] ?? 0) * FLOOR_HEIGHT });
+      const baseY = (peopleFloors[index] ?? 0) * FLOOR_HEIGHT;
+      if (spec.character && this.addOfficialResident(spec, origin, baseY)) return;
+      this.people?.add({ ...spec, baseY });
     });
     this.group.add(this.people.group);
 
@@ -255,6 +270,8 @@ export class InteriorScene implements InteriorLoader {
     this.lights.length = 0;
     this.people?.dispose();
     this.people = null;
+    for (const resident of this.residents) resident.avatar.dispose();
+    this.residents.length = 0;
     for (const geometry of this.geometries) geometry.dispose();
     this.geometries.clear();
     this.group.clear();
@@ -268,6 +285,31 @@ export class InteriorScene implements InteriorLoader {
   update(dt: number, elapsed: number): void {
     if (!this.current) return;
     this.people?.update(dt, elapsed);
+    for (const resident of this.residents) {
+      const pose = resident.animator.update(dt, { state: 'idle', speed: 0, stridePhase: 0, verticalSpeed: 0, elapsed });
+      resident.avatar.applyPose(pose, elapsed);
+      resident.avatar.updateFace(dt);
+    }
+  }
+
+  /**
+   * Põe um personagem oficial de pé dentro do prédio.
+   *
+   * O modelo vem da mesma fábrica que o `NpcSystem` usa ao ar livre:
+   * é literalmente o mesmo corpo, com a mesma escala e a mesma
+   * gestação de cânone.
+   *
+   * @returns `false` se o id não for de um personagem oficial — aí a
+   *   pessoa vira uma figura comum, e não um buraco na loja.
+   */
+  private addOfficialResident(spec: PersonSpec, origin: { x: number; z: number }, baseY: number): boolean {
+    const avatar = createOfficialAvatar(spec.character as string, { fill: 0.14, shadows: this.quality?.shadows ?? true });
+    if (!avatar) return false;
+    avatar.root.position.set(origin.x + spec.x, this.floorY + baseY, origin.z + spec.z);
+    avatar.root.rotation.y = spec.yaw ?? 0;
+    this.group.add(avatar.root);
+    this.residents.push({ avatar, animator: new AvatarAnimator() });
+    return true;
   }
 
   /**

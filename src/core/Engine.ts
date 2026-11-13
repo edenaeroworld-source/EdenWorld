@@ -39,6 +39,7 @@ import { LocalSocial, type SocialService } from '../social/SocialSystem';
 import { AudioSystem } from '../systems/AudioSystem';
 import { Benchmark, type BenchmarkReport, formatReport, readBenchmarkRequest } from '../systems/Benchmark';
 import { ProgressSystem } from '../systems/ProgressSystem';
+import { CharacterGround } from '../characters/CharacterGround';
 import { type GraphicsSettings, QualitySystem, defaultGraphicsSettings, isQualityLevel, suggestQualityLevel } from '../systems/QualitySystem';
 import { type LoadStatus, type SaveData, SaveSystem, createNewSave, getBrowserStorage } from '../systems/SaveSystem';
 import { CHARACTER_VOICES, VoiceSystem } from '../systems/VoiceSystem';
@@ -47,7 +48,7 @@ import { World } from '../world/World';
 import { Zone } from '../world/ZoneMap';
 import { getRegion } from '../regions/Region';
 import { UniverseSystem } from '../universe/UniverseSystem';
-import { CAMERA, type DebugFlags, GAME, WORLD, readDebugFlags } from './Config';
+import { CAMERA, type DebugFlags, GAME, PLAYER, WORLD, readDebugFlags } from './Config';
 import { GameLoop } from './GameLoop';
 import { SystemRegistry } from './GameSystem';
 import { type Orientation, type PlatformInfo, detectPlatform, orientationOf, shouldSuggestLandscape } from './Platform';
@@ -225,6 +226,14 @@ export class Engine {
   private weatherChoice: WeatherChoice = 'auto';
   private transitioning = false;
   /** A camada que monta a geometria dos interiores. */
+  /**
+   * Chão e colisão dos personagens que não são o jogador.
+   *
+   * Mesma física, mesma resposta: foi a divergência entre esta
+   * consulta e `HeightField.getHeight` que deixava habitantes e deuses
+   * enterrados em pontes, decks e tablados.
+   */
+  private characterGround!: CharacterGround;
   private interiorScene: InteriorScene | null = null;
   /** Interativos do interior ativo (vazio quando se está na rua). */
   private interiorInteractables: readonly Interactable[] = [];
@@ -397,9 +406,11 @@ export class Engine {
     await nextFrame();
     // Lê do mundo a cada chamada, e não de um instantâneo: quando a
     // região é reconstruída, os habitantes acompanham o terreno novo.
+    this.characterGround = this.makeCharacterGround();
     this.npcs = this.systems.register(
       new NpcSystem({
         scene: this.scene,
+        body: this.characterGround,
         ground: (x, z) => this.world.heightField.getHeight(x, z),
         blocked: (x, z) => {
           if (Math.hypot(x, z) > this.world.boundaryRadius - 8) return true;
@@ -1455,6 +1466,10 @@ export class Engine {
     this.scene.add(this.collectibles.group);
     this.progress.totals = { crystals: region.collectibles.length, entries: this.journalEntries.length, areas: this.world.areas.length, portals: region.portals.length };
 
+    // A física antiga foi embora com a cidade antiga: os habitantes
+    // precisam do chão da região nova antes de dar o primeiro passo.
+    this.characterGround = this.makeCharacterGround();
+    this.npcs.setBody(this.characterGround);
     this.npcs.setRegion(regionId);
     this.refreshInteractables();
     this.baseMapCanvas = null;
@@ -1618,6 +1633,24 @@ export class Engine {
    * A quantidade vem do orçamento de qualidade que já existia, e as
    * espécies da própria região — um bicho não aparece onde não vive.
    */
+  /**
+   * Monta o chão compartilhado dos personagens sobre a física atual.
+   *
+   * O corpo usado é o mesmo do jogador (raio, altura e degrau vêm de
+   * `PLAYER`): se o jogador cabe, o habitante cabe; se o jogador sobe,
+   * o habitante sobe. Era isso que faltava para as duas metades do
+   * jogo concordarem sobre onde fica o chão.
+   */
+  private makeCharacterGround(): CharacterGround {
+    return new CharacterGround({
+      physics: this.world.physics,
+      terrain: (x, z) => this.world.heightField.getHeight(x, z),
+      radius: PLAYER.radius,
+      height: PLAYER.height,
+      stepHeight: PLAYER.stepHeight,
+    });
+  }
+
   private refreshWildlife(): void {
     this.wildlifePeriod = this.world.environment.clock.period;
     const regionId = this.world.regionId;
