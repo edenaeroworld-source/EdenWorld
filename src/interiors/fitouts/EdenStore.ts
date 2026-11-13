@@ -80,15 +80,23 @@ function mercado(ctx: FitoutContext): void {
   baskets.solid(0.3, 0.24, 0.9, 'cestas');
 
   f.planter(b, 1.2, 1.2, SOUTH, 1.3);
-  f.planter(b, 22.8, 16.6, SOUTH, 1.3);
+  // A oeste do pé da escada: no canto, o vaso ficava encravado no
+  // primeiro degrau e estreitava a entrada da subida.
+  f.planter(b, 18.2, 16.4, SOUTH, 1.3);
   f.plantBox(b, 16.4, 15.6, NORTH, 3.0);
 
   // Ala leste: frios, ilhas de oferta e um canto de café. O quadrante
   // entre as gôndolas e a escada estava vazio.
   f.counter(b, 17.8, 10.4, NORTH, 3.4);
   f.wallShelf(b, 23.4, 8.0, WEST, 3.2, 3);
-  for (let i = 0; i < 2; i += 1) {
-    const island = b.at(17.4 + i * 3.2, 13.6, SOUTH);
+  // Ilhas de oferta. A segunda ficava dentro do vão da escada, metida
+  // no meio dos degraus; subiu para o quadrante livre ao norte.
+  const islands = [
+    { x: 17.4, z: 13.6 },
+    { x: 21.4, z: 9.8 },
+  ];
+  for (let i = 0; i < islands.length; i += 1) {
+    const island = b.at(islands[i].x, islands[i].z, SOUTH);
     island.box(2.2, 1.6, 0.72, b.palette.gloss, 0, 0.36, 0);
     island.box(2.0, 1.4, 0.1, i === 0 ? b.palette.glossRose : b.palette.glossMint, 0, 0.76, 0);
     for (let k = 0; k < 6; k += 1) {
@@ -140,6 +148,27 @@ function mercado(ctx: FitoutContext): void {
         { x: 14.6, z: 13.6 },
         { x: 14.6, z: 3.4 },
         { x: 9.4, z: 3.4 },
+      ],
+    },
+    // Esta sobe. O trajeto atravessa o vão da escada declarando o
+    // andar em cada ponta, e a altura dela sai dos mesmos degraus em
+    // que o jogador pisa — é a prova de que a escada é um caminho de
+    // verdade, e não um enfeite que só o jogador usa.
+    {
+      id: 'cliente-mercado-escada',
+      x: 21.3,
+      z: 17.4,
+      tone: 'morena',
+      outfit: b.palette.glossAqua,
+      speed: 0.72,
+      floor: 0,
+      path: [
+        { x: 21.3, z: 17.4, floor: 0 },
+        { x: 21.3, z: 11.8, floor: 1 },
+        { x: 21.3, z: 8.2, floor: 1 },
+        { x: 21.3, z: 11.8, floor: 1 },
+        { x: 21.3, z: 17.4, floor: 0 },
+        { x: 17.2, z: 17.4, floor: 0 },
       ],
     },
   );

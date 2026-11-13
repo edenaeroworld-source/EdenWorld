@@ -19,6 +19,23 @@
 import * as THREE from 'three';
 import type { InteriorPalette } from './InteriorPalette';
 
+/** Um ponto de trajeto, opcionalmente num andar que não é o térreo. */
+export interface PathPoint {
+  x: number;
+  z: number;
+  /** Andar deste ponto. Ausente = o andar declarado pela pessoa. */
+  floor?: number;
+}
+
+/**
+ * Converte (x, z, andar) na altura do piso ali, em coordenadas locais.
+ *
+ * Quem fornece isto é a cena, que conhece o vão da escada. É o que
+ * permite que uma pessoa suba de verdade em vez de flutuar na
+ * diagonal: ela pisa exatamente nos degraus que o jogador pisa.
+ */
+export type FloorHeight = (x: number, z: number, floor: number) => number;
+
 /** De onde vem o corpo de uma pessoa. */
 export interface PersonSpec {
   id: string;
@@ -32,12 +49,21 @@ export interface PersonSpec {
   tone?: 'clara' | 'morena' | 'escura';
   /** Cor da roupa. Por padrão, o uniforme da casa. */
   outfit?: THREE.Material;
-  /** Trajeto fechado, em coordenadas locais. Sem isto, fica parada. */
-  path?: readonly { x: number; z: number }[];
+  /**
+   * Trajeto fechado, em coordenadas locais. Sem isto, fica parada.
+   *
+   * Um ponto pode declarar o andar em que está. Quando dois pontos
+   * seguidos estão em andares diferentes, o trecho entre eles é uma
+   * subida: a pessoa anda pelo vão da escada e a altura dela sai da
+   * geometria real dos degraus, os mesmos em que o jogador pisa.
+   */
+  path?: readonly PathPoint[];
   /** Metros por segundo ao caminhar. */
   speed?: number;
   /** Altura do piso do andar em que ela está. */
   baseY?: number;
+  /** Andar em que a pessoa começa. Usado junto com `path`. */
+  floor?: number;
   /**
    * Id de um personagem oficial do panteão.
    *
@@ -63,10 +89,14 @@ interface Person {
   phase: number;
   leg: number;
   distance: number;
+  /** Altura do piso no quadro anterior, para medir a subida. */
+  lastHeight: number;
+  /** Quanto da postura de escada está aplicada (0–1). */
+  climb: number;
 }
 
 /** Comprimento acumulado de um trajeto fechado. */
-function pathLength(points: readonly { x: number; z: number }[]): number {
+function pathLength(points: readonly PathPoint[]): number {
   let total = 0;
   for (let i = 0; i < points.length; i += 1) {
     const a = points[i];
@@ -76,8 +106,12 @@ function pathLength(points: readonly { x: number; z: number }[]): number {
   return total;
 }
 
-/** Ponto e direção a `distance` metros do início do trajeto. */
-function along(points: readonly { x: number; z: number }[], distance: number): { x: number; z: number; yaw: number } {
+/** Ponto, direção e andar a `distance` metros do início do trajeto. */
+function along(
+  points: readonly PathPoint[],
+  distance: number,
+  baseFloor: number,
+): { x: number; z: number; yaw: number; floor: number } {
   let remaining = distance;
   for (let i = 0; i < points.length; i += 1) {
     const a = points[i];
@@ -85,11 +119,18 @@ function along(points: readonly { x: number; z: number }[], distance: number): {
     const segment = Math.hypot(b.x - a.x, b.z - a.z);
     if (remaining <= segment || i === points.length - 1) {
       const t = segment < 0.001 ? 0 : remaining / segment;
-      return { x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * t, yaw: Math.atan2(-(b.z - a.z), b.x - a.x) - Math.PI / 2 };
+      const fa = a.floor ?? baseFloor;
+      const fb = b.floor ?? baseFloor;
+      return {
+        x: a.x + (b.x - a.x) * t,
+        z: a.z + (b.z - a.z) * t,
+        yaw: Math.atan2(-(b.z - a.z), b.x - a.x) - Math.PI / 2,
+        floor: fa + (fb - fa) * t,
+      };
     }
     remaining -= segment;
   }
-  return { x: points[0].x, z: points[0].z, yaw: 0 };
+  return { x: points[0].x, z: points[0].z, yaw: 0, floor: points[0].floor ?? baseFloor };
 }
 
 export class InteriorPeople {
@@ -101,6 +142,8 @@ export class InteriorPeople {
     private readonly palette: InteriorPalette,
     private readonly origin: { x: number; z: number },
     private readonly baseY: number,
+    /** Altura do piso em cada ponto; sem isto, cada andar é plano. */
+    private readonly floorHeight: FloorHeight | null = null,
   ) {
     this.group.name = 'InteriorPessoas';
   }
@@ -175,6 +218,8 @@ export class InteriorPeople {
       phase: (spec.id.length * 13 + spec.x * 7 + spec.z * 3) % 6.283,
       leg: 0,
       distance: 0,
+      lastHeight: baseY,
+      climb: 0,
     });
   }
 
@@ -187,19 +232,38 @@ export class InteriorPeople {
         const speed = person.spec.speed ?? 0.85;
         const total = pathLength(person.spec.path);
         person.distance = (person.distance + speed * dt) % total;
-        const at = along(person.spec.path, person.distance);
+        const at = along(person.spec.path, person.distance, person.spec.floor ?? 0);
         person.root.position.x = this.origin.x + at.x;
         person.root.position.z = this.origin.z + at.z;
         person.root.rotation.y = at.yaw;
         person.leg += speed * dt * 3.4;
         const swing = Math.sin(person.leg) * 0.5;
-        person.legL.rotation.x = swing;
-        person.legR.rotation.x = -swing;
+        // Na escada a perna sobe mais, como a do jogador: é a mesma
+        // caminhada, não uma animação de escalar.
+        //
+        // A altura do degrau é um degrau — sobe 34 cm de uma vez. O
+        // corpo acompanha em vez de saltar, com folga proporcional ao
+        // quanto se andou, que é o mesmo cuidado que o motor do
+        // jogador tem. Sem isto a pessoa sobe aos solavancos.
+        const target = this.floorHeight ? this.baseY + this.floorHeight(at.x, at.z, at.floor) : person.baseY;
+        const budget = Math.max(1.6 * dt, speed * dt * 1.6);
+        const delta = target - person.lastHeight;
+        const height =
+          Math.abs(delta) <= budget ? target : person.lastHeight + Math.sign(delta) * budget;
+        const rise = height - person.lastHeight;
+        person.lastHeight = height;
+        const climbing = dt > 0 ? Math.min(1, Math.max(0, Math.abs(rise / dt) / 0.9)) : 0;
+        person.climb = person.climb + (climbing - person.climb) * Math.min(1, dt * 6);
+        const lift = 1 + person.climb * 0.6;
+        person.legL.rotation.x = swing * lift;
+        person.legR.rotation.x = -swing * lift;
         person.armL.rotation.x = -swing * 0.7;
         person.armR.rotation.x = swing * 0.7;
-        person.root.position.y = person.baseY + Math.abs(Math.sin(person.leg)) * 0.025;
+        person.torso.rotation.x = person.climb * (rise >= 0 ? 0.12 : -0.05);
+        person.root.position.y = height + Math.abs(Math.sin(person.leg)) * 0.025;
         continue;
       }
+      person.torso.rotation.x = 0;
 
       // Parada: respira, troca o peso de pé e olha em volta devagar.
       const sway = Math.sin(elapsed * 0.7 + person.phase) * 0.06;

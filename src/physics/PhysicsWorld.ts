@@ -231,6 +231,33 @@ export class PhysicsWorld {
   }
 
   /**
+   * Piso mais alto abaixo de `y` em (x, z) — o chão que sustenta algo
+   * que está naquela altura.
+   *
+   * A câmera usa isto para não afundar. Ao ar livre é o relevo; dentro
+   * de um prédio o relevo não existe (é o terreno lá fora, no meio do
+   * nada), e o que vale são as lajes: no primeiro andar o chão da
+   * câmera é a laje do primeiro andar, não o térreo três metros e meio
+   * abaixo. Sem isso a câmera atravessava o piso toda vez que o
+   * jogador subia a escada.
+   */
+  floorUnder(x: number, z: number, y: number): number {
+    const indoors = this.indoorFloor !== null;
+    let best = indoors ? (this.indoorFloor as number) : this.heightSampler.getHeight(x, z);
+    const list = this.cells.get(cellKey(Math.floor(x / CELL_SIZE), Math.floor(z / CELL_SIZE)));
+    if (!list) return best;
+    for (let i = 0; i < list.length; i++) {
+      const c = list[i];
+      if (!c.walkable) continue;
+      if (c.yMin > y) continue;
+      const top = colliderTopAt(c, x, z);
+      if (top === null || top > y) continue;
+      if (top > best) best = top;
+    }
+    return best;
+  }
+
+  /**
    * Chão sob o ponto (x, z) para um personagem com os pés em `feetY`.
    * Só considera superfícies caminháveis cujo topo esteja até
    * `stepHeight` acima dos pés — acima disso é parede, não degrau.

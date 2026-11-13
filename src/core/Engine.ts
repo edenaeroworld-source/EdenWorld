@@ -312,6 +312,9 @@ export class Engine {
       onInteract: () => this.handleAction('interact'),
       onExitMode: () => this.exitSpecialMode(),
       onCapture: () => this.capturePhoto(),
+      onLeaveBuilding: () => {
+        if (this.universe.interiors.isInside) void this.exitInterior();
+      },
     });
 
     this.mainMenu = new MainMenuScreen({
@@ -733,6 +736,7 @@ export class Engine {
     this.applyClockFromSave();
     this.currentAreaId = null;
     this.lastDistance = 0;
+    this.hud.setLeaveBuilding(null);
     this.saveSystem.save(this.save);
   }
 
@@ -1440,6 +1444,7 @@ export class Engine {
       this.setExteriorVisible(true);
       this.interiorInteractables = [];
       this.interiorReturn = null;
+      this.hud.setLeaveBuilding(null);
     }
 
     const loading = new LoadingScreen(this.uiRoot);
@@ -1544,6 +1549,9 @@ export class Engine {
     const interior = this.universe.interiors.current?.interior;
     this.hud.setPlace(interior?.name ?? 'Interior', this.world.regionName);
     this.hud.banner(interior?.name ?? 'Interior', interior?.note ?? '');
+    // A saída fica à mão o tempo todo lá dentro, inclusive do andar de
+    // cima, onde a porta está longe demais para ser alcançada.
+    this.hud.setLeaveBuilding(interior?.name ?? 'Interior');
     await this.hud.fade(false);
     this.dirty = true;
   }
@@ -1554,6 +1562,7 @@ export class Engine {
     const exit = this.universe.leaveInterior();
     this.transitioning = true;
     this.syncInputState();
+    this.hud.setLeaveBuilding(null);
     await this.hud.fade(true);
 
     this.interiorInteractables = [];

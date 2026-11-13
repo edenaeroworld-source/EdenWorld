@@ -20,6 +20,8 @@ export interface HudCallbacks {
   onInteract(): void;
   onExitMode(): void;
   onCapture(): void;
+  /** Sair do prédio em que o jogador está. */
+  onLeaveBuilding(): void;
 }
 
 export type HudMode = 'normal' | 'scenic' | 'photo';
@@ -48,10 +50,14 @@ export class HUD {
   private readonly captureButton: HTMLButtonElement;
   private readonly fadeElement: HTMLDivElement;
   private readonly flashElement: HTMLDivElement;
+  /** Botão de sair do prédio: só existe na tela enquanto se está dentro. */
+  private readonly leaveButton: HTMLButtonElement;
   private hintTimer = 0;
   private lastNight: boolean | null = null;
   private mode: HudMode = 'normal';
   private promptVisible = false;
+  /** Nome do prédio em que o jogador está, ou `null` ao ar livre. */
+  private leaveLabel: string | null = null;
 
   constructor(root: HTMLElement, callbacks: HudCallbacks) {
     this.placeSub = h('span', { class: 'pill__sub', text: 'Aurora City' });
@@ -94,6 +100,18 @@ export class HUD {
     this.bar = h('div', { class: 'hud__bar' }, this.barLabel, this.captureButton, exit);
     this.bar.hidden = true;
 
+    // Sair de um prédio é sempre uma decisão do jogador: ou pela porta,
+    // ou por este botão, que só aparece quando há de onde sair. Nunca
+    // acontece sozinho por andar perto da saída.
+    this.leaveButton = button({
+      class: 'btn btn--ghost btn--small hud__leave',
+      icon: icon('back', 18),
+      label: 'Sair do prédio',
+      onClick: () => callbacks.onLeaveBuilding(),
+    });
+    this.leaveButton.tabIndex = -1;
+    this.leaveButton.hidden = true;
+
     this.fadeElement = h('div', { class: 'fade' });
     this.flashElement = h('div', { class: 'flash' });
 
@@ -106,6 +124,7 @@ export class HUD {
       this.hints,
       this.prompt,
       this.bar,
+      this.leaveButton,
       this.fps,
       this.fadeElement,
       this.flashElement,
@@ -129,6 +148,24 @@ export class HUD {
     this.prompt.hidden = !normal || !this.promptVisible;
     // Nada de letreiros sobre a paisagem ao fotografar ou usar um telescópio.
     this.bannerElement.hidden = !normal;
+    this.leaveButton.hidden = this.leaveLabel === null || !normal;
+  }
+
+  /**
+   * Mostra (ou esconde) o botão de sair do prédio.
+   *
+   * @param label nome do lugar de onde se sai, ou `null` quando o
+   *   jogador está ao ar livre e o botão não deve existir.
+   */
+  setLeaveBuilding(label: string | null): void {
+    this.leaveLabel = label;
+    this.leaveButton.hidden = label === null || this.mode !== 'normal';
+    if (label !== null) this.leaveButton.setAttribute('aria-label', `Sair: ${label}`);
+  }
+
+  /** `true` enquanto o botão de sair do prédio está na tela. */
+  get leaveBuildingVisible(): boolean {
+    return !this.leaveButton.hidden;
   }
 
   setPlace(area: string, city: string): void {

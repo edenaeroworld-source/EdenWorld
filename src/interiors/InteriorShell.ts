@@ -247,26 +247,99 @@ export function buildShell(b: InteriorBuild, options: ShellOptions): void {
 }
 
 /**
- * Monta a escada que liga este andar ao de cima.
+ * A escada, medida: onde começa, para onde sobe, quantos degraus.
  *
- * Degraus de 34 cm — abaixo da altura de passo do jogador, então a
- * subida é só andar para a frente. Cada degrau é pisável de verdade,
- * e o guarda-corpo em volta do vão impede a queda pelo buraco.
+ * Tudo que precisa saber a forma da escada — os degraus, o corrimão,
+ * o guarda-corpo do vão lá em cima, e as pessoas que sobem por ela —
+ * lê daqui. Era a falta disto que deixava cada pedaço com a sua
+ * própria ideia de qual lado era o de cima.
  */
-export function buildStaircase(b: InteriorBuild, stair: Rect & { yaw: number }, options: { withRailing: boolean }): void {
+export interface StairFlight {
+  /** `true` quando a subida corre ao longo de Z. */
+  alongZ: boolean;
+  /** `+1` sobe no sentido positivo do eixo; `−1`, no oposto. */
+  forward: 1 | -1;
+  /** Coordenada, no eixo da subida, onde o primeiro degrau encosta no piso. */
+  start: number;
+  /** Coordenada, no eixo da subida, onde o último degrau encontra o andar de cima. */
+  end: number;
+  /** Centro do vão no eixo transversal. */
+  cross: number;
+  run: number;
+  width: number;
+  steps: number;
+  rise: number;
+  depth: number;
+  /**
+   * Lado do vão por onde se chega ao andar de cima.
+   *
+   * O guarda-corpo fecha os outros três. Este era o erro que prendia
+   * o jogador no supermercado: a boca era calculada invertida, então
+   * o vidro ficava justamente em cima do último degrau — dava para
+   * subir a escada inteira e não dava para pôr o pé no andar.
+   */
+  mouth: 'norte' | 'sul' | 'leste' | 'oeste';
+}
+
+/** Lê a geometria de um vão de escada. */
+export function stairFlight(stair: Rect & { yaw: number }): StairFlight {
   const alongZ = stair.d >= stair.w;
   const run = alongZ ? stair.d : stair.w;
   const width = alongZ ? stair.w : stair.d;
   const steps = Math.max(2, Math.round(FLOOR_HEIGHT / STEP_RISE));
-  const depth = run / steps;
-  const rise = FLOOR_HEIGHT / steps;
   // yaw = 0 sobe no sentido positivo do eixo; π sobe no sentido oposto.
-  const forward = Math.cos(stair.yaw) >= 0 ? 1 : -1;
-  const startAlong = forward > 0 ? (alongZ ? stair.z : stair.x) : (alongZ ? stair.z + stair.d : stair.x + stair.w);
-  const cross = alongZ ? stair.x + stair.w / 2 : stair.z + stair.d / 2;
+  const forward: 1 | -1 = Math.cos(stair.yaw) >= 0 ? 1 : -1;
+  const low = alongZ ? stair.z : stair.x;
+  const high = low + run;
+  return {
+    alongZ,
+    forward,
+    start: forward > 0 ? low : high,
+    end: forward > 0 ? high : low,
+    cross: alongZ ? stair.x + stair.w / 2 : stair.z + stair.d / 2,
+    run,
+    width,
+    steps,
+    rise: FLOOR_HEIGHT / steps,
+    depth: run / steps,
+    // Chega-se em cima no fim da subida: se ela corre para o lado
+    // negativo do eixo, a boca é a borda de menor coordenada.
+    mouth: alongZ ? (forward > 0 ? 'sul' : 'norte') : forward > 0 ? 'leste' : 'oeste',
+  };
+}
+
+/**
+ * Altura do piso da escada no ponto (x, z) local, em metros acima do
+ * andar de baixo — ou `null` fora do vão.
+ *
+ * É a mesma função que os colisores dos degraus descrevem, degrau a
+ * degrau, e é com ela que as pessoas de dentro do prédio sobem: quem
+ * anda e quem é desenhado pisam exatamente no mesmo lugar.
+ */
+export function stairHeightAt(stair: Rect & { yaw: number }, x: number, z: number): number | null {
+  if (x < stair.x || x > stair.x + stair.w || z < stair.z || z > stair.z + stair.d) return null;
+  const flight = stairFlight(stair);
+  const along = flight.alongZ ? z : x;
+  const travelled = (along - flight.start) * flight.forward;
+  const index = Math.min(flight.steps - 1, Math.max(0, Math.floor(travelled / flight.depth)));
+  return (index + 1) * flight.rise;
+}
+
+/**
+ * Monta a escada que liga este andar ao de cima.
+ *
+ * Degraus de 34 cm — abaixo da altura de passo do jogador (42 cm), então
+ * a subida é só andar para a frente, sem pulo e sem animação de escalar.
+ * Cada degrau é pisável de verdade; o corrimão é sólido na parte alta do
+ * lance, para ninguém cair de lado; e o guarda-corpo fecha o vão no andar
+ * de cima **menos na boca**, que é por onde se chega.
+ */
+export function buildStaircase(b: InteriorBuild, stair: Rect & { yaw: number }, options: { withRailing: boolean }): void {
+  const flight = stairFlight(stair);
+  const { alongZ, forward, depth, rise, run, steps, width, cross } = flight;
 
   for (let i = 0; i < steps; i += 1) {
-    const centre = startAlong + forward * (i * depth + depth / 2);
+    const centre = flight.start + forward * (i * depth + depth / 2);
     const x = alongZ ? cross : centre;
     const z = alongZ ? centre : cross;
     const top = (i + 1) * rise;
@@ -278,7 +351,12 @@ export function buildStaircase(b: InteriorBuild, stair: Rect & { yaw: number }, 
       top / 2,
       z,
     );
-    b.step(x, z, (alongZ ? width : depth) / 2, (alongZ ? depth : width) / 2, top, 0, `escada:${i}`, 'stone');
+    // O degrau é pisável e barra a câmera: sem isso ela mergulha por
+    // dentro da escada e mostra o prédio pelo avesso.
+    b.step(x, z, (alongZ ? width : depth) / 2, (alongZ ? depth : width) / 2, top, 0, `escada:${i}`, 'stone', {
+      blocksCamera: true,
+      thickness: Math.max(0.2, rise),
+    });
     // Focinho iluminado: dá para ver onde pisar.
     b.mesh(
       new THREE.BoxGeometry(alongZ ? width - 0.2 : 0.06, 0.04, alongZ ? 0.06 : width - 0.2),
@@ -289,34 +367,69 @@ export function buildStaircase(b: InteriorBuild, stair: Rect & { yaw: number }, 
     );
   }
 
-  // Corrimão dos dois lados da subida.
+  /* ------------------------------ corrimão ----------------------------- */
+  // Acompanha a inclinação, em vez de flutuar na horizontal no meio do
+  // lance. Os montantes nascem do degrau que está embaixo deles.
+  const railPosts = Math.max(3, Math.round(run / 1.1));
   for (const side of [-1, 1]) {
-    const hx = alongZ ? cross + (side * width) / 2 : (alongZ ? 0 : stair.x + stair.w / 2);
-    const hz = alongZ ? stair.z + stair.d / 2 : cross + (side * width) / 2;
-    const cx = alongZ ? hx : stair.x + stair.w / 2;
-    const cz = alongZ ? stair.z + stair.d / 2 : hz;
-    b.mesh(
-      new THREE.BoxGeometry(alongZ ? 0.07 : run, 0.07, alongZ ? run : 0.07),
-      b.palette.chrome,
-      cx,
-      FLOOR_HEIGHT / 2 + 0.95,
-      cz,
+    for (let i = 0; i <= railPosts; i += 1) {
+      const t = i / railPosts;
+      const along = flight.start + forward * t * run;
+      const surface = Math.min(FLOOR_HEIGHT, Math.max(rise, (Math.floor((t * run) / depth) + 1) * rise));
+      const offset = (side * (width - 0.16)) / 2;
+      const x = alongZ ? cross + offset : along;
+      const z = alongZ ? along : cross + offset;
+      b.mesh(new THREE.BoxGeometry(0.06, 1.0, 0.06), b.palette.chrome, x, surface + 0.5, z);
+    }
+    // O passamão: uma barra por trecho, seguindo os degraus.
+    const bars = steps;
+    for (let i = 0; i < bars; i += 1) {
+      const along = flight.start + forward * ((i + 0.5) * depth);
+      const surface = (i + 1) * rise;
+      const offset = (side * (width - 0.16)) / 2;
+      const x = alongZ ? cross + offset : along;
+      const z = alongZ ? along : cross + offset;
+      b.mesh(
+        new THREE.BoxGeometry(alongZ ? 0.08 : depth + 0.04, 0.08, alongZ ? depth + 0.04 : 0.08),
+        b.palette.chrome,
+        x,
+        surface + 1.0,
+        z,
+      );
+    }
+    // Colisão do corrimão só na parte alta do lance: embaixo o jogador
+    // ainda precisa poder entrar na escada de lado, que é como quase
+    // todo mundo entra.
+    const guarded = run * 0.62;
+    const centreAlong = flight.start + forward * (run - guarded / 2);
+    const offset = (side * (width - 0.1)) / 2;
+    const rx = alongZ ? cross + offset : centreAlong;
+    const rz = alongZ ? centreAlong : cross + offset;
+    b.collide(
+      rx,
+      rz,
+      (alongZ ? 0.1 : guarded) / 2,
+      (alongZ ? guarded : 0.1) / 2,
+      rise,
+      FLOOR_HEIGHT + 1.0,
+      0,
+      `corrimao:${side > 0 ? 'direito' : 'esquerdo'}`,
     );
   }
 
   if (!options.withRailing) return;
   // Guarda-corpo em volta do vão no andar de cima, deixando a boca da
-  // escada aberta. Sem isto, dá para cair no buraco.
+  // escada aberta. Sem isto, dá para cair no buraco — e com a boca no
+  // lado errado, não dá para sair da escada.
   const top = FLOOR_HEIGHT;
-  const mouth = forward > 0 ? (alongZ ? 'norte' : 'oeste') : alongZ ? 'sul' : 'leste';
-  const edges: { x: number; z: number; w: number; d: number; id: string }[] = [
+  const edges: { x: number; z: number; w: number; d: number; id: StairFlight['mouth'] }[] = [
     { x: stair.x + stair.w / 2, z: stair.z, w: stair.w, d: 0.1, id: 'norte' },
     { x: stair.x + stair.w / 2, z: stair.z + stair.d, w: stair.w, d: 0.1, id: 'sul' },
     { x: stair.x, z: stair.z + stair.d / 2, w: 0.1, d: stair.d, id: 'oeste' },
     { x: stair.x + stair.w, z: stair.z + stair.d / 2, w: 0.1, d: stair.d, id: 'leste' },
   ];
   for (const edge of edges) {
-    if (edge.id === mouth) continue;
+    if (edge.id === flight.mouth) continue;
     b.mesh(new THREE.BoxGeometry(edge.w, 0.08, edge.d), b.palette.chrome, edge.x, top + 1.0, edge.z);
     b.mesh(new THREE.BoxGeometry(edge.w, 0.9, edge.d * 0.4), b.palette.glass, edge.x, top + 0.55, edge.z);
     b.collide(edge.x, edge.z, Math.max(edge.w, 0.12) / 2, Math.max(edge.d, 0.12) / 2, top, top + 1.1, 0, `guarda-corpo:${edge.id}`);

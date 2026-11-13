@@ -270,8 +270,12 @@ export class ThirdPersonCamera {
     let cy = this.pivot.y + dy * this.currentDistance;
     const cz = this.pivot.z + dz * this.currentDistance;
 
-    // Mantém a câmera acima do terreno e da linha d'água.
-    const floor = Math.max(physics.terrainHeight(cx, cz) + 0.22, WORLD.waterLevel + 0.2);
+    // Mantém a câmera acima do chão e da linha d'água. Dentro de um
+    // prédio o chão é a laje do andar em que o jogador está — medida a
+    // partir do alvo, não da câmera, senão ao subir a escada a câmera
+    // ficaria presa na laje de cima enquanto o corpo ainda está embaixo.
+    const ground = physics.floorUnder(cx, cz, this.pivot.y + 0.3);
+    const floor = physics.indoor ? ground + 0.22 : Math.max(ground + 0.22, WORLD.waterLevel + 0.2);
     if (cy < floor) cy = floor;
 
     camera.position.set(cx, cy, cz);
