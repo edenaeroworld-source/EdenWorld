@@ -99,7 +99,7 @@ retoma a rotina, e a cabeça acompanha.
 
 | Arquivo | Responsabilidade |
 | --- | --- |
-| `src/player/Gestures.ts` | Os 12 gestos: canais, quadros-chave, duração e `GesturePlayback` |
+| `src/player/Gestures.ts` | Os 13 gestos: canais, quadros-chave, duração e `GesturePlayback` |
 | `src/player/Expressions.ts` | As 7 expressões e o peso de cada alvo de morph |
 | `src/player/AvatarFace.ts` | Geometria do rosto com 6 alvos + `FaceController` puro (piscada, fala, mistura) |
 | `src/characters/Personas.ts` | Jeito de cada pessoa: gestos preferidos, humor de saudação, energia |

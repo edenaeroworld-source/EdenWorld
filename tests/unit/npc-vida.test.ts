@@ -37,8 +37,8 @@ function walkPose(animator: AvatarAnimator, dt: number, phase: number): Pose {
 }
 
 describe('gestos por cima da animação', () => {
-  it('tem os doze gestos da conversa, todos com duração e mistura', () => {
-    expect(GESTURE_IDS.length).toBe(12);
+  it('tem os treze gestos da conversa, todos com duração e mistura', () => {
+    expect(GESTURE_IDS.length).toBe(13);
     for (const id of GESTURE_IDS) {
       const gesture = GESTURES[id];
       expect(gesture.id).toBe(id);

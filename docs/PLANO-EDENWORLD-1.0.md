@@ -105,7 +105,7 @@ produção em ~0,5 s (416 kB do jogo + 580 kB do Three.js, ~284 kB em gzip).
 | Saturno | Casa EdenPawl |
 | Maze | Margem leste do lago |
 | Júpiter | Pavilhão Lúmen |
-| Amara | Mirante Celeste |
+| Amara (Deusa da Maternidade) | Mirante Celeste |
 
 Com `?debug`, `__eden.irPara('haru')` leva direto até qualquer uma delas.
 
@@ -144,9 +144,12 @@ Com `?debug`, `__eden.irPara('haru')` leva direto até qualquer uma delas.
 
 ## Pontos de cânone a confirmar com o criador
 
-- **Amara**: o documento pede para preservar a identidade dela e **não**
-  atribuir o domínio da maternidade. Sem o domínio oficial, ela aparece no jogo
-  com perfil e personalidade, e o campo "domínio" fica declaradamente em aberto.
+- ~~**Amara**~~ — **resolvido pelo criador em 12/11/2026**: Amara é a **Deusa da
+  Maternidade** e está **grávida**. A gestação é identidade, não fase: entra na
+  ficha, no diálogo, no diário, no EdenPhone e na silhueta do avatar em
+  `src/player/Gestation.ts`. O cânone declarou o domínio e a gestação — e só
+  isso. Não há filho, pai, data nem parto inventados em lugar nenhum, e um
+  teste em `tests/unit/pantheon.test.ts` guarda essa fronteira.
 - **Kling** (Noureja Nether): citado apenas no acervo do EdenReads até a região
   existir.
 - **Concurso Divino**: datas e regras completas do próximo ciclo.

@@ -869,6 +869,10 @@ export class NpcSystem implements GameSystem {
   private materializeDeity(deity: DeityNpc): void {
     const avatar = new Avatar(deity.character.appearance);
     avatar.fill = 0.16;
+    // Gestação é identidade do personagem, não estado de jogo: entra junto
+    // com a aparência, antes de qualquer Afters, e vale sempre que ela
+    // estiver em cena (ver `src/player/Gestation.ts`).
+    avatar.setGestation(deity.character.gestation ?? 0);
     avatar.setShadows(this.shadows);
     this.group.add(avatar.root);
     deity.avatar = avatar;
