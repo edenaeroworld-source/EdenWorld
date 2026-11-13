@@ -143,6 +143,15 @@ export const ROSE_GARDEN = {
   coreRadius: 12,
 } as const;
 
+/**
+ * O miolo do roseiral é **área proibida**: ninguém entra.
+ *
+ * A zona em si é declarada em `world/KeepOut.ts`, que deriva centro e
+ * raio do `ROSE_GARDEN` acima — a barreira tem a forma e o tamanho do
+ * que protege, e muda junto se o mirante um dia mudar. A nota fica
+ * aqui porque é aqui que se procura quando se mexe na planta.
+ */
+
 /* --------------------------- jardins flutuantes ------------------------- */
 
 export interface FloatingGarden {

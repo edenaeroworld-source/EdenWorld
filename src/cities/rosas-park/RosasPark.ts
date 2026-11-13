@@ -38,6 +38,7 @@ import {
   waterfallFoot,
   waterfallPosition,
 } from './RosasLayout';
+import { keepOutsFor, pushOutOfKeepOut } from '../../world/KeepOut';
 import { roseBeds } from './RosasZones';
 
 export interface RosasParkOptions {
@@ -52,6 +53,14 @@ export interface RosasParkOptions {
 const ROSE_PALETTE = [0xffc1d6, 0xff8fb8, 0xffe9f2, 0xf0588c, 0xffd9e6];
 const SAKURA_LEAF = [0xffc8dd, 0xffd9e8, 0xf7b8d0];
 const TROPICAL_LEAF = [0x3fae63, 0x2f9e5e, 0x58c47a, 0x1f8a52];
+
+/**
+ * Folga da placa de um marco até a borda de uma área proibida.
+ *
+ * Maior que o alcance do interativo (3 m) para que a pessoa consulte
+ * a placa parada do lado de fora, sem encostar na barreira.
+ */
+const PLAQUE_STANDOFF = 3.4;
 
 export class RosasPark {
   readonly id = 'rosas-park';
@@ -77,6 +86,10 @@ export class RosasPark {
     this.buildLandmarks(ctx);
     this.buildStation(ctx);
     this.buildAmbience(ctx);
+    // Por último, depois de todo o cenário: o que for área proibida
+    // desta região fica fechado. Vir por último garante que nenhuma
+    // etapa posterior abra um buraco na barreira.
+    ctx.sealKeepOuts(keepOutsFor(this.id));
   }
 
   /* ------------------------------ caminhos ----------------------------- */
@@ -193,7 +206,10 @@ export class RosasPark {
     // Mirante central: piso de vidro sobre um pedestal.
     const coreY = ctx.ground(x, z);
     batch.add(disc(ROSE_GARDEN.coreRadius, coreY, coreY + 0.18, 48), ctx.materials.glass, new THREE.Matrix4().makeTranslation(x, 0, z));
-    ctx.physics.addCylinder({ x, z, radius: ROSE_GARDEN.coreRadius, yMin: coreY, yMax: coreY + 0.18, walkable: true, solid: false, blocksCamera: false, surface: 'stone', tag: 'rosas:mirante' });
+    // O piso de vidro continua no lugar, visível e idêntico — mas sem
+    // colisor caminhável. Ele era o convite: um chão em que dava para
+    // pisar, no meio de uma estrutura em que ninguém deveria entrar.
+    // Quem fecha a área agora é a barreira de `sealKeepOuts`.
 
     // Pérgula de arcos sobre o mirante: estrutura orgânica, sem quina.
     for (let i = 0; i < 6; i += 1) {
@@ -534,24 +550,33 @@ export class RosasPark {
 
   private buildLandmarks(ctx: CityContext): void {
     const batch = ctx.batch();
+    const forbidden = keepOutsFor(this.id);
     for (const landmark of LANDMARKS) {
-      const y = ctx.ground(landmark.x, landmark.z);
+      // Uma placa dentro de uma área proibida seria uma placa que
+      // ninguém pode ler: o alcance do interativo é 3 m e a barreira
+      // fica bem antes disso. Ela vai para a borda de fora da
+      // estrutura, que é de onde a pessoa a olha de qualquer forma.
+      // A regra é geral — vale para o Coração do Roseiral hoje e para
+      // qualquer marco que caia dentro de uma zona amanhã.
+      const spot = pushOutOfKeepOut(forbidden, landmark.x, landmark.z, PLAQUE_STANDOFF);
+      const { x: markX, z: markZ } = spot;
+      const y = ctx.ground(markX, markZ);
 
       // Placa: um cristal inclinado sobre um pedestal.
       const pedestal = cyl(0.3, 0.42, 0.9, 10);
-      batch.add(pedestal, ctx.materials.sandstone, new THREE.Matrix4().makeTranslation(landmark.x, y + 0.45, landmark.z));
+      batch.add(pedestal, ctx.materials.sandstone, new THREE.Matrix4().makeTranslation(markX, y + 0.45, markZ));
       const shard = sphere(landmark.hidden ? 0.46 : 0.36, 10, 8);
-      batch.add(shard, ctx.materials.crystal, new THREE.Matrix4().makeScale(1, 1.5, 0.5).setPosition(landmark.x, y + 1.35, landmark.z));
+      batch.add(shard, ctx.materials.crystal, new THREE.Matrix4().makeScale(1, 1.5, 0.5).setPosition(markX, y + 1.35, markZ));
 
-      ctx.lightSpots.push({ x: landmark.x, y: y + 1.4, z: landmark.z, radius: landmark.hidden ? 12 : 8, color: landmark.hidden ? 0xa6ffe4 : 0xffe9a6 });
+      ctx.lightSpots.push({ x: markX, y: y + 1.4, z: markZ, radius: landmark.hidden ? 12 : 8, color: landmark.hidden ? 0xa6ffe4 : 0xffe9a6 });
 
       ctx.addInteractable({
         id: `marco:${landmark.id}`,
         name: landmark.name,
         action: 'Observar',
-        x: landmark.x,
+        x: markX,
         y: y + 1,
-        z: landmark.z,
+        z: markZ,
         range: 3,
         payload: {
           type: 'placa',
@@ -563,9 +588,9 @@ export class RosasPark {
 
       // Os escondidos também contam como colecionável: achar é o prêmio.
       if (landmark.hidden) {
-        ctx.collectibles.push({ id: `rosas-${landmark.id}`, x: landmark.x, y: y + 1.9, z: landmark.z, hint: landmark.note });
+        ctx.collectibles.push({ id: `rosas-${landmark.id}`, x: markX, y: y + 1.9, z: markZ, hint: landmark.note });
       }
-      ctx.reserve(landmark.x, landmark.z, 2.4);
+      ctx.reserve(markX, markZ, 2.4);
     }
     ctx.commit(batch, 'rosas:marcos');
   }

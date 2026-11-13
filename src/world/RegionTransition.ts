@@ -22,6 +22,8 @@
  * sabe desenhar passa as funções; aqui mora só a ordem e a conferência.
  */
 
+import { type KeepOutZone, insideKeepOut, keepOutsFor } from './KeepOut';
+
 export type TransitionStage = 'salvar' | 'descarregar' | 'carregar' | 'validar';
 
 /** Relata o andamento da montagem para a tela de carregamento. */
@@ -116,6 +118,14 @@ export interface RegionIntegrityInput {
   groundAt: (x: number, z: number) => number;
   /** Raio jogável da região; 0 desliga a conferência de limite. */
   boundaryRadius: number;
+  /**
+   * Áreas proibidas da região.
+   *
+   * Omitido, a conferência as busca sozinha pelo `regionId` — assim
+   * nenhum chamador precisa lembrar de passá-las, e esquecer não
+   * desliga a verificação sem ninguém notar.
+   */
+  keepOuts?: readonly KeepOutZone[];
 }
 
 /** Dois personagens mais perto do que isto estão em cima um do outro. */
@@ -126,15 +136,17 @@ export const GROUND_TOLERANCE = 0.35;
 /**
  * Confere que a região montada está jogável.
  *
- * As três perguntas são as que o jogador faz sem saber que está
- * fazendo: *os personagens estão cada um no seu lugar?*, *estão
- * pisando no chão?* e *estão dentro do mundo?*. Qualquer "não" aqui é
- * um bug que o jogador veria — personagem enterrado, flutuando,
- * duplicado ou fora do mapa.
+ * As perguntas são as que o jogador faz sem saber que está fazendo:
+ * *os personagens estão cada um no seu lugar?*, *estão pisando no
+ * chão?*, *estão dentro do mundo?* e *estão fora do que é para ficar
+ * fora?*. Qualquer "não" aqui é um bug que o jogador veria —
+ * personagem enterrado, flutuando, duplicado, fora do mapa ou dentro
+ * de uma estrutura em que ninguém entra.
  */
 export function checkRegionIntegrity(input: RegionIntegrityInput): RegionValidation {
   const problems: string[] = [];
   const active = input.characters.filter((character) => character.active !== false);
+  const forbidden = input.keepOuts ?? keepOutsFor(input.regionId);
 
   const seen = new Set<string>();
   for (const character of active) {
@@ -165,6 +177,13 @@ export function checkRegionIntegrity(input: RegionIntegrityInput): RegionValidat
     }
     if (input.boundaryRadius > 0 && Math.hypot(character.x, character.z) > input.boundaryRadius) {
       problems.push(`${character.id} está fora do limite de ${input.regionId}.`);
+    }
+    // Área proibida: é aqui que uma viagem que recolocasse alguém
+    // dentro do Coração do Roseiral é reprovada, em vez de chegar ao
+    // jogador como uma deusa plantada dentro do vidro.
+    const zone = insideKeepOut(forbidden, character.x, character.z);
+    if (zone) {
+      problems.push(`${character.id} está dentro de ${zone.name}, que é área proibida.`);
     }
   }
 
