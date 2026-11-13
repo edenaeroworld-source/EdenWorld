@@ -36,6 +36,22 @@ export interface WalkNetworkOptions {
    * letra: passavam pela árvore.
    */
   edgeBlocked?: (ax: number, az: number, bx: number, bz: number) => boolean;
+  /**
+   * `true` quando um corpo que **vem de** (fromX, fromZ) não consegue
+   * parar em (x, z).
+   *
+   * A planta diz por onde passa a calçada; não diz que o paisagismo
+   * pôs um canteiro de 50 cm em cima dela. Quatro nós do anel da Praça
+   * Central caíam dentro dos canteiros — pontos que parecem livres a
+   * quem olha de cima (em cima do canteiro não há colisão) e são
+   * inalcançáveis para quem anda pelo piso, 50 cm abaixo. Quem fosse
+   * mandado para lá ficava empurrando a borda do canteiro para sempre.
+   *
+   * A pergunta cita a origem porque é ela que dá a altura dos pés: um
+   * tabuleiro de ponte é intransponível para quem está embaixo e é
+   * chão para quem já subiu.
+   */
+  pointBlocked?: (x: number, z: number, fromX: number, fromZ: number) => boolean;
   /** Distância máxima (m) para ligar dois trechos vizinhos. */
   joinRadius?: number;
   /** Espaçamento (m) entre nós ao longo de um trecho. */
@@ -194,9 +210,10 @@ export class WalkNetwork {
    * Caminho mais curto entre dois nós (A\*), incluindo origem e destino.
    * Devolve lista vazia se não houver ligação.
    */
-  path(from: number, to: number): number[] {
+  path(from: number, to: number, avoid?: (id: number) => boolean): number[] {
     if (from === to) return [from];
     if (from < 0 || to < 0 || from >= this.nodes.length || to >= this.nodes.length) return [];
+    if (avoid?.(to)) return [];
     const count = this.nodes.length;
     const cameFrom = new Int32Array(count).fill(-1);
     const gScore = new Float64Array(count).fill(Infinity);
@@ -221,6 +238,9 @@ export class WalkNetwork {
       closed[current] = 1;
       for (const next of this.adjacency[current]) {
         if (closed[next]) continue;
+        // Nó que esta pessoa já descobriu não dar: sem isto, replanejar
+        // devolvia sempre a mesma rota para dentro do mesmo obstáculo.
+        if (next !== to && avoid?.(next)) continue;
         const tentative = gScore[current] + this.distance(current, next);
         if (tentative >= gScore[next]) continue;
         cameFrom[next] = current;
@@ -237,12 +257,18 @@ export class WalkNetwork {
     return Math.min(this.nodes.length - 1, Math.floor(rng() * this.nodes.length));
   }
 
-  /** Nó aleatório dentro de um raio de um ponto (ou o mais próximo). */
-  randomNodeNear(rng: Rng, x: number, z: number, radius: number): number {
+  /** Todos os nós dentro de um raio de um ponto. */
+  nodesNear(x: number, z: number, radius: number): number[] {
     const candidates: number[] = [];
     for (const node of this.nodes) {
       if (Math.hypot(node.x - x, node.z - z) <= radius) candidates.push(node.id);
     }
+    return candidates;
+  }
+
+  /** Nó aleatório dentro de um raio de um ponto (ou o mais próximo). */
+  randomNodeNear(rng: Rng, x: number, z: number, radius: number): number {
+    const candidates = this.nodesNear(x, z, radius);
     if (candidates.length === 0) return this.nearest(x, z);
     return candidates[Math.min(candidates.length - 1, Math.floor(rng() * candidates.length))];
   }
@@ -393,6 +419,7 @@ function buildWalkNetwork(
   const joinRadius = options.joinRadius ?? 11;
   const blocked = options.blocked ?? (() => false);
   const edgeBlocked = options.edgeBlocked ?? (() => false);
+  const pointBlocked = options.pointBlocked ?? (() => false);
   const isFree = (x: number, z: number): boolean => !options.insideLot(x, z) && !blocked(x, z);
 
   const nodes: WalkNode[] = [];
@@ -427,6 +454,32 @@ function buildWalkNetwork(
     return !edgeBlocked(ax, az, bx, bz);
   };
 
+  /**
+   * Onde pôr este ponto de passagem, dado de onde se chega a ele.
+   *
+   * Se o ponto da planta caiu dentro de alguma coisa — o canteiro de
+   * 50 cm do anel da praça, a base de uma fonte —, o caminho é que
+   * desvia, não o cenário: procura-se o lugar livre mais próximo. Só
+   * quando não há nenhum em três metros e meio o ponto é descartado.
+   *
+   * Apagar o canteiro resolveria o mesmo sintoma e estragaria a praça.
+   */
+  const placeNode = (raw: RawNode, from: Point2 | null): RawNode | null => {
+    const anchor = from ?? raw;
+    if (!pointBlocked(raw.x, raw.z, anchor.x, anchor.z)) return raw;
+    for (const distance of [1.3, 2.6, 3.5]) {
+      for (let i = 0; i < 12; i += 1) {
+        const angle = (i / 12) * TAU;
+        const x = raw.x + Math.cos(angle) * distance;
+        const z = raw.z + Math.sin(angle) * distance;
+        if (!isFree(x, z)) continue;
+        if (pointBlocked(x, z, anchor.x, anchor.z)) continue;
+        return { x, z, kind: raw.kind };
+      }
+    }
+    return null;
+  };
+
   for (const chain of chainsOf(spacing)) {
     let previous = -1;
     for (const raw of chain) {
@@ -434,8 +487,13 @@ function buildWalkNetwork(
         previous = -1;
         continue;
       }
-      const id = addNode(raw);
-      if (previous >= 0 && edgeFree(nodes[previous].x, nodes[previous].z, raw.x, raw.z)) connect(previous, id);
+      const spot = placeNode(raw, previous >= 0 ? nodes[previous] : null);
+      if (!spot) {
+        previous = -1;
+        continue;
+      }
+      const id = addNode(spot);
+      if (previous >= 0 && edgeFree(nodes[previous].x, nodes[previous].z, spot.x, spot.z)) connect(previous, id);
       previous = id;
     }
   }

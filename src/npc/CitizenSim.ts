@@ -4,6 +4,7 @@ import { archetypePersona } from '../characters/Personas';
 import { clamp01, dampAngle, type Rng } from '../utils/math';
 import type { DayPeriod } from '../world/WorldClock';
 import type { CitizenProfile } from './CitizenData';
+import type { DestinationBoard } from './DestinationBoard';
 import { NpcLife } from './NpcLife';
 import type { WalkNetwork } from './WalkNetwork';
 
@@ -37,6 +38,13 @@ export interface CitizenSimOptions {
    * falhava e todo mundo passava o dia inteiro perambulando ao acaso.
    */
   areas?: readonly NamedArea[];
+  /**
+   * Quadro de destinos compartilhado pela população.
+   *
+   * É o que impede que todo mundo escolha o mesmo ponto. Opcional: a
+   * simulação de uma pessoa só não precisa dele.
+   */
+  board?: DestinationBoard;
 }
 
 /** Chance de parar para olhar a cidade ao chegar em um nó. */
@@ -51,6 +59,18 @@ const MIN_TRIP = 45;
 const STUCK_SECONDS = 1.2;
 /** Por quanto tempo um trecho descoberto bloqueado fica fora da rota. */
 const AVOID_SECONDS = 12;
+/**
+ * Quantos desvios seguidos antes de desistir do ponto em si.
+ *
+ * Um desvio resolve obstáculo passageiro (outra pessoa parada na
+ * frente). Dois seguidos no mesmo ponto querem dizer outra coisa: não
+ * é o trecho que está ruim, é o destino que não existe de verdade.
+ */
+const STUCK_RETRIES = 2;
+/** Por quanto tempo um ponto que se mostrou inalcançável fica fora da lista. */
+const BAN_SECONDS = 45;
+/** Quantos destinos a pessoa compara antes de escolher. */
+const DESTINATION_SAMPLES = 10;
 /** Por quanto tempo a pessoa mantém o lado escolhido para contornar. */
 const SIDESTEP_SECONDS = 2.4;
 /** Distâncias laterais (m) sondadas ao escolher por qual lado desviar. */
@@ -94,6 +114,10 @@ export class CitizenSim {
   private repathTimer = 0;
   /** Nó de destino da viagem atual (-1 = sem destino). */
   private destination = -1;
+  /** Nós que esta pessoa descobriu serem inalcançáveis, e por quanto tempo. */
+  private readonly banned = new Map<number, number>();
+  /** Desvios seguidos sem sair do lugar. */
+  private failures = 0;
   /** Há quanto tempo a pessoa não consegue avançar. */
   private stuckTimer = 0;
   /** Trechos que a pessoa descobriu estarem bloqueados, e por quanto tempo. */
@@ -127,6 +151,17 @@ export class CitizenSim {
   /** Lugares com nome da região onde esta pessoa vive. */
   private get areas(): readonly NamedArea[] {
     return this.options.areas ?? AREAS;
+  }
+
+  /**
+   * Nó da rede para onde esta pessoa está indo (-1 = sem destino).
+   *
+   * Leitura para roteiro, depuração e testes: é por aqui que se
+   * verifica que a cidade tem destinos variados em vez de 54 pessoas
+   * indo para o mesmo canteiro.
+   */
+  get goal(): number {
+    return this.destination;
   }
 
   /** Área (id) em que o cidadão está agora. */
@@ -163,7 +198,17 @@ export class CitizenSim {
     // o próximo dia ser descartado como repetido sem nunca ter saído.
     if (area.id === this.goalArea) return;
     this.goalArea = area.id;
-    const destination = this.network.randomNodeNear(this.rng, area.x, area.z, Math.max(20, area.radius * 0.8));
+    // Dentro da área, o ponto menos disputado. A rotina diz *o lugar*
+    // ("passo a tarde no parque"), não *o metro quadrado*: sem esta
+    // escolha, todos os jardineiros da cidade iam para o mesmo banco
+    // na mesma hora, e era isso que se via quando o período virava.
+    const spots = this.network.nodesNear(area.x, area.z, Math.max(20, area.radius * 0.8)).filter((id) => !this.isBanned(id));
+    const board = this.options.board;
+    const destination = spots.length === 0
+      ? this.network.nearest(area.x, area.z)
+      : board
+        ? board.leastBusy(this.sample(spots, DESTINATION_SAMPLES), this.rng)
+        : spots[Math.min(spots.length - 1, Math.floor(this.rng() * spots.length))];
     this.travelTo(destination);
   }
 
@@ -175,13 +220,35 @@ export class CitizenSim {
    */
   private travelTo(destination: number): boolean {
     if (destination < 0 || destination === this.node) return false;
-    const route = this.network.path(this.node, destination);
+    if (this.isBanned(destination)) return false;
+    const route = this.network.path(this.node, destination, this.avoidNode);
     if (route.length <= 1) return false;
     route.shift();
     this.route = route;
-    this.destination = destination;
+    this.setDestination(destination);
     this.target = this.route.shift() as number;
     return true;
+  }
+
+  /** Nós que esta pessoa não quer mais tentar (passado ao planejador). */
+  private readonly avoidNode = (id: number): boolean => this.isBanned(id);
+
+  private isBanned(node: number): boolean {
+    return (this.banned.get(node) ?? 0) > 0;
+  }
+
+  /**
+   * Anota o destino no quadro compartilhado.
+   *
+   * Reservar e devolver tem de acontecer num lugar só, senão o quadro
+   * desanda: uma reserva que ninguém devolve faz o ponto parecer
+   * eternamente cheio, e todo mundo passa a evitar uma esquina vazia.
+   */
+  private setDestination(node: number): void {
+    if (node === this.destination) return;
+    this.options.board?.release(this.destination);
+    this.destination = node;
+    this.options.board?.claim(node);
   }
 
   /**
@@ -199,15 +266,24 @@ export class CitizenSim {
     const size = this.network.size;
     if (size === 0) return;
     const here = this.network.node(this.node);
-    // Até oito tentativas de achar um destino distante; depois aceita
-    // qualquer um, para nunca ficar sem rumo.
-    for (let attempt = 0; attempt < 8; attempt += 1) {
+    const board = this.options.board;
+    const far: number[] = [];
+    let fallback = -1;
+    // Sorteia alguns candidatos e fica com o menos disputado dos que
+    // ficam longe. Sortear **um** e aceitar era o que deixava meia
+    // dúzia de pessoas indo para o mesmo canteiro por coincidência.
+    for (let attempt = 0; attempt < DESTINATION_SAMPLES; attempt += 1) {
       const candidate = this.network.randomNode(this.rng);
-      if (candidate === this.node) continue;
+      if (candidate === this.node || this.isBanned(candidate)) continue;
+      if (fallback < 0) fallback = candidate;
       const other = this.network.node(candidate);
-      const far = Math.hypot(other.x - here.x, other.z - here.z) >= MIN_TRIP;
-      if ((far || attempt >= 6) && this.travelTo(candidate)) return;
+      if (Math.hypot(other.x - here.x, other.z - here.z) >= MIN_TRIP) far.push(candidate);
     }
+    const wanted = board ? board.leastBusy(far, this.rng) : (far[0] ?? -1);
+    if (wanted >= 0 && this.travelTo(wanted)) return;
+    // Nenhum destino distante serviu: aceita qualquer um, para nunca
+    // ficar sem rumo.
+    if (fallback >= 0 && this.travelTo(fallback)) return;
     this.pickNextTarget();
   }
 
@@ -242,11 +318,19 @@ export class CitizenSim {
     this.activity = 'andando';
   }
 
+  /** Alguns candidatos sorteados da lista (sem embaralhar a lista toda). */
+  private sample(list: readonly number[], count: number): number[] {
+    if (list.length <= count) return [...list];
+    const out: number[] = [];
+    for (let i = 0; i < count; i += 1) out.push(list[Math.min(list.length - 1, Math.floor(this.rng() * list.length))]);
+    return out;
+  }
+
   /** Próximo passo sem rota: um vizinho que não seja de onde eu vim. */
   private pickNextTarget(): void {
     const neighbors = this.network.neighbors(this.node);
     if (neighbors.length === 0) return;
-    const candidates = neighbors.filter((id) => id !== this.previous && !this.isAvoided(id));
+    const candidates = neighbors.filter((id) => id !== this.previous && !this.isAvoided(id) && !this.isBanned(id));
     const list = candidates.length > 0 ? candidates : neighbors;
     this.target = list[Math.min(list.length - 1, Math.floor(this.rng() * list.length))];
   }
@@ -271,6 +355,21 @@ export class CitizenSim {
     this.avoid.set(this.edgeKey(this.node, this.target), AVOID_SECONDS);
     this.route.length = 0;
     this.stuckTimer = 0;
+    this.failures += 1;
+    if (this.failures >= STUCK_RETRIES) {
+      // Insistir no mesmo ponto é o que produzia a roda de gente em
+      // volta da árvore: o nó caía dentro do canteiro, `path` não
+      // conhecia o desvio e devolvia sempre a mesma rota para dentro
+      // da mesma parede. Agora o ponto sai da lista desta pessoa — e
+      // se era ele o destino, ela escolhe outro lugar para ir.
+      this.banned.set(this.target, BAN_SECONDS);
+      this.failures = 0;
+      if (this.destination >= 0 && this.destination !== this.target && this.travelTo(this.destination)) return;
+      this.setDestination(-1);
+      this.goalArea = null;
+      this.pickDestination();
+      return;
+    }
     if (this.destination >= 0 && this.travelTo(this.destination)) return;
     this.pickNextTarget();
   }
@@ -350,12 +449,13 @@ export class CitizenSim {
       this.node = this.target;
       this.stuckTimer = 0;
       this.sidestep = 0;
+      this.failures = 0;
       if (this.route.length > 0) {
         this.target = this.route.shift() as number;
       } else {
         this.goalArea = null;
         this.facing = null;
-        this.destination = -1;
+        this.setDestination(-1);
         if (this.rng() < PAUSE_CHANCE) {
           this.pauseTimer = PAUSE_MIN + this.rng() * (PAUSE_MAX - PAUSE_MIN);
           this.speed = 0;
@@ -440,13 +540,23 @@ export class CitizenSim {
     }
   }
 
-  /** Envelhece os bloqueios temporários de trecho. */
+  /**
+   * Envelhece os bloqueios temporários de trecho e de ponto.
+   *
+   * Os dois esquecem de propósito: o que atravancou pode ter sido
+   * outra pessoa parada, e um ponto riscado para sempre encolheria a
+   * cidade a cada tropeço.
+   */
   private expireAvoidance(dt: number): void {
-    if (this.avoid.size === 0) return;
     for (const [key, left] of this.avoid) {
       const next = left - dt;
       if (next <= 0) this.avoid.delete(key);
       else this.avoid.set(key, next);
+    }
+    for (const [node, left] of this.banned) {
+      const next = left - dt;
+      if (next <= 0) this.banned.delete(node);
+      else this.banned.set(node, next);
     }
   }
 

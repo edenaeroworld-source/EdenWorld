@@ -130,6 +130,31 @@ export class CharacterGround {
   }
 
   /**
+   * `true` se um corpo que **vem de** (fromX, fromZ) consegue parar em
+   * (x, z).
+   *
+   * A pergunta tem de citar de onde se vem, e é por um motivo medido.
+   * `blocked(x, z)` sem altura usa `heightAt(x, z)`, que devolve o
+   * **topo** do que estiver ali: em cima do canteiro de 50 cm da Praça
+   * Central não há colisão nenhuma, logo o ponto parecia livre. Só que
+   * quem chega anda pelo piso da praça, 50 cm abaixo, e 50 cm é mais
+   * que o passo de 42 cm — a pessoa bate na parede do canteiro e para.
+   *
+   * Quatro nós da rede de Aurora caíam exatamente assim, dentro dos
+   * canteiros do anel da praça, e quem era mandado para lá ficava
+   * empurrando a borda para sempre. Daí a roda de gente em volta da
+   * árvore.
+   *
+   * A altura de quem vem é lida com `settle`, não com `heightAt`: no
+   * tabuleiro de uma ponte de Rosas os pés estão no tabuleiro, não no
+   * terreno 88 cm abaixo, e perguntar pelo terreno condenaria as
+   * pontes inteiras.
+   */
+  reachableFrom(x: number, z: number, fromX: number, fromZ: number, radius = this.radius): boolean {
+    return !this.blocked(x, z, this.settle(fromX, fromZ), radius);
+  }
+
+  /**
    * `true` se o trecho reto entre dois pontos encosta em algo sólido.
    *
    * Amostra ao longo do segmento com passo menor que o raio do corpo,

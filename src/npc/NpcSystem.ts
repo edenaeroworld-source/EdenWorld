@@ -14,6 +14,7 @@ import { createRng, type Rng } from '../utils/math';
 import type { DayPeriod } from '../world/WorldClock';
 import { citizenAftersId, makeCitizen } from './CitizenData';
 import { CitizenSim } from './CitizenSim';
+import { DestinationBoard } from './DestinationBoard';
 import { getRegion } from '../regions/Region';
 import { NpcLife } from './NpcLife';
 import { buildAuroraWalkNetwork, buildRosasWalkNetwork, type WalkNetwork } from './WalkNetwork';
@@ -209,6 +210,8 @@ export class NpcSystem implements GameSystem {
   private regionId = 'aurora-city';
   private readonly rng: Rng;
   private readonly citizens: CitizenSim[] = [];
+  /** Quem está indo para onde — o que impede 54 pessoas no mesmo ponto. */
+  private readonly board = new DestinationBoard();
   private readonly slots: VisualSlot[] = [];
   private readonly deities: DeityNpc[] = [];
   private readonly auraGeometry: THREE.RingGeometry;
@@ -252,7 +255,7 @@ export class NpcSystem implements GameSystem {
     this.auraGeometry.rotateX(-Math.PI / 2);
 
     this.blocked = options.blocked;
-    this.network = buildAuroraWalkNetwork({ blocked: options.blocked, edgeBlocked: this.edgeBlocked });
+    this.network = buildAuroraWalkNetwork({ blocked: options.blocked, edgeBlocked: this.edgeBlocked, pointBlocked: this.pointBlocked });
     this.spawnCitizens(CITIZEN_COUNT);
     this.createSlots();
     this.spawnPantheon();
@@ -267,7 +270,7 @@ export class NpcSystem implements GameSystem {
    * lugar são eles, não quem eles são.
    */
   setRegion(regionId: string): void {
-    const options = { blocked: this.blocked, edgeBlocked: this.edgeBlocked };
+    const options = { blocked: this.blocked, edgeBlocked: this.edgeBlocked, pointBlocked: this.pointBlocked };
     this.network = regionId === 'rosas-park' ? buildRosasWalkNetwork(options) : buildAuroraWalkNetwork(options);
     this.regionId = regionId;
     for (const slot of this.slots) {
@@ -279,6 +282,8 @@ export class NpcSystem implements GameSystem {
     }
     this.pending.length = 0;
     this.citizens.length = 0;
+    // O quadro de destinos fala de nós da rede, e a rede é outra.
+    this.board.clear();
     this.spawnCitizens(CITIZEN_COUNT);
     this.placePantheon();
   }
@@ -310,18 +315,40 @@ export class NpcSystem implements GameSystem {
     return this.body ? this.body.corridorBlocked(ax, az, bx, bz) : false;
   };
 
+  /**
+   * `true` quando o ponto de passagem é inalcançável para quem anda.
+   *
+   * A planta da cidade põe o anel da praça em r=35,9 m e o paisagismo
+   * põe oito canteiros de 50 cm de altura em r=37 m. Quatro nós caíam
+   * dentro deles. Em cima do canteiro não há colisão, então o ponto
+   * parecia bom; quem chega anda 50 cm abaixo e 50 cm é mais que o
+   * passo de 42 cm. A pessoa encostava na borda e ficava ali. Oito
+   * canteiros, oito rodas de gente em volta de uma árvore.
+   */
+  private readonly pointBlocked = (x: number, z: number, fromX: number, fromZ: number): boolean => {
+    return this.body ? !this.body.reachableFrom(x, z, fromX, fromZ) : false;
+  };
+
   /* ----------------------------- Criação ----------------------------- */
 
   private spawnCitizens(count: number): void {
     if (this.network.size === 0) return;
+    // Nascer espalhado é metade do problema resolvido. Sorteio puro
+    // repete nó com frequência (aniversário: 54 sorteios em ~300 nós
+    // dão cinco pares em média), e duas pessoas no mesmo ponto já
+    // começam o dia empurrando uma à outra.
+    const taken = new Set<number>();
     for (let i = 0; i < count; i++) {
       const profile = makeCitizen(i + 1);
-      const node = this.network.randomNode(this.rng);
+      let node = this.network.randomNode(this.rng);
+      for (let attempt = 0; attempt < 8 && taken.has(node); attempt += 1) node = this.network.randomNode(this.rng);
+      taken.add(node);
       this.citizens.push(
         new CitizenSim(profile, this.network, node, createRng(i * 977 + 31), {
           ground: this.ground,
           body: this.body ?? undefined,
           areas: regionAreas(this.regionId),
+          board: this.board,
         }),
       );
     }
@@ -768,7 +795,7 @@ export class NpcSystem implements GameSystem {
     // entregue como empurrão, para que o passo já saia desviado — e
     // depois peneirado pela colisão, que não deixa o empurrão jogar
     // ninguém para dentro de uma parede.
-    this.separate();
+    this.separate(step <= 0 || batchDt > 0);
 
     for (const citizen of this.citizens) {
       const slice = step <= 0 || this.drawn.has(citizen) ? dt : batchDt;
@@ -856,12 +883,18 @@ export class NpcSystem implements GameSystem {
   /**
    * Afasta quem está perto demais de quem.
    *
-   * Só entre os desenhados: duas pessoas se atravessando a 80 m de
-   * distância não incomodam ninguém, e a cidade inteira contra a
-   * cidade inteira seria 54² comparações por quadro.
+   * Vale para a população inteira, não só para quem está desenhado.
+   * Enquanto valeu só para os desenhados, quem estava fora de vista
+   * podia empilhar-se à vontade — e empilhava, porque é fora de vista
+   * que a cidade passa a maior parte do tempo. O jogador só via o
+   * resultado ao chegar perto: um monte de gente no mesmo metro
+   * quadrado, que então começava a se separar tarde demais.
+   *
+   * São 54 pessoas: 1431 pares por quadro, uns 10 µs. O custo que
+   * justificava a restrição não existe nesta escala.
    */
-  private separate(): void {
-    const list = [...this.drawn];
+  private separate(everyoneSteps: boolean): void {
+    const list = this.citizens;
     for (let i = 0; i < list.length; i += 1) {
       for (let j = i + 1; j < list.length; j += 1) {
         const a = list[i];
@@ -873,8 +906,13 @@ export class NpcSystem implements GameSystem {
         const push = (PERSONAL_SPACE - distance) * 0.5;
         const nx = (dx / distance) * push;
         const nz = (dz / distance) * push;
-        a.pushAway(nx, nz);
-        b.pushAway(-nx, -nz);
+        // Só empurra quem vai andar neste quadro. Quem está fora de
+        // vista avança em passos maiores, de tempos em tempos; somar
+        // um empurrão por quadro a quem só anda a cada quatro
+        // multiplicaria a separação por quatro e catapultaria a
+        // pessoa quando chegasse a vez dela.
+        if (everyoneSteps || this.drawn.has(a)) a.pushAway(nx, nz);
+        if (everyoneSteps || this.drawn.has(b)) b.pushAway(-nx, -nz);
       }
     }
   }
