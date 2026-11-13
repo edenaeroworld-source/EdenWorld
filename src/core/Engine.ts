@@ -471,6 +471,7 @@ export class Engine {
       this.renderer.setResolution(profile);
       this.world.applyQuality(profile);
       this.npcs.applyQuality(profile);
+      this.interiorScene?.applyQuality(profile);
       this.afters.applyQuality(profile.particleDensity, profile.environmentEffects);
       this.player.avatar.setShadows(profile.shadows);
       const size = this.renderer.size;
@@ -1559,6 +1560,7 @@ export class Engine {
       },
     });
     this.universe.interiors.setLoader(scene);
+    scene.applyQuality(this.quality.current);
     this.interiorScene = scene;
     return scene;
   }
@@ -2049,6 +2051,9 @@ export class Engine {
     this.afters.setVisible(this.player.visible && mode !== 'menu');
     this.world.update(dt, elapsed, this.rig.camera, this.shadowFocus, worldActive);
     this.systems.update(dt, elapsed);
+    // Quem está dentro do prédio continua vivo: atendentes respiram,
+    // clientes andam pelos corredores.
+    if (this.universe.interiors.isInside) this.interiorScene?.update(dt, elapsed);
 
     const env = this.world.environment;
     const listenerX = mode === 'menu' ? this.rig.camera.position.x : p.x;
