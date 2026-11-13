@@ -38,6 +38,16 @@ export interface PersonSpec {
   speed?: number;
   /** Altura do piso do andar em que ela está. */
   baseY?: number;
+  /**
+   * Id de um personagem oficial do panteão.
+   *
+   * Quando preenchido, esta pessoa **não** é desenhada aqui: o
+   * `InteriorScene` monta o modelo oficial dela, o mesmo que aparece
+   * ao ar livre. Saturno atrás do balcão da EdenPawl era uma figura
+   * de oito caixas enquanto a Saturno da rua era um avatar completo —
+   * duas deusas com o mesmo nome.
+   */
+  character?: string;
 }
 
 interface Person {

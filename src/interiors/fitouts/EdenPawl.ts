@@ -98,7 +98,8 @@ export function edenpawl(ctx: FitoutContext): void {
   b.light(22.2, 2.7, 10.4, 0xffe6c8, 4.5, 9);
 
   ctx.people.push(
-    { id: 'saturno-balcao', x: 22.2, z: 12.0, yaw: NORTH, tone: 'morena', outfit: b.palette.glossRose, height: 1.68 },
+    // A dona da casa, com o modelo oficial — o mesmo de Aurora City.
+    { id: 'saturno-balcao', character: 'saturno', x: 22.2, z: 12.0, yaw: NORTH },
     { id: 'atendente-pawl', x: 2.6, z: 11.4, yaw: NORTH, tone: 'clara', outfit: b.palette.glossMint },
     {
       id: 'visitante-pawl',

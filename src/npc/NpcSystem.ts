@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import type { AftersBodySystem } from '../afters/AftersBodySystem';
 import { type AftersBody, type AftersChannelId, clampIntensity, fromPercent, getAftersPreset, sanitizeAftersBody, toPercent } from '../afters/AftersState';
+import type { CharacterGround } from '../characters/CharacterGround';
+import { createOfficialAvatar } from '../characters/CharacterModels';
 import { PANTHEON, type EdenCharacter } from '../characters/Pantheon';
 import { characterPersona } from '../characters/Personas';
 import type { GameSystem } from '../core/GameSystem';
@@ -15,6 +17,8 @@ import { CitizenSim } from './CitizenSim';
 import { getRegion } from '../regions/Region';
 import { NpcLife } from './NpcLife';
 import { buildAuroraWalkNetwork, buildRosasWalkNetwork, type WalkNetwork } from './WalkNetwork';
+import { AREAS, type NamedArea } from '../cities/aurora-city/Layout';
+import { BASIN as ROSAS_BASIN, LAKE_ISLAND as ROSAS_ISLAND, PAVILIONS as ROSAS_PAVILIONS, ROSE_GARDEN } from '../cities/rosas-park/RosasLayout';
 
 /**
  * A população de Aurora City.
@@ -32,6 +36,15 @@ export interface NpcSystemOptions {
   ground: (x: number, z: number) => number;
   /** `true` onde ninguém pode andar (água, edifício, zona reservada). */
   blocked: (x: number, z: number) => boolean;
+  /**
+   * Chão e colisão da região montada.
+   *
+   * É o que faz os habitantes pisarem no estrado da praça e no
+   * tabuleiro das pontes — e esbarrarem em árvore, banco e poste em
+   * vez de atravessá-los. Opcional porque a simulação pura (sem cena
+   * 3D) continua válida sem ele.
+   */
+  body?: CharacterGround;
   quality: QualityProfile;
   seed?: number;
 }
@@ -57,6 +70,8 @@ const DEITY_RANGE = 150;
 const LABEL_RANGE = 46;
 /** Distância (m) entre dois habitantes para um bate-papo começar. */
 const CHAT_RANGE = 2.6;
+/** Distância (m) abaixo da qual dois habitantes se empurram. */
+const PERSONAL_SPACE = 0.72;
 /** Intervalo (s) entre tentativas de formar uma dupla de conversa. */
 const CHAT_INTERVAL = 3.5;
 /**
@@ -151,6 +166,33 @@ function nameSprite(name: string, title: string, color: string): THREE.Sprite {
   return sprite;
 }
 
+/**
+ * Os lugares com nome de cada região, que é para onde as rotinas levam.
+ *
+ * Aurora já tinha a sua lista na planta da cidade. Rosas Park não
+ * tinha nenhuma, e era por isso que as rotinas não pegavam lá: os
+ * arquétipos pedem 'praca' ou 'mirante' e a busca não achava nada,
+ * então ninguém no parque tinha hora nem lugar para estar. Aqui o
+ * parque ganha a dele, tirada da própria planta — pavilhões,
+ * roseiral, ilha do lago, bacia das quedas.
+ */
+function regionAreas(regionId: string): readonly NamedArea[] {
+  return regionId === 'rosas-park' ? ROSAS_AREAS : AREAS;
+}
+
+const ROSAS_AREAS: readonly NamedArea[] = [
+  { id: 'roseiral', name: 'Roseiral Maior', x: ROSE_GARDEN.x, z: ROSE_GARDEN.z, radius: 44 },
+  { id: 'ilha-lago', name: 'Ilha das Lontras', x: ROSAS_ISLAND.x, z: ROSAS_ISLAND.z, radius: 20 },
+  { id: 'quedas', name: 'Pé das Quedas', x: ROSAS_BASIN.x, z: ROSAS_BASIN.z, radius: 34 },
+  ...ROSAS_PAVILIONS.map((pavilion) => ({
+    id: pavilion.id,
+    name: pavilion.name,
+    x: pavilion.x,
+    z: pavilion.z,
+    radius: Math.max(16, pavilion.radius * 2),
+  })),
+];
+
 export class NpcSystem implements GameSystem {
   readonly id = 'npcs';
   readonly group = new THREE.Group();
@@ -163,6 +205,7 @@ export class NpcSystem implements GameSystem {
   private readonly scene: THREE.Scene;
   private readonly ground: (x: number, z: number) => number;
   private readonly blocked: (x: number, z: number) => boolean;
+  private body: CharacterGround | null;
   private regionId = 'aurora-city';
   private readonly rng: Rng;
   private readonly citizens: CitizenSim[] = [];
@@ -196,6 +239,7 @@ export class NpcSystem implements GameSystem {
   constructor(options: NpcSystemOptions) {
     this.scene = options.scene;
     this.ground = options.ground;
+    this.body = options.body ?? null;
     this.rng = createRng(options.seed ?? 20261114);
     this.maxVisible = Math.min(MAX_SLOTS, options.quality.npcVisible);
     this.visibleRange = options.quality.npcRange;
@@ -208,7 +252,7 @@ export class NpcSystem implements GameSystem {
     this.auraGeometry.rotateX(-Math.PI / 2);
 
     this.blocked = options.blocked;
-    this.network = buildAuroraWalkNetwork({ blocked: options.blocked });
+    this.network = buildAuroraWalkNetwork({ blocked: options.blocked, edgeBlocked: this.edgeBlocked });
     this.spawnCitizens(CITIZEN_COUNT);
     this.createSlots();
     this.spawnPantheon();
@@ -223,7 +267,8 @@ export class NpcSystem implements GameSystem {
    * lugar são eles, não quem eles são.
    */
   setRegion(regionId: string): void {
-    this.network = regionId === 'rosas-park' ? buildRosasWalkNetwork({ blocked: this.blocked }) : buildAuroraWalkNetwork({ blocked: this.blocked });
+    const options = { blocked: this.blocked, edgeBlocked: this.edgeBlocked };
+    this.network = regionId === 'rosas-park' ? buildRosasWalkNetwork(options) : buildAuroraWalkNetwork(options);
     this.regionId = regionId;
     for (const slot of this.slots) {
       this.resetSlotFace(slot);
@@ -238,6 +283,33 @@ export class NpcSystem implements GameSystem {
     this.placePantheon();
   }
 
+  /**
+   * Troca o chão/colisão usado pela população.
+   *
+   * Chamado quando a região é remontada: a física antiga foi embora
+   * junto com a cidade antiga, e continuar consultando-a deixaria todo
+   * mundo pisando em pontes que não existem mais.
+   */
+  setBody(body: CharacterGround | null): void {
+    this.body = body;
+  }
+
+  /**
+   * `true` se não há como ir de um ponto ao outro.
+   *
+   * A rede de caminhada nasce da planta da cidade — avenidas, anel,
+   * trilhas —, e a planta não sabe onde o paisagismo pôs um plátano ou
+   * um muro. Com esta consulta, um trecho sem passagem nenhuma não
+   * vira aresta.
+   *
+   * O critério é corredor, não linha reta: um poste no meio da calçada
+   * não fecha a calçada, e quem desvia dele é a direção em tempo real.
+   * Cortar por linha reta apagaria o anel da praça inteiro.
+   */
+  private readonly edgeBlocked = (ax: number, az: number, bx: number, bz: number): boolean => {
+    return this.body ? this.body.corridorBlocked(ax, az, bx, bz) : false;
+  };
+
   /* ----------------------------- Criação ----------------------------- */
 
   private spawnCitizens(count: number): void {
@@ -245,7 +317,13 @@ export class NpcSystem implements GameSystem {
     for (let i = 0; i < count; i++) {
       const profile = makeCitizen(i + 1);
       const node = this.network.randomNode(this.rng);
-      this.citizens.push(new CitizenSim(profile, this.network, node, createRng(i * 977 + 31), { ground: this.ground }));
+      this.citizens.push(
+        new CitizenSim(profile, this.network, node, createRng(i * 977 + 31), {
+          ground: this.ground,
+          body: this.body ?? undefined,
+          areas: regionAreas(this.regionId),
+        }),
+      );
     }
   }
 
@@ -285,12 +363,24 @@ export class NpcSystem implements GameSystem {
           z = node.z;
         }
       }
-      const y = this.ground(x, z);
+      const y = this.groundFor(x, z);
       deity.x = x;
       deity.y = y;
       deity.z = z;
       deity.interactable.position.set(x, y, z);
     }
+  }
+
+  /**
+   * Altura em que um personagem pousa.
+   *
+   * Pela física quando há cidade montada — é o que põe Aérion em cima
+   * do estrado da Praça Central (2,16 m) em vez de 16 cm dentro dele,
+   * e Lilly sobre o tablado do Palco Aurora (2,60 m) em vez de
+   * enterrada até a cintura. Pelo relevo puro quando não há.
+   */
+  private groundFor(x: number, z: number): number {
+    return this.body ? this.body.settle(x, z) : this.ground(x, z);
   }
 
   private spawnPantheon(): void {
@@ -306,7 +396,7 @@ export class NpcSystem implements GameSystem {
           z = node.z;
         }
       }
-      const y = this.ground(x, z);
+      const y = this.groundFor(x, z);
       const interactable: Interactable = {
         id: `divino:${character.id}`,
         name: character.name,
@@ -674,6 +764,12 @@ export class NpcSystem implements GameSystem {
         this.simAccumulator = 0;
       }
     }
+    // Espaço pessoal entre habitantes: calculado antes do passo e
+    // entregue como empurrão, para que o passo já saia desviado — e
+    // depois peneirado pela colisão, que não deixa o empurrão jogar
+    // ninguém para dentro de uma parede.
+    this.separate();
+
     for (const citizen of this.citizens) {
       const slice = step <= 0 || this.drawn.has(citizen) ? dt : batchDt;
       if (slice <= 0) continue;
@@ -755,6 +851,32 @@ export class NpcSystem implements GameSystem {
 
     // 6. Panteão.
     this.updateDeities(dt, elapsed);
+  }
+
+  /**
+   * Afasta quem está perto demais de quem.
+   *
+   * Só entre os desenhados: duas pessoas se atravessando a 80 m de
+   * distância não incomodam ninguém, e a cidade inteira contra a
+   * cidade inteira seria 54² comparações por quadro.
+   */
+  private separate(): void {
+    const list = [...this.drawn];
+    for (let i = 0; i < list.length; i += 1) {
+      for (let j = i + 1; j < list.length; j += 1) {
+        const a = list[i];
+        const b = list[j];
+        const dx = a.x - b.x;
+        const dz = a.z - b.z;
+        const distance = Math.hypot(dx, dz);
+        if (distance >= PERSONAL_SPACE || distance < 1e-4) continue;
+        const push = (PERSONAL_SPACE - distance) * 0.5;
+        const nx = (dx / distance) * push;
+        const nz = (dz / distance) * push;
+        a.pushAway(nx, nz);
+        b.pushAway(-nx, -nz);
+      }
+    }
   }
 
   /**
@@ -890,6 +1012,18 @@ export class NpcSystem implements GameSystem {
   private updateDeities(dt: number, elapsed: number): void {
     const focus = this.focus;
     for (const deity of this.deities) {
+      // `placePantheon` já decidiu quem é desta região. Sem esta
+      // checagem, um deus de Aurora reaparecia em Rosas assim que o
+      // jogador passasse a 150 m das **coordenadas antigas** dele —
+      // com a altura do terreno de Aurora, portanto no ar ou enterrado.
+      if (!deity.interactable.enabled) {
+        if (deity.avatar) deity.avatar.root.visible = false;
+        if (deity.label) deity.label.visible = false;
+        if (deity.aura) deity.aura.visible = false;
+        const sleeping = deity.aftersId ? this.afters?.findActor(deity.aftersId) : null;
+        if (sleeping) sleeping.visible = false;
+        continue;
+      }
       const distance = Math.hypot(deity.x - focus.x, deity.z - focus.z);
       const active = distance <= DEITY_RANGE;
       if (active && !deity.avatar) this.materializeDeity(deity);
@@ -939,13 +1073,11 @@ export class NpcSystem implements GameSystem {
   }
 
   private materializeDeity(deity: DeityNpc): void {
-    const avatar = new Avatar(deity.character.appearance);
-    avatar.fill = 0.16;
-    // Gestação é identidade do personagem, não estado de jogo: entra junto
-    // com a aparência, antes de qualquer Afters, e vale sempre que ela
-    // estiver em cena (ver `src/player/Gestation.ts`).
-    avatar.setGestation(deity.character.gestation ?? 0);
-    avatar.setShadows(this.shadows);
+    // Modelo oficial, da fábrica compartilhada: o mesmo corpo em
+    // Aurora City, em Rosas Park e dentro de qualquer prédio. Aparência,
+    // escala e gestação de cânone saem todas do mesmo lugar — era a
+    // falta disso que deixava Saturno diferente de si mesma.
+    const avatar = createOfficialAvatar(deity.character.id, { fill: 0.16, shadows: this.shadows }) ?? new Avatar(deity.character.appearance);
     this.group.add(avatar.root);
     deity.avatar = avatar;
     if (deity.aftersId) this.afters?.bindAvatar(deity.aftersId, avatar, deity.character.afters);

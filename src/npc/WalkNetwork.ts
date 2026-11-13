@@ -26,6 +26,16 @@ export interface WalkNode {
 export interface WalkNetworkOptions {
   /** `true` para pontos onde ninguém pode pisar (água, encosta, obra). */
   blocked?: (x: number, z: number) => boolean;
+  /**
+   * `true` para trechos retos obstruídos por algo sólido no mundo
+   * montado — uma árvore, um banco, um poste, a borda de uma fonte.
+   *
+   * A planta da cidade não sabe onde o paisagismo plantou o quê.
+   * Enquanto esta consulta não existiu, a rede ligava dois pontos
+   * atravessando o tronco, e os habitantes seguiam a ligação ao pé da
+   * letra: passavam pela árvore.
+   */
+  edgeBlocked?: (ax: number, az: number, bx: number, bz: number) => boolean;
   /** Distância máxima (m) para ligar dois trechos vizinhos. */
   joinRadius?: number;
   /** Espaçamento (m) entre nós ao longo de um trecho. */
@@ -382,6 +392,7 @@ function buildWalkNetwork(
   const spacing = options.spacing ?? 9;
   const joinRadius = options.joinRadius ?? 11;
   const blocked = options.blocked ?? (() => false);
+  const edgeBlocked = options.edgeBlocked ?? (() => false);
   const isFree = (x: number, z: number): boolean => !options.insideLot(x, z) && !blocked(x, z);
 
   const nodes: WalkNode[] = [];
@@ -413,7 +424,7 @@ function buildWalkNetwork(
       const t = i / samples;
       if (!isFree(ax + (bx - ax) * t, az + (bz - az) * t)) return false;
     }
-    return true;
+    return !edgeBlocked(ax, az, bx, bz);
   };
 
   for (const chain of chainsOf(spacing)) {
