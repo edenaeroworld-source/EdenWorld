@@ -41,6 +41,8 @@ import { CHARACTER_VOICES, VoiceSystem } from '../systems/VoiceSystem';
 import { clamp01, formatDistance, formatDuration, wrapAngle } from '../utils/math';
 import { World } from '../world/World';
 import { Zone } from '../world/ZoneMap';
+import { getRegion } from '../regions/Region';
+import { UniverseSystem } from '../universe/UniverseSystem';
 import { CAMERA, type DebugFlags, GAME, WORLD, readDebugFlags } from './Config';
 import { GameLoop } from './GameLoop';
 import { SystemRegistry } from './GameSystem';
@@ -174,6 +176,8 @@ export class Engine {
   /** Último relatório desta sessão (exposto em `__eden.desempenho()`). */
   private lastBenchmark: BenchmarkReport | null = null;
   private readonly connect: EdenConnectService;
+  /** Regiões, economia, moradia, bichos, fauna e atividades. */
+  private universe: UniverseSystem;
   private readonly social: SocialService;
   private save: SaveData;
   private progress: ProgressSystem;
@@ -245,6 +249,7 @@ export class Engine {
     this.loadStatus = loaded.status;
     this.edenSocial = new EdenSocial(this.save.social);
     this.story = new MemoryFlags(this.save.flags);
+    this.universe = new UniverseSystem(this.save);
     this.musicMemory = this.save.settings.audio.music > 0 ? this.save.settings.audio.music : 0.55;
     if (loaded.status === 'corrompido') console.warn('[Save] Salvamento inválido: iniciando um novo jogo.');
 
@@ -278,6 +283,7 @@ export class Engine {
     this.input.keyboard.usePointerLock = this.save.settings.gameplay.pointerLock;
     this.rig.autoAlign = this.save.settings.gameplay.autoCamera;
 
+    this.systems.register(this.universe);
     this.connect = this.systems.register(new OfflineEdenConnect(this.save.profile.name));
     this.social = this.systems.register(new LocalSocial());
 
@@ -680,6 +686,16 @@ export class Engine {
     this.progress.totals = totals;
     this.story = new MemoryFlags(this.save.flags);
     this.edenSocial = new EdenSocial(this.save.social);
+    // O universo também recomeça: cristais iniciais, nenhuma casa,
+    // nenhum bicho, só as regiões que já são conhecidas de saída.
+    this.save.regions = fresh.regions;
+    this.save.economy = fresh.economy;
+    this.save.housing = fresh.housing;
+    this.save.pets = fresh.pets;
+    this.save.sightings = fresh.sightings;
+    this.save.missions = fresh.missions;
+    this.save.interiors = fresh.interiors;
+    this.universe = new UniverseSystem(this.save);
     this.afters.setConfig(this.save.afters, false);
     this.aftersBody.setBody(this.save.afters.body, false);
     this.npcs.restoreAftersOverrides(this.save.afters.citizens);
@@ -1088,6 +1104,10 @@ export class Engine {
     const life = divino ? this.npcs.characterLife(personId) : this.npcs.lifeOf(interactableId);
     const player = this.player.position;
 
+    // Conversar é um fato do mundo: as atividades que pediam para falar
+    // com alguém avançam sozinhas, sem o jogador precisar "entregar".
+    if (character) this.universe.talkedTo(character.id);
+
     // O personagem para o que estava fazendo, se vira para quem chamou e
     // cumprimenta. A rotina dele fica guardada para depois.
     if (character) this.npcs.lookAt(character.id, player.x, player.z);
@@ -1322,6 +1342,38 @@ export class Engine {
     void placeName;
   }
 
+  /**
+   * Viagem entre regiões do universo.
+   *
+   * Aurora City é a única região com cenário tridimensional construído
+   * até agora. Viajar para outra região registra a chegada de verdade
+   * (posição, bichos, atividades, salvamento) e avisa, com todas as
+   * letras, que o cenário dela ainda não existe — em vez de deixar o
+   * jogador numa planície vazia achando que o jogo quebrou.
+   */
+  private requestTravel(regionId: string): void {
+    if (this.transitioning) return;
+    const motor = this.player.motor;
+    const here = { x: motor.position.x, y: motor.position.y, z: motor.position.z, heading: motor.heading };
+    const target = getRegion(regionId);
+    const event = this.universe.travelTo(regionId, here);
+    if (!event || !target) return;
+
+    this.dirty = true;
+    this.persist();
+
+    if (target.playable) {
+      const entry = this.universe.regions.entryPoint(regionId);
+      void this.travelTo(entry.x, entry.z, entry.heading, undefined, target.name);
+      return;
+    }
+
+    // Região sem cenário ainda: o jogador continua onde estava no mundo
+    // 3D, mas o universo registra que ele está lá. É honesto e é
+    // reversível — o mapa deixa voltar a Aurora City a qualquer momento.
+    this.hud.toast(`${target.name}: ${target.tagline} O cenário desta região ainda está em construção.`, 'info', 7);
+  }
+
   /* ------------------------------------------------------------------ */
   /* Configurações e salvamento                                          */
   /* ------------------------------------------------------------------ */
@@ -1397,6 +1449,9 @@ export class Engine {
     save.flags = [...this.story.all];
     save.social = this.edenSocial.toData();
     save.afters = { ...this.afters.current, body: this.aftersBody.current, citizens: this.npcs.aftersOverridesData() };
+    // O universo inteiro num só lugar: as sete partes saem do mesmo
+    // objeto, então não há risco de salvar metade do estado.
+    Object.assign(save, this.universe.toJSON());
     if (this.graphicsChosen && !this.qualityOverride) save.settings.graphics = { ...this.quality.graphics };
     const ok = this.saveSystem.save(save);
     // Armazenamento cheio ou bloqueado no meio da sessão: avisa uma única vez.
@@ -1481,6 +1536,10 @@ export class Engine {
   private createPhoneHost(): PhoneHost {
     return {
       playerName: () => this.save.profile.name,
+      universe: () => this.universe,
+      worldHour: () => this.world.environment.clock.hours,
+      requestTravel: (regionId) => this.requestTravel(regionId),
+      refresh: () => this.phone.refreshCurrent(),
       clockLabel: () => this.world.environment.clock.label,
       weatherLabel: () => this.world.environment.weather.label,
       areaName: () => this.areaName,

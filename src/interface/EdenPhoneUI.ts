@@ -2,6 +2,7 @@ import { FUTURE_EVENTS, FUTURE_FEATURES, type FutureFeature } from '../shared/Fu
 import type { TimePaceSetting } from '../systems/SaveSystem';
 import { button, choiceGroup, clear, h } from './dom';
 import { type EdenAppsHost, buildAfters, buildFeed, buildGram, buildMusic, buildPeople, buildReads, buildTalk } from './EdenApps';
+import { type UniverseAppHost, buildActivities, buildAtlas, buildHomes, buildPets, buildStores, buildWallet } from './UniverseApps';
 import { type IconName, icon } from './icons';
 import { type MapMarker, drawMap } from './MapRenderer';
 import type { Screen } from './UIManager';
@@ -20,6 +21,12 @@ export type PhoneApp =
   | 'reads'
   | 'afters'
   | 'musica'
+  | 'atlas'
+  | 'carteira'
+  | 'lojas'
+  | 'bichos'
+  | 'imoveis'
+  | 'atividades'
   | `recurso:${string}`;
 
 export interface PhonePortal {
@@ -52,7 +59,7 @@ export interface PhoneStats {
 
 export type WeatherChoice = 'auto' | 'limpo' | 'brisa' | 'neblina';
 
-export interface PhoneHost extends EdenAppsHost {
+export interface PhoneHost extends EdenAppsHost, UniverseAppHost {
   playerName(): string;
   clockLabel(): string;
   weatherLabel(): string;
@@ -199,9 +206,35 @@ export class EdenPhoneUI implements Screen {
       });
     else if (app === 'afters') buildAfters(this.host, this.content, () => this.show('afters'));
     else if (app === 'musica') buildMusic(this.host, this.content, () => this.show('musica'));
+    else if (app === 'atlas') buildAtlas(this.host, this.content);
+    else if (app === 'carteira') buildWallet(this.host, this.content);
+    else if (app === 'lojas') buildStores(this.host, this.content);
+    else if (app === 'bichos') buildPets(this.host, this.content);
+    else if (app === 'imoveis') buildHomes(this.host, this.content);
+    else if (app === 'atividades') buildActivities(this.host, this.content);
     else this.buildFeature(app.slice('recurso:'.length));
     this.content.scrollTop = 0;
     if (focus) (this.content.querySelector<HTMLElement>('button') ?? this.homeButton).focus({ preventScroll: true });
+  }
+
+  /**
+   * Redesenha o aplicativo aberto, mantendo o foco onde estava.
+   *
+   * As telas do universo mudam dados ao serem usadas (comprar, adotar,
+   * viajar), e precisam se redesenhar sem roubar o foco de quem navega
+   * pelo teclado.
+   */
+  refreshCurrent(): void {
+    const active = document.activeElement as HTMLElement | null;
+    const label = active?.getAttribute('aria-label') ?? active?.textContent ?? null;
+    this.show(this.app);
+    if (!label) return;
+    for (const candidate of this.content.querySelectorAll<HTMLElement>('button')) {
+      if ((candidate.getAttribute('aria-label') ?? candidate.textContent) === label) {
+        candidate.focus({ preventScroll: true });
+        return;
+      }
+    }
   }
 
   /** Abre uma conversa do EdenTalk (ou a lista, com `null`). */
@@ -246,6 +279,12 @@ export class EdenPhoneUI implements Screen {
         open: () => this.show('afters', true),
       },
       { id: 'musica', label: 'EdenMusic', icon: 'music', colors: ['#d6b8ff', '#7a3fe0'], open: () => this.show('musica', true) },
+      { id: 'atlas', label: 'Mapa do Éden', icon: 'map', colors: ['#a6ffe4', '#108d79'], open: () => this.show('atlas', true) },
+      { id: 'carteira', label: 'Carteira', icon: 'star', colors: ['#ffe28a', '#e0821b'], open: () => this.show('carteira', true) },
+      { id: 'lojas', label: 'Lojas', icon: 'ticket', colors: ['#bfe9ff', '#1b82ea'], open: () => this.show('lojas', true) },
+      { id: 'bichos', label: 'EdenPawl', icon: 'people', colors: ['#ffd9a6', '#ef9a2e'], open: () => this.show('bichos', true) },
+      { id: 'imoveis', label: 'Imóveis', icon: 'book', colors: ['#b9f5c4', '#2f9e5e'], open: () => this.show('imoveis', true) },
+      { id: 'atividades', label: 'Atividades', icon: 'star', colors: ['#c9a6ff', '#7a3fe0'], open: () => this.show('atividades', true) },
       { id: 'eventos', label: 'Eventos', icon: 'ticket', colors: ['#d6b8ff', '#8a5be0'], soon: true, open: () => this.show('eventos', true) },
       { id: 'ajustes', label: 'Ajustes', icon: 'settings', colors: ['#dfe8f0', '#6f8296'], open: () => this.host.openSettings() },
       ...FUTURE_FEATURES.map(
