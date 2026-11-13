@@ -46,11 +46,11 @@ import { dressRoom } from './InteriorDressing';
 import { FLOOR_HEIGHT, InteriorBuild } from './InteriorKit';
 import type { InteriorLoader } from './InteriorManager';
 import { InteriorPalette } from './InteriorPalette';
-import { InteriorPeople, type PersonSpec } from './InteriorPeople';
+import { type FloorHeight, InteriorPeople, type PersonSpec } from './InteriorPeople';
 import { createOfficialAvatar } from '../characters/CharacterModels';
 import { AvatarAnimator } from '../player/AvatarAnimator';
 import type { Avatar } from '../player/Avatar';
-import { buildBackdrop, buildShell, buildStaircase, footprintOf, stairwellOf } from './InteriorShell';
+import { buildBackdrop, buildShell, buildStaircase, footprintOf, stairHeightAt, stairwellOf } from './InteriorShell';
 import { getFitout } from './fitouts';
 
 /**
@@ -284,11 +284,30 @@ export class InteriorScene implements InteriorLoader {
     // Gente. Quem é do panteão ganha o modelo oficial; o resto, a
     // figura simples da casa — que é barata o bastante para dez por
     // loja num celular, e é para isso que ela existe.
-    this.people = new InteriorPeople(this.palette, origin, 0);
+    // Onde fica o piso para quem anda aqui dentro. Fora do vão da
+    // escada é o andar; dentro dele, o degrau — a mesma geometria em
+    // que o jogador pisa, para que ninguém flutue na diagonal.
+    const stair = Math.max(1, interior.floors) > 1 ? stairwellOf(interior) : null;
+    const topFloor = Math.max(1, interior.floors) - 1;
+    const floorHeight: FloorHeight = (x, z, floor) => {
+      if (stair) {
+        const rise = stairHeightAt(stair, x, z);
+        // O lance pertence sempre ao andar de baixo: quem desce o
+        // usa de cima para baixo, e as alturas batem nos dois sentidos.
+        if (rise !== null) {
+          const lower = Math.min(Math.max(0, Math.floor(floor + 0.001)), Math.max(0, topFloor - 1));
+          return lower * FLOOR_HEIGHT + rise;
+        }
+      }
+      return floor * FLOOR_HEIGHT;
+    };
+
+    this.people = new InteriorPeople(this.palette, origin, 0, floorHeight);
     people.forEach((spec, index) => {
-      const baseY = (peopleFloors[index] ?? 0) * FLOOR_HEIGHT;
+      const floor = peopleFloors[index] ?? 0;
+      const baseY = floor * FLOOR_HEIGHT;
       if (spec.character && this.addOfficialResident(spec, origin, baseY)) return;
-      this.people?.add({ ...spec, baseY });
+      this.people?.add({ ...spec, baseY, floor: spec.floor ?? floor });
     });
     this.group.add(this.people.group);
 

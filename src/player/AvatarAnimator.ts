@@ -37,6 +37,15 @@ export interface AnimatorInput {
   stridePhase: number;
   /** Velocidade vertical (m/s). */
   verticalSpeed: number;
+  /**
+   * Inclinação do chão sob os pés (m subidos por m andado).
+   *
+   * É o que decide se o personagem anda ou sobe degrau. Uma rampa de
+   * jardim fica perto de 0,15 e continua sendo caminhada; uma escada
+   * fica perto de 0,74 e ganha a elevação de joelho. Entre as duas a
+   * passagem é contínua, então nunca há uma troca brusca de animação.
+   */
+  slope?: number;
   elapsed: number;
 }
 
@@ -73,6 +82,10 @@ export class AvatarAnimator {
   private swimWeight = 0;
   private sitWeight = 0;
   private landKick = 0;
+  /** Quanto da pose de escada está aplicada (0–1), subindo ou descendo. */
+  private stairWeight = 0;
+  /** +1 subindo, −1 descendo; suavizado para a virada no patamar não piscar. */
+  private stairDir = 0;
 
   /** Gesto em execução (um por vez; o novo substitui o anterior com fade). */
   private gesture: GesturePlayback | null = null;
@@ -168,13 +181,25 @@ export class AvatarAnimator {
   update(dt: number, input: AnimatorInput): Pose {
     const { state, speed, stridePhase: phase, elapsed: t } = input;
     const k = 12;
-    const moving = state === 'walk' || state === 'run' || (state === 'swim' && speed > 0.4);
+    // Escada é caminhada: o ciclo de passada continua rodando e na
+    // velocidade real. O que muda é a altura do joelho e a postura,
+    // aplicadas por cima — nunca uma animação de escalar no lugar do
+    // andar.
+    const onStairs = state === 'stairUp' || state === 'stairDown';
+    const moving = state === 'walk' || state === 'run' || onStairs || (state === 'swim' && speed > 0.4);
     this.moveBlend = damp(this.moveBlend, moving ? clamp01(speed / 1.6) : 0, k, dt);
     this.runBlend = damp(this.runBlend, clamp01((speed - PLAYER.walkSpeed) / (PLAYER.runSpeed - PLAYER.walkSpeed)), 8, dt);
     this.airWeight = damp(this.airWeight, state === 'jump' || state === 'fall' ? 1 : 0, 14, dt);
     this.fallBlend = damp(this.fallBlend, input.verticalSpeed < -1 ? 1 : 0, 7, dt);
     this.swimWeight = damp(this.swimWeight, state === 'swim' ? 1 : 0, 7, dt);
     this.sitWeight = damp(this.sitWeight, state === 'sit' ? 1 : 0, 9, dt);
+    // A pose de escada entra na medida da inclinação: 0 numa rampa
+    // suave, cheia num degrau. `slope` ausente (rede, testes antigos)
+    // cai no estado, que já é só escada quando a inclinação é de escada.
+    const slope = input.slope ?? (state === 'stairUp' ? 0.74 : state === 'stairDown' ? -0.74 : 0);
+    const steepness = onStairs ? clamp01((Math.abs(slope) - 0.26) / 0.34) : 0;
+    this.stairWeight = damp(this.stairWeight, moving ? steepness : 0, 9, dt);
+    if (Math.abs(slope) > 0.26) this.stairDir = damp(this.stairDir, slope > 0 ? 1 : -1, 9, dt);
     this.landKick = damp(this.landKick, 0, 9, dt);
     this.talkLevel = damp(this.talkLevel, this.talkTarget, 6, dt);
     this.talkClock += dt;
@@ -226,6 +251,41 @@ export class AvatarAnimator {
       a[Ch.HeadX] = -lerp(0.02, 0.14, r);
       a[Ch.HeadY] = -s * 0.05;
       blend(pose, a, this.moveBlend);
+    }
+
+    // Escada, por cima do andar: é a mesma passada, com o joelho mais
+    // alto para passar do degrau e o corpo compensando a inclinação.
+    // Subindo, o peso vai à frente e a mão procura o corrimão; descendo,
+    // o passo é curto, o tronco recua e o joelho de apoio amortece.
+    if (this.stairWeight > 0.001 && this.swimWeight < 0.999) {
+      const s = Math.sin(phase);
+      const c = Math.cos(phase);
+      const up = clamp01(this.stairDir);
+      const down = clamp01(-this.stairDir);
+      a.fill(0);
+      // Joelho que sobe: alto na subida, moderado na descida.
+      const lift = lerp(0.55, 1.15, up);
+      a[Ch.LegLX] = -s * lift - up * 0.22 + down * 0.1;
+      a[Ch.LegRX] = s * lift - up * 0.22 + down * 0.1;
+      a[Ch.ShinL] = Math.max(0, -c) * lerp(1.2, 1.9, up) + lerp(0.3, 0.14, up);
+      a[Ch.ShinR] = Math.max(0, c) * lerp(1.2, 1.9, up) + lerp(0.3, 0.14, up);
+      // O corpo se inclina para dentro da escada nos dois sentidos:
+      // para a frente subindo, recuado e atento descendo.
+      a[Ch.BodyPitch] = lerp(-0.06, 0.2, up);
+      a[Ch.TorsoX] = lerp(0.02, 0.12, up);
+      a[Ch.HipsY] = -Math.abs(c) * 0.035 + 0.02;
+      a[Ch.TorsoY] = s * 0.06;
+      // Braços: um busca o corrimão subindo; descendo ficam baixos e
+      // ligeiramente abertos, para equilíbrio.
+      a[Ch.ArmLX] = s * 0.36 - up * 0.3;
+      a[Ch.ArmRX] = -s * 0.36 - up * 0.3;
+      a[Ch.ArmLZ] = lerp(0.2, 0.34, up);
+      a[Ch.ArmRZ] = -lerp(0.2, 0.34, up);
+      a[Ch.ForeL] = -lerp(0.4, 0.95, up) - Math.max(0, -s) * 0.2;
+      a[Ch.ForeR] = -lerp(0.4, 0.95, up) - Math.max(0, s) * 0.2;
+      // Olhando onde pisa, principalmente na descida.
+      a[Ch.HeadX] = lerp(0.2, 0.06, up);
+      blend(pose, a, this.stairWeight * this.moveBlend);
     }
 
     // No ar: subida (pernas recolhidas) e queda (braços abertos).

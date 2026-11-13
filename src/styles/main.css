@@ -944,6 +944,24 @@ button {
   color: var(--deep);
 }
 
+/*
+ * Sair do prédio: canto inferior esquerdo, longe do polegar que
+ * controla o movimento no celular e fora do caminho do comando de
+ * interação, que fica centralizado.
+ */
+.hud__leave {
+  position: absolute;
+  left: calc(14px + var(--safe-l));
+  bottom: calc(18px + var(--safe-b));
+  pointer-events: auto;
+}
+
+@media (max-width: 720px) {
+  .hud__leave {
+    bottom: calc(112px + var(--safe-b));
+  }
+}
+
 .fade {
   position: absolute;
   inset: 0;

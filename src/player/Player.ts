@@ -117,6 +117,7 @@ export class Player {
       speed: motor.speed,
       stridePhase: motor.stridePhase,
       verticalSpeed: motor.velocity.y,
+      slope: motor.slope,
       elapsed,
     });
     this.avatar.applyPose(pose, elapsed);

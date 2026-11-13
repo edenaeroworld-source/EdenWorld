@@ -191,8 +191,25 @@ export class InteriorBuild {
     );
   }
 
-  /** `InteriorCollision`: superfície em que se pisa. */
-  step(x: number, z: number, halfX: number, halfZ: number, top: number, yaw: number, suffix: string, surface: SurfaceType = 'stone'): void {
+  /**
+   * `InteriorCollision`: superfície em que se pisa.
+   *
+   * `blocksCamera` existe por causa dos andares de cima: uma laje que
+   * a câmera atravessa deixa quem está no primeiro andar olhando para
+   * dentro do térreo, de baixo para cima, como se o prédio fosse de
+   * vidro. Piso e degraus barram a câmera; um estrado de 20 cm, não.
+   */
+  step(
+    x: number,
+    z: number,
+    halfX: number,
+    halfZ: number,
+    top: number,
+    yaw: number,
+    suffix: string,
+    surface: SurfaceType = 'stone',
+    options: { blocksCamera?: boolean; thickness?: number } = {},
+  ): void {
     const topY = this.worldY(top);
     this.colliders.push(
       this.physics.addBox({
@@ -201,11 +218,11 @@ export class InteriorBuild {
         halfX,
         halfZ,
         rotation: yaw,
-        yMin: topY - 0.4,
+        yMin: topY - (options.thickness ?? 0.4),
         yMax: topY,
         walkable: true,
         solid: false,
-        blocksCamera: false,
+        blocksCamera: options.blocksCamera ?? false,
         surface,
         topAt: () => topY,
         tag: `${this.tag}:${suffix}`,
@@ -240,7 +257,7 @@ export class InteriorBuild {
     const cx = rect.x + rect.w / 2;
     const cz = rect.z + rect.d / 2;
     this.mesh(new THREE.BoxGeometry(rect.w, 0.2, rect.d), material, cx, -0.1, cz);
-    this.step(cx, cz, rect.w / 2, rect.d / 2, 0, 0, suffix, surface);
+    this.step(cx, cz, rect.w / 2, rect.d / 2, 0, 0, suffix, surface, { blocksCamera: true, thickness: 0.2 });
   }
 
   /**

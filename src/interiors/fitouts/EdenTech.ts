@@ -54,7 +54,9 @@ function recepcao(ctx: FitoutContext): void {
   }
   f.armchair(b, 13.0, 5.2, EAST);
   f.wallArt(b, 14.6, 0.3, SOUTH, 1.6, 1.0);
-  f.planter(b, 17.2, 7.2, WEST, 1.2);
+  // Ao norte do vão da escada: dentro dele o vaso ficava encravado
+  // no primeiro degrau.
+  f.planter(b, 17.2, 4.2, WEST, 1.2);
   f.pendantLamp(b, 15.0, 2.4, 2.9);
   b.light(15.2, 2.8, 3.4, 0xffe3c0, 5, 9);
 
@@ -95,10 +97,14 @@ function recepcao(ctx: FitoutContext): void {
 function loja(ctx: FitoutContext): void {
   const { b } = ctx;
 
-  // Corredor central livre entre duas fileiras de vitrine.
+  // Corredor central livre entre duas fileiras de vitrine. A fileira
+  // leste para antes do vão da escada: a terceira vitrine ficava em
+  // cima dos degraus que sobem para o laboratório.
   for (let i = 0; i < 3; i += 1) {
     f.displayCase(b, 2.4, 2.2 + i * 3.2, EAST, 2.4, b.palette.glossAqua);
-    f.displayCase(b, 15.6, 2.2 + i * 3.2, WEST, 2.4, b.palette.glossMint);
+  }
+  for (let i = 0; i < 2; i += 1) {
+    f.displayCase(b, 15.6, 1.9 + i * 2.8, WEST, 2.4, b.palette.glossMint);
   }
 
   // Mesa de demonstração: notebooks abertos, ligados.
@@ -147,21 +153,25 @@ function loja(ctx: FitoutContext): void {
 function laboratorio(ctx: FitoutContext): void {
   const { b } = ctx;
   for (let i = 0; i < 5; i += 1) f.serverRack(b, 1.2, 1.6 + i * 2.1, EAST);
-  for (let i = 0; i < 3; i += 1) f.serverRack(b, 16.8, 2.4 + i * 2.1, WEST);
+  // A fileira leste cabe ao norte do vão: o terceiro rack ficava
+  // suspenso sobre o buraco da escada.
+  for (let i = 0; i < 3; i += 1) f.serverRack(b, 16.8, 1.5 + i * 1.9, WEST);
 
   f.officeDesk(b, 7.0, 2.4, SOUTH);
   f.officeDesk(b, 10.6, 2.4, SOUTH);
   f.screenWall(b, 9.0, 0.35, SOUTH, 4, 2);
   f.demoTable(b, 8.8, 6.4, SOUTH, 2);
-  f.waterCooler(b, 15.6, 10.6, NORTH);
+  f.waterCooler(b, 12.4, 11.4, NORTH);
   f.planter(b, 4.4, 10.8, NORTH, 1.1);
   f.wallArt(b, 4.0, 0.3, SOUTH, 1.2, 0.8);
   // Bancada de reparo e canto de pausa, ala leste do laboratório.
   f.counter(b, 14.0, 2.2, SOUTH, 3.0);
   f.officeChair(b, 14.0, 3.4, NORTH);
-  f.bookshelf(b, 17.3, 6.6, WEST, 2.2);
-  f.armchair(b, 13.4, 6.4, EAST);
-  f.coffeeTable(b, 14.6, 6.4, EAST);
+  // Canto de leitura: estava inteiro dentro do vão da escada, três
+  // móveis boiando sobre o buraco. Agora encosta na parede sul.
+  f.bookshelf(b, 6.6, 11.6, NORTH, 2.2);
+  f.armchair(b, 5.4, 9.2, EAST);
+  f.coffeeTable(b, 6.6, 9.2, EAST);
   f.plantBox(b, 11.0, 11.4, NORTH, 2.4);
 
   // Mesa de rede: a maquete viva do Éden, com as sete regiões acesas.
