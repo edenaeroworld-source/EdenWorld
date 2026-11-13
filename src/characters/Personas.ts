@@ -162,15 +162,15 @@ export const CHARACTER_PERSONAS: Readonly<Record<string, Persona>> = Object.free
     energy: 0.88,
     idleEvery: 12,
   }),
-  // Amara é serena. Nada de pressa.
+  // Amara é serena. Nada de pressa — e a mão volta ao ventre sozinha.
   amara: persona({
     rest: 'neutra',
     greetMood: 'feliz',
     greet: ['cumprimentar'],
-    talk: ['falar', 'concordar'],
-    idle: ['pensar'],
+    talk: ['falar', 'acalentar', 'concordar'],
+    idle: ['acalentar', 'pensar'],
     energy: 0.44,
-    idleEvery: 18,
+    idleEvery: 14,
   }),
 });
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { WORLD } from '../../src/core/Config';
 import { DialogueRunner, MemoryFlags, validateDialogue } from '../../src/characters/Dialogue';
 import { CHARACTER_JOURNAL, PANTHEON, getCharacter } from '../../src/characters/Pantheon';
+import { GESTURE_IDS } from '../../src/player/Gestures';
 
 /**
  * Panteão e diálogos: coerência do cânone do Éden Aero e segurança das árvores
@@ -29,16 +30,35 @@ describe('panteão', () => {
     }
   });
 
-  it('não dá a Amara nenhum domínio inventado — e nunca o da maternidade', () => {
+  it('declara Amara como Deusa da Maternidade, grávida, por cânone', () => {
     const amara = getCharacter('amara');
     expect(amara).toBeDefined();
-    expect(amara?.domain).toEqual([]);
-    expect(amara?.canonNote?.length ?? 0).toBeGreaterThan(10);
-    // A única menção permitida à maternidade é a nota de cânone que a exclui.
-    const visible = JSON.stringify({ ...amara, canonNote: undefined }).toLowerCase();
-    expect(visible).not.toContain('maternidade');
-    expect(visible).not.toContain('mãe de');
-    expect(amara?.canonNote?.toLowerCase()).toContain('não atribuir');
+    expect(amara?.domain).toContain('Maternidade');
+    expect(amara?.title).toBe('Deusa da Maternidade');
+    // A gestação é identidade: vai para a silhueta, não para um painel.
+    expect(amara?.gestation).toBe(1);
+    // Não há mais dúvida de cânone a registrar sobre ela.
+    expect(amara?.canonNote).toBeUndefined();
+    const visible = JSON.stringify(amara).toLowerCase();
+    expect(visible).toContain('grávida');
+    expect(visible).not.toContain('ainda não declarado');
+  });
+
+  it('não inventa, em volta da gestação de Amara, o que o cânone não disse', () => {
+    const amara = getCharacter('amara');
+    const visible = JSON.stringify(amara).toLowerCase();
+    // O criador declarou domínio e gestação. Nada além disso: nem filho,
+    // nem pai, nem data, nem parto. Inventar a volta é inventar cânone.
+    for (const invented of ['pai do', 'o pai ', 'marido', 'esposo', 'nasce em', 'data do parto', 'parto', 'meses de', 'semanas de', 'nome do bebê', 'filho dela', 'filha dela']) {
+      expect(visible).not.toContain(invented);
+    }
+  });
+
+  it('dá a Amara só gestos que ela consegue fazer, e o do ventre', () => {
+    const amara = getCharacter('amara');
+    const gestures = (amara?.dialogue.nodes ?? []).map((node) => node.gesture).filter(Boolean);
+    expect(gestures).toContain('acalentar');
+    for (const gesture of gestures) expect(GESTURE_IDS).toContain(gesture);
   });
 
   it('preserva a identidade autista de Haru com respeito, e o seu print', () => {

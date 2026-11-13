@@ -182,11 +182,12 @@ describe('Pessoas', () => {
     expect(text()).toContain('???');
   });
 
-  it('não inventa domínio para Amara', () => {
+  it('mostra o domínio da Maternidade na ficha de Amara', () => {
     const { host, social } = makeHost();
     social.meet('amara');
     buildPeople(host, content, () => {});
-    expect(text()).toContain('ainda não declarado pelo cânone do Éden');
+    expect(text()).toContain('Maternidade');
+    expect(text()).not.toContain('ainda não declarado pelo cânone do Éden');
   });
 
   it('leva da ficha para a conversa no EdenTalk', () => {

@@ -4,8 +4,12 @@ import * as THREE from 'three';
 import { describe, it } from 'vitest';
 import { displaceNormal, displaceVertex } from '../../src/afters/AftersMorph';
 import { effectiveIntensity } from '../../src/afters/AftersState';
+import { getCharacter } from '../../src/characters/Pantheon';
 import { makeCitizen } from '../../src/npc/CitizenData';
+import { AvatarAnimator } from '../../src/player/AvatarAnimator';
 import { Avatar } from '../../src/player/Avatar';
+import { displaceGestation, gestationNormal } from '../../src/player/Gestation';
+import type { GestureId } from '../../src/player/Gestures';
 import { DEFAULT_APPEARANCE, type AvatarAppearance } from '../../src/player/AvatarAppearance';
 
 /**
@@ -18,9 +22,11 @@ import { DEFAULT_APPEARANCE, type AvatarAppearance } from '../../src/player/Avat
  *     EDEN_RENDER=1 npx vitest run tests/unit/afters-render.test.ts
  *
  * Saídas: `docs/afters-silhueta.png` (0%, 125%, 250% de frente e 250% de
- * perfil) e `docs/afters-cidade.png` (quatro moradores de Aurora City com a
- * configuração que o perfil de cada um sorteou). Servem para conferir a
- * silhueta quando não há navegador à mão.
+ * perfil), `docs/afters-cidade.png` (quatro moradores de Aurora City com a
+ * configuração que o perfil de cada um sorteou) e `docs/amara-gestacao.png`
+ * (a silhueta gestante de Amara, de frente e de perfil, ao lado da mesma
+ * aparência sem gestação). Servem para conferir a silhueta quando não há
+ * navegador à mão.
  */
 
 /** Rasterizador mínimo, só para gerar a prova visual da silhueta. */
@@ -70,7 +76,32 @@ interface Panel {
   depth: Float32Array;
 }
 
-function renderPanel(bust: number, curve: number, turn = 0, appearance: AvatarAppearance = { ...DEFAULT_APPEARANCE, outfit: 'aero' }): Panel {
+/**
+ * Pose de pé, opcionalmente com um gesto no meio da execução.
+ *
+ * Sem isto o avatar aparece em T-pose relaxada, com os braços colados no
+ * corpo — e um braço colado esconde exatamente a silhueta que a prova
+ * precisa mostrar.
+ */
+function standingPose(gesture?: GestureId, at = 1.2): ReturnType<AvatarAnimator['update']> {
+  const animator = new AvatarAnimator();
+  if (gesture) animator.playGesture(gesture);
+  let pose = animator.update(0.016, { state: 'idle', speed: 0, stridePhase: 0, verticalSpeed: 0, elapsed: 0 });
+  const steps = Math.round(at / 0.016);
+  for (let i = 1; i <= steps; i += 1) {
+    pose = animator.update(0.016, { state: 'idle', speed: 0, stridePhase: 0, verticalSpeed: 0, elapsed: i * 0.016 });
+  }
+  return pose;
+}
+
+function renderPanel(
+  bust: number,
+  curve: number,
+  turn = 0,
+  appearance: AvatarAppearance = { ...DEFAULT_APPEARANCE, outfit: 'aero' },
+  gestation = 0,
+  gesture?: GestureId,
+): Panel {
   const rgb = new Uint8Array(W * H * 3);
   const depth = new Float32Array(W * H).fill(-Infinity);
   // Fundo em degradê aqua, a identidade do Éden Aero.
@@ -86,6 +117,10 @@ function renderPanel(bust: number, curve: number, turn = 0, appearance: AvatarAp
 
   const avatar = new Avatar({ ...appearance });
   avatar.setMorph(bust, curve);
+  avatar.setGestation(gestation);
+  // A inclinação do tronco é parte da postura gestante: sem aplicar a pose,
+  // a prova mostraria o ventre sem o contrapeso que o corpo faz por ele.
+  if (gestation > 0 || gesture) avatar.applyPose(standingPose(gesture));
   avatar.root.rotation.y = turn;
   avatar.root.updateMatrixWorld(true);
 
@@ -113,15 +148,16 @@ function renderPanel(bust: number, curve: number, turn = 0, appearance: AvatarAp
     const shade: number[] = [];
     for (let i = 0; i < positions.count; i += 1) {
       const zone = zones.getX(i);
-      const moved = displaceVertex({ x: positions.getX(i), y: positions.getY(i), z: positions.getZ(i) }, zone, bust, curve);
+      const local = { x: positions.getX(i), y: positions.getY(i), z: positions.getZ(i) };
+      // Mesma composição do shader: silhueta primeiro, ventre depois.
+      const moved = displaceGestation(displaceVertex(local, zone, bust, curve), zone, gestation);
       p.set(moved.x, moved.y, moved.z).applyMatrix4(mesh.matrixWorld);
       const base = normals
-        ? displaceNormal(
-            { x: positions.getX(i), y: positions.getY(i), z: positions.getZ(i) },
-            { x: normals.getX(i), y: normals.getY(i), z: normals.getZ(i) },
+        ? gestationNormal(
+            local,
+            displaceNormal(local, { x: normals.getX(i), y: normals.getY(i), z: normals.getZ(i) }, zone, bust, curve),
             zone,
-            bust,
-            curve,
+            gestation,
           )
         : { x: 0, y: 1, z: 0 };
       n.set(base.x, base.y, base.z).applyMatrix3(normalMatrix).normalize();
@@ -223,5 +259,39 @@ describe.runIf(process.env.EDEN_RENDER)('prova visual da silhueta', () => {
       }
     }
     writeFileSync(process.env.EDEN_CITY_OUT ?? 'docs/afters-cidade.png', png(W * panels.length, H, total));
+  });
+
+  it('gera a silhueta gestante de Amara, de frente e de perfil', () => {
+    const amara = getCharacter('amara');
+    if (!amara) throw new Error('Amara saiu do panteão');
+    const look = amara.appearance;
+    const g = amara.gestation ?? 0;
+    // A mesma deusa sem e com gestação: a comparação é o que prova que a
+    // silhueta mudou por causa dela, e não por causa da aparência.
+    const panels = [
+      renderPanel(0, 0, 0, look, 0),
+      renderPanel(0, 0, 0, look, g),
+      renderPanel(0, 0, -0.75, look, g, 'acalentar'),
+      renderPanel(0, 0, Math.PI / 2, look, g),
+    ];
+    const total = new Uint8Array(W * panels.length * H * 3);
+    for (let y = 0; y < H; y += 1) {
+      for (let panel = 0; panel < panels.length; panel += 1) {
+        for (let x = 0; x < W; x += 1) {
+          const src = (y * W + x) * 3;
+          const dst = (y * W * panels.length + panel * W + x) * 3;
+          total[dst] = panels[panel].rgb[src];
+          total[dst + 1] = panels[panel].rgb[src + 1];
+          total[dst + 2] = panels[panel].rgb[src + 2];
+        }
+      }
+      for (let panel = 1; panel < panels.length; panel += 1) {
+        const dst = (y * W * panels.length + panel * W) * 3;
+        total[dst] = 20;
+        total[dst + 1] = 110;
+        total[dst + 2] = 180;
+      }
+    }
+    writeFileSync(process.env.EDEN_AMARA_OUT ?? 'docs/amara-gestacao.png', png(W * panels.length, H, total));
   });
 });

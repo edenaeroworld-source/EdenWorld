@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { MAX_INTENSITY, Zone as MorphZone, aftersMorphGLSL } from '../afters/AftersMorph';
+import { MAX_GESTATION, TORSO_JOINT_Y, gestationGLSL } from './Gestation';
 import { TAU, clamp } from '../utils/math';
 import { Ch, type Pose } from './AvatarAnimator';
 import { type Expression, FaceController, buildFaceGeometry } from './AvatarFace';
@@ -12,7 +13,8 @@ const THIGH = 0.41;
 const SHIN = 0.385;
 const UPPER_ARM = 0.27;
 const FOREARM = 0.23;
-const WAIST = 0.06;
+/** Altura da junta do tronco sobre o quadril. A banda do ventre depende dela. */
+const WAIST = TORSO_JOINT_Y;
 const SHOULDER_Y = 0.37;
 const SHOULDER_X = 0.2;
 /** Afastamento lateral do quadril para cada perna. */
@@ -21,6 +23,16 @@ const LEG_X = 0.095;
 const SHOULDER_SPREAD = 0.034;
 /** Quanto a perna abre por unidade de AfterCurve® (0–2.5). */
 const LEG_SPREAD = 0.022;
+/** Quanto o braço afasta do corpo na gestação plena: contorna o ventre. */
+const GESTATION_SHOULDER_SPREAD = 0.04;
+/**
+ * Inclinação do tronco para trás na gestação plena (radianos).
+ *
+ * É o contrapeso que o corpo faz sozinho quando o centro de massa anda
+ * para a frente. Pequeno de propósito: sem isto a postura fica de quem
+ * engoliu uma bola; com exagero, de quem está caindo para trás.
+ */
+const GESTATION_LEAN = 0.075;
 const NECK_Y = 0.48;
 
 type Hex = string | number;
@@ -382,6 +394,8 @@ export class Avatar {
   private readonly bustUniform = { value: 0 };
   /** Intensidade do AfterCurve® aplicada à silhueta (0–2.5). */
   private readonly curveUniform = { value: 0 };
+  /** Gestação (0–1). Traço de personagem, não produto: ver `Gestation.ts`. */
+  private readonly gestationUniform = { value: 0 };
   private geometries: JointGeometries | null = null;
   private current: AvatarAppearance = DEFAULT_APPEARANCE;
 
@@ -395,6 +409,7 @@ export class Avatar {
       shader.uniforms.avatarFill = this.fillUniform;
       shader.uniforms.uBust = this.bustUniform;
       shader.uniforms.uCurve = this.curveUniform;
+      shader.uniforms.uGestation = this.gestationUniform;
       shader.fragmentShader = shader.fragmentShader
         .replace('#include <common>', '#include <common>\nuniform float avatarFill;')
         .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n\ttotalEmissiveRadiance += diffuseColor.rgb * avatarFill;');
@@ -402,12 +417,20 @@ export class Avatar {
       // Como o rig só gira juntas, a deformação continua correta andando,
       // correndo, nadando ou sentado — e a roupa vai junto, porque está na
       // mesma malha fundida.
+      // Duas camadas, uma composição: a silhueta dos Afters e o ventre da
+      // gestação são escalas radiais independentes sobre o mesmo vértice.
+      // Nenhuma mexe em y, então compor é multiplicar — e a ordem não
+      // altera o resultado. O GLSL do ventre entra depois porque reaproveita
+      // a struct e as funções de banda declaradas pelo dos Afters.
       shader.vertexShader = shader.vertexShader
-        .replace('#include <common>', `#include <common>\n${aftersMorphGLSL()}`)
-        .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\n\tobjectNormal = edenAftersNormal(position, objectNormal);')
-        .replace('#include <begin_vertex>', '#include <begin_vertex>\n\ttransformed = edenAftersPosition(transformed);');
+        .replace('#include <common>', `#include <common>\n${aftersMorphGLSL()}\n${gestationGLSL()}`)
+        .replace(
+          '#include <beginnormal_vertex>',
+          '#include <beginnormal_vertex>\n\tobjectNormal = edenGestationNormal(position, edenAftersNormal(position, objectNormal));',
+        )
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\n\ttransformed = edenGestationPosition(edenAftersPosition(transformed));');
     };
-    this.material.customProgramCacheKey = () => 'eden-avatar-fill-afters';
+    this.material.customProgramCacheKey = () => 'eden-avatar-fill-afters-gestacao';
 
     // O mapa de sombras usa um material próprio: sem isto a sombra do
     // avatar continuaria com a silhueta antiga enquanto o corpo muda.
@@ -415,11 +438,12 @@ export class Avatar {
     this.depthMaterial.onBeforeCompile = (shader) => {
       shader.uniforms.uBust = this.bustUniform;
       shader.uniforms.uCurve = this.curveUniform;
+      shader.uniforms.uGestation = this.gestationUniform;
       shader.vertexShader = shader.vertexShader
-        .replace('#include <common>', `#include <common>\n${aftersMorphGLSL()}`)
-        .replace('#include <begin_vertex>', '#include <begin_vertex>\n\ttransformed = edenAftersPosition(transformed);');
+        .replace('#include <common>', `#include <common>\n${aftersMorphGLSL()}\n${gestationGLSL()}`)
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\n\ttransformed = edenGestationPosition(edenAftersPosition(transformed));');
     };
-    this.depthMaterial.customProgramCacheKey = () => 'eden-avatar-depth-afters';
+    this.depthMaterial.customProgramCacheKey = () => 'eden-avatar-depth-afters-gestacao';
     this.haloMaterial = new THREE.MeshBasicMaterial({ color: 0xfff2a8, toneMapped: false });
 
     const mesh = (name: string): THREE.Mesh => {
@@ -516,17 +540,41 @@ export class Avatar {
    * @param curve intensidade do AfterCurve® (0 a 2.5)
    */
   setMorph(bust: number, curve: number): void {
-    const b = clamp(bust, 0, MAX_INTENSITY);
-    const c = clamp(curve, 0, MAX_INTENSITY);
-    this.bustUniform.value = b;
-    this.curveUniform.value = c;
-    // O rig acompanha: ombros e pernas abrem um pouco, como fariam em volta
-    // de um corpo mais largo. São deslocamentos de junta, não deformação —
-    // braços e pernas continuam do mesmo tamanho, só não atravessam o corpo.
-    const shoulder = SHOULDER_X + b * SHOULDER_SPREAD;
+    this.bustUniform.value = clamp(bust, 0, MAX_INTENSITY);
+    this.curveUniform.value = clamp(curve, 0, MAX_INTENSITY);
+    this.updateRig();
+  }
+
+  /**
+   * Gestação do personagem (0 = não gestante, 1 = gestação plena).
+   *
+   * Não é um produto Afters e não aparece em interface nenhuma: é um
+   * traço de identidade, declarado em `EdenCharacter.gestation`. Custa um
+   * `float` — não reconstrói geometria nem interrompe a animação, então o
+   * ventre continua correto andando, sentada ou conversando.
+   */
+  setGestation(value: number): void {
+    this.gestationUniform.value = clamp(value, 0, MAX_GESTATION);
+    this.updateRig();
+  }
+
+  /** Gestação em vigor (0–1). */
+  get gestation(): number {
+    return this.gestationUniform.value;
+  }
+
+  /**
+   * Acerta as juntas em volta do volume do corpo.
+   *
+   * Deslocamento de junta, não deformação: braços e pernas continuam do
+   * mesmo tamanho, só deixam de atravessar o corpo quando ele é mais
+   * largo — por Afters ou por gestação.
+   */
+  private updateRig(): void {
+    const shoulder = SHOULDER_X + this.bustUniform.value * SHOULDER_SPREAD + this.gestationUniform.value * GESTATION_SHOULDER_SPREAD;
     this.armL.position.x = shoulder;
     this.armR.position.x = -shoulder;
-    const leg = LEG_X + c * LEG_SPREAD;
+    const leg = LEG_X + this.curveUniform.value * LEG_SPREAD;
     this.legL.position.x = leg;
     this.legR.position.x = -leg;
   }
@@ -586,7 +634,10 @@ export class Avatar {
   applyPose(pose: Pose, elapsed = 0): void {
     this.pivot.position.y = HIP_HEIGHT + pose[Ch.HipsY];
     this.pivot.rotation.x = pose[Ch.BodyPitch];
-    this.torso.rotation.set(pose[Ch.TorsoX], pose[Ch.TorsoY], pose[Ch.TorsoZ]);
+    // O contrapeso da gestação é somado à pose, nunca escrito por cima:
+    // o animador reescreve `pose` a cada quadro, e um valor absoluto aqui
+    // apagaria o gesto que estiver em andamento.
+    this.torso.rotation.set(pose[Ch.TorsoX] - this.gestationUniform.value * GESTATION_LEAN, pose[Ch.TorsoY], pose[Ch.TorsoZ]);
     this.head.rotation.set(pose[Ch.HeadX], pose[Ch.HeadY], 0);
     this.armL.rotation.set(pose[Ch.ArmLX], 0, pose[Ch.ArmLZ]);
     this.armR.rotation.set(pose[Ch.ArmRX], 0, pose[Ch.ArmRZ]);

@@ -62,7 +62,7 @@ export const LIBRARY: readonly LibraryDocument[] = [
       'Aérion criou o Éden Aero e caminha entre os seus.',
       'Luma responde pelo corpo e pela silhueta viva, incluindo o ecossistema Afters. Suki-Chan cuida da inteligência e da educação. Nexara governa a internet e as redes sociais. Lilly rege a música e a vibração. Akemi-Chan representa a cultura otaku e o fandom.',
       'Saturno defende os animais e é a primeira filha de Adão e Eva. Haru cuida da tecnologia e dos sistemas, incluindo o EdenOS, e é a primeira deusa autista do Éden. Maze responde pela natureza. Júpiter assina a arte e a criação estética.',
-      'Amara é uma figura conhecida do Éden; seu domínio oficial ainda não foi declarado publicamente, e este acervo não inventa um.',
+      'Amara é a Deusa da Maternidade: o cuidado com o que ainda está começando. Está grávida, e isso faz parte da identidade dela no cânone — não de uma fase.',
     ],
   },
   {

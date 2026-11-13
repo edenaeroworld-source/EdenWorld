@@ -193,6 +193,7 @@ export function buildPeople(host: EdenAppsHost, content: HTMLElement, onTalk: (i
     if (known) {
       card.appendChild(h('p', { text: character.tagline }));
       card.appendChild(h('p', { class: 'muted', text: `Domínio: ${character.domain.length > 0 ? character.domain.join(' · ') : 'ainda não declarado pelo cânone do Éden'}` }));
+      if ((character.gestation ?? 0) > 0) card.appendChild(h('p', { class: 'muted', text: 'Está grávida — faz parte de quem ela é.' }));
       card.appendChild(h('p', { class: 'muted', text: `Onde encontrar: ${character.place.label}` }));
       card.appendChild(
         h('div', { class: 'row' }, button({ class: 'btn btn--ghost btn--small', icon: icon('chat', 18), label: 'Abrir conversa', onClick: () => onTalk(character.id) })),

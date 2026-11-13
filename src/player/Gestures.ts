@@ -29,7 +29,8 @@ export type GestureId =
   | 'surpresa'
   | 'despedir'
   | 'aplaudir'
-  | 'espreguicar';
+  | 'espreguicar'
+  | 'acalentar';
 
 export interface GestureDefinition {
   id: GestureId;
@@ -222,6 +223,34 @@ const GESTURE_LIST: readonly GestureDefinition[] = [
       mix(pose, Ch.ForeL, -1.45, w);
       mix(pose, Ch.ForeR, -1.45, w);
       add(pose, Ch.HeadX, -0.05, w);
+    },
+  },
+  {
+    id: 'acalentar',
+    label: 'Mão no ventre',
+    duration: 3.4,
+    fade: 0.5,
+    apply(pose, t, w) {
+      // A mão esquerda descansa à frente do ventre; a direita só abre o
+      // suficiente para contornar o volume. É o gesto que alguém grávida
+      // faz sem perceber: lento, discreto, e respira. Nada de pose de
+      // anúncio de maternidade.
+      //
+      // Os números vêm da cinemática do braço, não de tentativa: o braço
+      // gira primeiro em Z (abrir) e depois em X (levar à frente). Para a
+      // mão cair **em frente** ao ventre, e não ao lado dele, o Z precisa
+      // ser levemente negativo — cruzando para dentro — e quase toda a
+      // dobra tem que vir do cotovelo.
+      const breath = Math.sin(t * 1.15);
+      mix(pose, Ch.ArmLZ, -0.14, w);
+      mix(pose, Ch.ArmLX, -0.1 + breath * 0.015, w);
+      mix(pose, Ch.ForeL, -1.45 + breath * 0.03, w);
+      mix(pose, Ch.ArmRZ, -0.22, w * 0.8);
+      mix(pose, Ch.ArmRX, 0.02, w * 0.8);
+      mix(pose, Ch.ForeR, -0.2 + breath * 0.02, w * 0.8);
+      // O olhar desce junto, e o tronco acompanha a respiração.
+      add(pose, Ch.HeadX, 0.1, w * 0.55);
+      add(pose, Ch.TorsoX, breath * 0.012, w);
     },
   },
   {

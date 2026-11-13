@@ -11,8 +11,12 @@ import type { DialogueTree } from './Dialogue';
  * funções puras: o `NpcSystem` transforma cada entrada em um NPC real e
  * o EdenPhone usa os mesmos dados para contatos e mensagens.
  *
- * Nada aqui inventa domínio para personagem que o cânone não definiu
- * (ver `canonNote`).
+ * Nada aqui inventa domínio para personagem que o cânone não definiu —
+ * o campo `canonNote` existe para registrar essas lacunas com honestidade.
+ * Quando o cânone declara, o jogo acompanha sem hesitar: foi o que
+ * aconteceu com Amara, Deusa da Maternidade, grávida por cânone. A regra
+ * continua valendo em volta do que foi declarado: nem filho, nem pai, nem
+ * data — só o que o criador disse.
  */
 
 export interface CharacterPlace {
@@ -60,6 +64,15 @@ export interface EdenCharacter {
    * o personagem aparece com a silhueta original — que é o caso da maioria.
    */
   afters?: AftersBody;
+  /**
+   * Gestação do personagem, de 0 (não gestante) a 1 (gestação plena).
+   *
+   * Traço de **identidade**, não configuração: é o cânone que declara,
+   * não o jogador. Vai direto para a silhueta do avatar (ver
+   * `src/player/Gestation.ts`) e não aparece em interface alguma como
+   * controle — não existe painel para engravidar ninguém.
+   */
+  gestation?: number;
   /** Observação honesta sobre o que ainda depende do cânone oficial. */
   canonNote?: string;
 }
@@ -1100,33 +1113,38 @@ const JUPITER: EdenCharacter = {
 const AMARA: EdenCharacter = {
   id: 'amara',
   name: 'Amara',
-  title: 'Figura do panteão do Éden Aero',
-  domain: [],
+  title: 'Deusa da Maternidade',
+  domain: ['Maternidade', 'Gestação'],
   colors: ['#ffe9a6', '#c79a3a'],
-  tagline: 'Conhecida em todo o Éden; domínio ainda não declarado.',
+  tagline: 'A deusa grávida: cuida do que ainda está começando.',
   bio: [
-    'Amara é uma figura conhecida do universo Éden Aero.',
-    'Nesta versão do jogo ela aparece com identidade e presença próprias, sem domínio atribuído: o cânone ainda não o declarou publicamente.',
-    'Costuma ser encontrada no alto do Mirante Celeste, olhando a cidade inteira de uma vez.',
+    'Amara é a Deusa da Maternidade do Éden Aero — o domínio do cuidado que começa antes de alguém chegar.',
+    'Ela está grávida, e isso não é um detalhe de figurino: faz parte de quem ela é no cânone, como a galáxia no corpo de Aérion ou o jeito próprio de Haru. O avatar dela mostra a gestação em todos os aparelhos, de qualquer ângulo.',
+    'Costuma ser encontrada no alto do Mirante Celeste, de onde se vê Aurora City inteira. Diz que gosta de olhar de longe as coisas que ainda vão crescer.',
   ],
   place: { x: 176, z: 60, heading: facing(176, 60, 0, 0), label: 'Mirante Celeste' },
   appearance: look('#7d4a2c', 'longo', '#2b1d16', '#c98a2b', 'aero', '#f3ead6', '#c79a3a', '#ffffff', 'nenhum', 1.02),
   aura: 0xffe9a6,
+  // Gestação plena: a silhueta do avatar carrega o ventre em toda a cidade,
+  // andando, parada ou conversando. Ver `src/player/Gestation.ts`.
+  gestation: 1,
   contact: {
     handle: '@amara',
-    status: 'Vista boa, silêncio melhor.',
-    messages: ['Se subir ao mirante no fim da tarde, fique até o último raio de sol. Vale.'],
+    status: 'Esperando — no melhor sentido da palavra.',
+    messages: [
+      'Se subir ao mirante no fim da tarde, fique até o último raio de sol. Vale.',
+      'Qualquer coisa que você esteja começando conta como começo. Inclusive as pequenas.',
+    ],
   },
   journal: {
     id: 'personagem-amara',
-    title: 'Amara, no alto do mirante',
+    title: 'Amara, Deusa da Maternidade',
     paragraphs: [
-      'Encontrei Amara no Mirante Celeste. Ela é uma figura conhecida em todo o Éden Aero.',
-      'Quando perguntei qual é o domínio dela, respondeu que cada cidade conta uma versão diferente — e que ela prefere assim, por enquanto.',
+      'Encontrei Amara no Mirante Celeste. Ela é a Deusa da Maternidade do Éden Aero, e está grávida.',
+      'Perguntei se o domínio dela era sobre ter filhos. Disse que é sobre o cuidado que existe antes de qualquer coisa estar pronta — e que isso cabe em muita gente que nunca vai gerar ninguém.',
+      'Enquanto falava, apoiou a mão no ventre, do jeito de quem faz isso sem perceber. Depois apontou a cidade e disse que Aurora também está sendo gestada, um pouco por dia.',
     ],
   },
-  canonNote:
-    'O documento oficial pede para preservar a identidade de Amara e NÃO atribuir a ela o domínio da maternidade. Como o domínio oficial não foi informado, o jogo mantém o campo em aberto em vez de inventar um.',
   dialogue: {
     start: 'primeira',
     nodes: [
@@ -1134,14 +1152,15 @@ const AMARA: EdenCharacter = {
         id: 'primeira',
         mood: 'feliz',
         gesture: 'cumprimentar',
-        text: ['Daqui dá para ver a cidade inteira respirando.', 'Eu sou Amara. Já ouviu falar de mim, provavelmente — e provavelmente ouviu errado.'],
+        text: ['Daqui dá para ver a cidade inteira respirando.', 'Eu sou Amara, Deusa da Maternidade. Seja bem-vindo(a) ao ponto mais alto de Aurora.'],
         effects: [
           { kind: 'contato', id: 'amara' },
           { kind: 'diario', id: 'personagem-amara' },
           { kind: 'bandeira', id: 'conheceu-amara' },
         ],
         choices: [
-          { label: 'Qual é o seu domínio?', to: 'dominio' },
+          { label: 'O que é o seu domínio?', to: 'dominio' },
+          { label: 'Você está grávida?', to: 'gestacao' },
           { label: 'O que você vê daqui?', to: 'vista' },
           { label: 'Vou aproveitar a vista também' },
         ],
@@ -1149,13 +1168,44 @@ const AMARA: EdenCharacter = {
       {
         id: 'dominio',
         mood: 'neutra',
-        gesture: 'concordar',
+        gesture: 'falar',
         text: [
-          'Essa é a pergunta que todo mundo faz primeiro.',
-          'Cada cidade do Éden conta uma versão diferente da minha história, e nenhuma delas é oficial ainda.',
-          'Então prefiro deixar em aberto. Quando houver resposta, ela virá do próprio Éden — não de um boato de Aurora City.',
+          'Maternidade. E antes que você pense em fralda: o domínio é maior que isso.',
+          'É o cuidado com o que ainda não está pronto. Quem cria, quem cultiva, quem espera, quem recomeça — todo mundo que segura alguma coisa pequena até ela aguentar o próprio peso.',
+          'Por isso eu fico aqui em cima. Daqui a cidade parece uma criança que acabou de aprender a andar.',
         ],
-        choices: [{ label: 'Justo', to: 'primeira' }],
+        choices: [
+          { label: 'E a sua gestação?', to: 'gestacao' },
+          { label: 'Faz sentido', to: 'primeira' },
+        ],
+      },
+      {
+        id: 'gestacao',
+        mood: 'feliz',
+        gesture: 'acalentar',
+        text: [
+          'Estou. E pode olhar, não é segredo nem indelicadeza: faz parte de quem eu sou.',
+          'Uma deusa da maternidade grávida não é uma coincidência bonita. É a minha forma de estar no mundo — como a galáxia no corpo de Aérion, ou o jeito que Haru tem de pensar.',
+          'A diferença é que o meu domínio tem prazo, e o prazo é uma companhia boa. Me faz prestar atenção nos começos.',
+        ],
+        choices: [
+          { label: 'Como você se sente?', to: 'cuidado' },
+          { label: 'Obrigado(a) por contar', to: 'primeira' },
+        ],
+      },
+      {
+        id: 'cuidado',
+        mood: 'pensativa',
+        gesture: 'acalentar',
+        text: [
+          'Cansada em alguns dias, enorme em outros, e curiosa o tempo inteiro.',
+          'Mas olha: cuidar não é o mesmo que se anular. Eu continuo subindo esses degraus todos os dias, continuo discutindo com Nexara sobre as redes e continuo achando que Lilly toca alto demais.',
+          'Se alguém te disser que esperar é ficar parada, essa pessoa nunca esperou nada.',
+        ],
+        choices: [
+          { label: 'Vou lembrar disso', to: 'primeira' },
+          { label: 'E a vista?', to: 'vista' },
+        ],
       },
       {
         id: 'vista',
@@ -1164,6 +1214,7 @@ const AMARA: EdenCharacter = {
         text: [
           'Daqui eu vejo o Distrito Cristal de manhã, a Orla Cristalina ao meio-dia e o néon começando por volta das sete.',
           'Vejo gente mudando de ideia sobre o próprio caminho o tempo todo. É a parte bonita.',
+          'Aurora também está sendo gestada, sabia? Um pouco por dia, por todo mundo que mora nela.',
         ],
         choices: [{ label: 'Obrigado(a), Amara', to: 'primeira' }],
       },
@@ -1172,6 +1223,7 @@ const AMARA: EdenCharacter = {
         mood: 'feliz',
         text: ['A vista continua boa. Você também.'],
         choices: [
+          { label: 'Como vocês dois estão?', to: 'cuidado' },
           { label: 'Fale da vista', to: 'vista' },
           { label: 'Só passei para dizer oi' },
         ],
