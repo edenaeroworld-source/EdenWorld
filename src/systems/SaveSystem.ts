@@ -5,6 +5,7 @@ import { type InputSettingsData, defaultInputSettings, sanitizeInputSettings } f
 import { type AvatarAppearance, DEFAULT_APPEARANCE, sanitizeAppearance, sanitizePlayerName } from '../player/AvatarAppearance';
 import { clamp } from '../utils/math';
 import { type GraphicsSettings, isQualityLevel } from './QualitySystem';
+import { isVoiceMode, type VoiceMode } from './VoiceSystem';
 
 export const SAVE_VERSION = 2;
 
@@ -16,6 +17,10 @@ export interface AudioSettings {
   music: number;
   ambience: number;
   effects: number;
+  /** Volume das falas (clipes ou síntese do navegador). */
+  voice: number;
+  /** Como as falas soam: só texto (padrão) ou síntese do navegador. */
+  voiceMode: VoiceMode;
   muted: boolean;
 }
 
@@ -77,7 +82,9 @@ export interface SaveData {
 }
 
 export function defaultAudioSettings(): AudioSettings {
-  return { master: 0.8, music: 0.55, ambience: 0.7, effects: 0.8, muted: false };
+  // A voz entra desligada: o jogo não tem dublagem, e a síntese do
+  // navegador é uma escolha de quem joga, não um padrão imposto.
+  return { master: 0.8, music: 0.55, ambience: 0.7, effects: 0.8, voice: 0.85, voiceMode: 'texto', muted: false };
 }
 
 export function defaultGameplaySettings(): GameplaySettings {
@@ -151,6 +158,8 @@ export function sanitizeAudioSettings(raw: unknown): AudioSettings {
     music: num(raw.music, d.music, 0, 1),
     ambience: num(raw.ambience, d.ambience, 0, 1),
     effects: num(raw.effects, d.effects, 0, 1),
+    voice: num(raw.voice, d.voice, 0, 1),
+    voiceMode: isVoiceMode(raw.voiceMode) ? raw.voiceMode : d.voiceMode,
     muted: bool(raw.muted, d.muted),
   };
 }

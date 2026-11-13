@@ -6,8 +6,15 @@
  * (ganhar um contato no EdenPhone, abrir um registro no diário, marcar
  * uma bandeira de história, liberar os Afters).
  *
+ * Um nó pode ainda dizer **como** a fala é dita: a expressão do rosto e
+ * um gesto. São dicas opcionais — quem não as declara fala com o rosto
+ * de descanso do personagem.
+ *
  * Módulo puro: sem DOM, sem Three.js (testável).
  */
+
+import type { GestureId } from '../player/Gestures';
+import type { Expression } from '../player/Expressions';
 
 export type DialogueEffectKind = 'contato' | 'diario' | 'bandeira' | 'afters' | 'mensagem';
 
@@ -27,6 +34,14 @@ export interface DialogueChoice {
   effects?: readonly DialogueEffect[];
 }
 
+/** Dicas de atuação de um nó: como a fala é dita, não o que é dito. */
+export interface DialoguePerformance {
+  /** Expressão do rosto enquanto o nó é lido. */
+  mood?: Expression;
+  /** Gesto disparado quando o nó começa. */
+  gesture?: GestureId;
+}
+
 export interface DialogueNode {
   id: string;
   /** Parágrafos falados pelo personagem. */
@@ -34,6 +49,10 @@ export interface DialogueNode {
   /** Efeitos aplicados ao chegar neste nó. */
   effects?: readonly DialogueEffect[];
   choices?: readonly DialogueChoice[];
+  /** Expressão do rosto neste nó (padrão: a de descanso do personagem). */
+  mood?: Expression;
+  /** Gesto disparado ao entrar no nó. */
+  gesture?: GestureId;
 }
 
 export interface DialogueTree {

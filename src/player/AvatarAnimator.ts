@@ -1,5 +1,6 @@
 import { PLAYER } from '../core/Config';
-import { clamp01, damp, lerp } from '../utils/math';
+import { clamp, clamp01, damp, lerp } from '../utils/math';
+import { GESTURES, GesturePlayback, type GestureId } from './Gestures';
 import type { MotionState } from './PlayerMotor';
 
 /** Canais da pose (ângulos em radianos, deslocamentos em metros). */
@@ -49,6 +50,12 @@ function blend(out: Pose, target: Pose, weight: number): void {
  * misturadas por pesos suavizados (parado, andar, correr, pular, cair,
  * nadar, sentar e acenar). Não depende de arquivos de animação.
  *
+ * Por cima da locomoção entram duas camadas de conversa, ambas com peso
+ * suavizado — nada substitui a animação de base:
+ *
+ * - **gestos** (`playGesture`), que mexem só na metade de cima do corpo;
+ * - **olhar** (`lookAt`), que vira a cabeça para um ponto de interesse.
+ *
  * Convenção dos ângulos (personagem olhando para +Z): em braços e
  * pernas, rotação X positiva leva o membro para trás e rotação Z
  * positiva o leva para +X (lado esquerdo do personagem); em tronco e
@@ -65,17 +72,92 @@ export class AvatarAnimator {
   private fallBlend = 0;
   private swimWeight = 0;
   private sitWeight = 0;
-  private waveWeight = 0;
-  private waveTimer = 0;
   private landKick = 0;
 
-  /** Dispara o aceno (dura alguns segundos). */
+  /** Gesto em execução (um por vez; o novo substitui o anterior com fade). */
+  private gesture: GesturePlayback | null = null;
+  /** Gesto que está saindo de cena enquanto o novo entra. */
+  private fading: GesturePlayback | null = null;
+  /** Quanto o personagem está falando agora (0–1), suavizado. */
+  private talkLevel = 0;
+  private talkTarget = 0;
+  private talkClock = 0;
+  private lookYaw = 0;
+  private lookPitch = 0;
+  private lookYawTarget = 0;
+  private lookPitchTarget = 0;
+
+  /** Dispara o aceno (atalho histórico para o gesto `acenar`). */
   wave(duration = 2.6): void {
-    this.waveTimer = duration;
+    this.playGesture('acenar', { duration });
   }
 
   get isWaving(): boolean {
-    return this.waveTimer > 0;
+    return this.gesture?.id === 'acenar';
+  }
+
+  /**
+   * Toca um gesto por cima da animação atual.
+   *
+   * O gesto anterior não é cortado: ele sai suavemente enquanto o novo
+   * entra, e as pernas seguem andando normalmente o tempo todo.
+   */
+  playGesture(id: GestureId, options: { duration?: number; strength?: number } = {}): void {
+    const definition = GESTURES[id];
+    if (!definition) return;
+    if (this.gesture) {
+      this.gesture.stop();
+      this.fading = this.gesture;
+    }
+    this.gesture = new GesturePlayback(definition, options);
+  }
+
+  /** Encerra o gesto atual suavemente. */
+  stopGesture(): void {
+    if (!this.gesture) return;
+    this.gesture.stop();
+    this.fading = this.gesture;
+    this.gesture = null;
+  }
+
+  /** Gesto em execução, ou `null`. */
+  get currentGesture(): GestureId | null {
+    return this.gesture?.id ?? null;
+  }
+
+  get isGesturing(): boolean {
+    return this.gesture !== null;
+  }
+
+  /**
+   * Nível de fala (0 = calado, 1 = falando).
+   *
+   * Mantido fora dos gestos de propósito: a pessoa pode estar falando e
+   * acenando ao mesmo tempo, como acontece em qualquer conversa.
+   */
+  setTalking(level: number): void {
+    this.talkTarget = clamp01(level);
+  }
+
+  get talking(): number {
+    return this.talkLevel;
+  }
+
+  /**
+   * Vira a cabeça para um ponto de interesse.
+   *
+   * @param yaw giro lateral em radianos, relativo à direção do corpo.
+   * @param pitch inclinação vertical em radianos (positivo = olhar para baixo).
+   */
+  lookAt(yaw: number, pitch = 0): void {
+    this.lookYawTarget = clamp(yaw, -1.1, 1.1);
+    this.lookPitchTarget = clamp(pitch, -0.5, 0.5);
+  }
+
+  /** Devolve o olhar à posição neutra. */
+  clearLook(): void {
+    this.lookYawTarget = 0;
+    this.lookPitchTarget = 0;
   }
 
   /** Pequena flexão dos joelhos ao aterrissar. */
@@ -93,9 +175,11 @@ export class AvatarAnimator {
     this.fallBlend = damp(this.fallBlend, input.verticalSpeed < -1 ? 1 : 0, 7, dt);
     this.swimWeight = damp(this.swimWeight, state === 'swim' ? 1 : 0, 7, dt);
     this.sitWeight = damp(this.sitWeight, state === 'sit' ? 1 : 0, 9, dt);
-    this.waveTimer = Math.max(0, this.waveTimer - dt);
-    this.waveWeight = damp(this.waveWeight, this.waveTimer > 0 ? 1 : 0, 10, dt);
     this.landKick = damp(this.landKick, 0, 9, dt);
+    this.talkLevel = damp(this.talkLevel, this.talkTarget, 6, dt);
+    this.talkClock += dt;
+    this.lookYaw = damp(this.lookYaw, this.lookYawTarget, 6, dt);
+    this.lookPitch = damp(this.lookPitch, this.lookPitchTarget, 6, dt);
 
     const pose = this.pose;
     const a = this.scratch;
@@ -238,14 +322,28 @@ export class AvatarAnimator {
       blend(pose, a, this.sitWeight);
     }
 
-    // Aceno (sobreposto ao braço direito).
-    if (this.waveWeight > 0.001) {
-      const w = this.waveWeight;
-      pose[Ch.ArmRZ] = lerp(pose[Ch.ArmRZ], -2.35 + Math.sin(t * 9.5) * 0.3, w);
-      pose[Ch.ArmRX] = lerp(pose[Ch.ArmRX], -0.15, w);
-      pose[Ch.ForeR] = lerp(pose[Ch.ForeR], -0.45 + Math.sin(t * 9.5 + 0.8) * 0.25, w);
-      pose[Ch.HeadY] = lerp(pose[Ch.HeadY], -0.1, w * 0.6);
-      pose[Ch.TorsoZ] = lerp(pose[Ch.TorsoZ], 0.05, w);
+    // Fala: mãos e cabeça acompanham a frase enquanto o texto aparece.
+    if (this.talkLevel > 0.002) {
+      GESTURES.falar.apply(pose, this.talkClock, this.talkLevel * 0.9);
+    }
+
+    // Gestos (aceno, concordar, apontar…), misturados por cima.
+    if (this.fading) {
+      this.fading.update(dt);
+      this.fading.apply(pose);
+      if (this.fading.finished) this.fading = null;
+    }
+    if (this.gesture) {
+      this.gesture.update(dt);
+      this.gesture.apply(pose);
+      if (this.gesture.finished) this.gesture = null;
+    }
+
+    // Olhar: a cabeça vira para o ponto de interesse sem girar o corpo.
+    if (Math.abs(this.lookYaw) > 0.001 || Math.abs(this.lookPitch) > 0.001) {
+      pose[Ch.HeadY] = clamp(pose[Ch.HeadY] * 0.4 + this.lookYaw, -1.2, 1.2);
+      pose[Ch.HeadX] = clamp(pose[Ch.HeadX] + this.lookPitch, -0.7, 0.7);
+      pose[Ch.TorsoY] += this.lookYaw * 0.18;
     }
 
     // Amortecimento ao tocar o chão.

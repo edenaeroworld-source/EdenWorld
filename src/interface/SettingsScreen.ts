@@ -14,6 +14,7 @@ import {
 import type { InputManager } from '../input/InputManager';
 import { QUALITY_LABELS, QUALITY_LEVELS, type GraphicsSettings, type QualityLevel, QualitySystem } from '../systems/QualitySystem';
 import type { SaveData } from '../systems/SaveSystem';
+import { VOICE_MODE_LABELS, VOICE_MODES } from '../systems/VoiceSystem';
 import { button, choiceGroup, clear, field, h, keyCapContent, percent, slider, spokenLabel, toggle } from './dom';
 import { type IconName, icon } from './icons';
 import type { Screen } from './UIManager';
@@ -211,7 +212,7 @@ export class SettingsScreen implements Screen {
   private buildAudio(): void {
     const audio = this.host.save.settings.audio;
     const commit = (): void => this.host.commit('audio');
-    const volume = (label: string, key: 'master' | 'music' | 'ambience' | 'effects'): HTMLDivElement =>
+    const volume = (label: string, key: 'master' | 'music' | 'ambience' | 'effects' | 'voice'): HTMLDivElement =>
       field(
         label,
         slider({
@@ -240,6 +241,20 @@ export class SettingsScreen implements Screen {
       volume('Música', 'music'),
       volume('Ambiente', 'ambience'),
       volume('Efeitos', 'effects'),
+      volume('Voz', 'voice'),
+      field(
+        'Falas',
+        choiceGroup(
+          'Falas',
+          VOICE_MODES.map((mode) => ({ value: mode, label: VOICE_MODE_LABELS[mode] })),
+          audio.voiceMode,
+          (value) => {
+            audio.voiceMode = value;
+            commit();
+          },
+        ),
+        'O jogo não tem dublagem. “Síntese do navegador” lê as falas com a voz artificial do seu sistema.',
+      ),
       h('p', { class: 'muted', text: 'Todo o áudio do EDENWORLD é gerado em tempo real pelo navegador.' }),
     );
   }

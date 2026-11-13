@@ -3,6 +3,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { MAX_INTENSITY, Zone as MorphZone, aftersMorphGLSL } from '../afters/AftersMorph';
 import { TAU, clamp } from '../utils/math';
 import { Ch, type Pose } from './AvatarAnimator';
+import { type Expression, FaceController, buildFaceGeometry } from './AvatarFace';
 import { type AvatarAppearance, DEFAULT_APPEARANCE } from './AvatarAppearance';
 
 /** Altura da articulação do quadril em relação aos pés (escala 1). */
@@ -101,6 +102,7 @@ interface JointGeometries {
   hips: THREE.BufferGeometry;
   torso: THREE.BufferGeometry;
   head: THREE.BufferGeometry;
+  face: THREE.BufferGeometry;
   upperArm: THREE.BufferGeometry;
   forearm: THREE.BufferGeometry;
   thigh: THREE.BufferGeometry;
@@ -279,10 +281,9 @@ function buildGeometries(a: AvatarAppearance): JointGeometries {
     head.add(ball(0.011, 1, 1.2, 0.4, 6), 0x14161c, side * 0.064, headY + 0.014, 0.167);
     head.add(ball(0.006, 1, 1, 0.5, 6), 0xffffff, side * 0.064 + 0.008, headY + 0.028, 0.171);
     head.add(ball(0.03, 1, 0.62, 0.3, 8), blush, side * 0.108, headY - 0.045, 0.135);
-    head.add(new THREE.BoxGeometry(0.046, 0.008, 0.008), shade(a.hairStyle === 'careca' ? 0x5a3a22 : a.hairColor, -0.25), side * 0.064, headY + 0.066, 0.162, 0, 0, side * -0.12);
   }
-  const smile = new THREE.TorusGeometry(0.028, 0.006, 5, 10, Math.PI);
-  head.add(smile, 0xb8475a, 0, headY - 0.05, 0.164, 0, 0, Math.PI);
+  // Sobrancelhas, pálpebras e boca não entram aqui: são a malha do rosto,
+  // que tem alvos de morph e muda de expressão (ver `AvatarFace`).
   buildHair(head, a);
   buildAccessory(head, a);
 
@@ -326,11 +327,23 @@ function buildGeometries(a: AvatarAppearance): JointGeometries {
     hips: hips.build(MorphZone.Curve),
     torso: torso.build(MorphZone.Bust),
     head: head.build(),
+    face: buildFaceGeometry(a),
     upperArm: upperArm.build(),
     forearm: forearm.build(),
     thigh: thigh.build(MorphZone.Thigh),
     shin: shin.build(),
   };
+}
+
+/** Semente estável por aparência: desencontra as piscadas entre habitantes. */
+function seedFrom(appearance: AvatarAppearance): number {
+  const text = `${appearance.skin}${appearance.hairColor}${appearance.hairStyle}${appearance.outfit}`;
+  let hash = 2166136261;
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return Math.abs(hash % 100000);
 }
 
 /**
@@ -346,6 +359,10 @@ export class Avatar {
   private readonly hips: THREE.Mesh;
   private readonly torso: THREE.Mesh;
   private readonly head: THREE.Mesh;
+  /** Sobrancelhas, pálpebras e boca: a malha que muda de expressão. */
+  private readonly faceMesh: THREE.Mesh;
+  /** Mistura de expressões, fala e piscadas. */
+  readonly face: FaceController;
   private readonly armL: THREE.Mesh;
   private readonly armR: THREE.Mesh;
   private readonly foreL: THREE.Mesh;
@@ -416,6 +433,13 @@ export class Avatar {
     this.hips = mesh('quadril');
     this.torso = mesh('tronco');
     this.head = mesh('cabeca');
+    // O rosto usa o mesmo material (mesma luz, mesma cor por vértice), mas
+    // não entra no mapa de sombras: são peças de milímetros.
+    this.faceMesh = new THREE.Mesh(new THREE.BufferGeometry(), this.material);
+    this.faceMesh.name = 'rosto';
+    this.faceMesh.castShadow = false;
+    this.faceMesh.receiveShadow = false;
+    this.face = new FaceController(seedFrom(appearance));
     this.armL = mesh('braco-e');
     this.armR = mesh('braco-d');
     this.foreL = mesh('antebraco-e');
@@ -433,6 +457,7 @@ export class Avatar {
     this.torso.position.y = WAIST;
     this.torso.add(this.head, this.armL, this.armR);
     this.head.position.y = NECK_Y;
+    this.head.add(this.faceMesh);
     this.armL.position.set(SHOULDER_X, SHOULDER_Y, 0);
     this.armR.position.set(-SHOULDER_X, SHOULDER_Y, 0);
     this.armL.add(this.foreL);
@@ -467,6 +492,10 @@ export class Avatar {
     this.hips.geometry = next.hips;
     this.torso.geometry = next.torso;
     this.head.geometry = next.head;
+    this.faceMesh.geometry = next.face;
+    // Reinicia os pesos de morph para a geometria nova (mesma ordem de alvos).
+    this.faceMesh.updateMorphTargets();
+    this.face.reset();
     this.armL.geometry = this.armR.geometry = next.upperArm;
     this.foreL.geometry = this.foreR.geometry = next.forearm;
     this.legL.geometry = this.legR.geometry = next.thigh;
@@ -507,6 +536,39 @@ export class Avatar {
     return { bust: this.bustUniform.value, curve: this.curveUniform.value };
   }
 
+  /**
+   * Troca a expressão do rosto. A mudança é suave: os pesos de morph
+   * caminham até o alvo em alguns décimos de segundo.
+   */
+  setExpression(expression: Expression): void {
+    this.face.setExpression(expression);
+  }
+
+  /** Nível de fala (0–1): a boca abre e fecha enquanto o texto aparece. */
+  setTalking(level: number): void {
+    this.face.setTalking(level);
+  }
+
+  /** Expressão em vigor. */
+  get expression(): Expression {
+    return this.face.expression;
+  }
+
+  /**
+   * Avança o rosto e copia os pesos para a malha.
+   *
+   * Separado de `applyPose` porque o corpo e o rosto têm ritmos diferentes:
+   * a pose vem do animador a cada quadro, o rosto anda sozinho (piscadas,
+   * boca) mesmo quando a pose não muda.
+   */
+  updateFace(dt: number): void {
+    this.face.update(dt);
+    const influences = this.faceMesh.morphTargetInfluences;
+    if (!influences) return;
+    const weights = this.face.weights;
+    for (let i = 0; i < influences.length && i < weights.length; i += 1) influences[i] = weights[i];
+  }
+
   /** Intensidade da luz de preenchimento (0 = só a luz do cenário). */
   get fill(): number {
     return this.fillUniform.value;
@@ -539,7 +601,8 @@ export class Avatar {
 
   setShadows(enabled: boolean): void {
     this.root.traverse((object) => {
-      if ((object as THREE.Mesh).isMesh && object !== this.halo) object.castShadow = enabled;
+      // A auréola e o rosto ficam de fora: luz própria e peças de milímetros.
+      if ((object as THREE.Mesh).isMesh && object !== this.halo && object !== this.faceMesh) object.castShadow = enabled;
     });
   }
 

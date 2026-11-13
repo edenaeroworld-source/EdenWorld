@@ -6,17 +6,22 @@
 
 **A World Beyond Imagination.** Um mundo aberto em 3D do universo Éden Aero que roda direto no navegador — no computador, no celular e no tablet, sem instalar nada.
 
-**Aurora City** é uma cidade-jardim à beira-mar para explorar a pé com um avatar criado por você — agora habitada: moradores com rotina própria, as onze figuras do panteão do Éden em seus lugares, um EdenOS com aplicativos que funcionam de verdade e a tecnologia **Afters** liberada por Luma.
+**Aurora City** é uma cidade-jardim à beira-mar para explorar a pé com um avatar criado por você — agora habitada: moradores com rotina própria que olham, cumprimentam e conversam entre si, as onze figuras do panteão do Éden em seus lugares, um EdenOS com aplicativos que funcionam de verdade e a tecnologia **Afters** liberada por Luma.
 
 ## O que há nesta versão
 
 - **Aurora City**, com 11 áreas: Praça Central (e a Esfera Aurora), Centro de Aurora, Distrito Cristal, Vila das Nuvens, Parque das Águas, Ilha do Gazebo, Jardins Suspensos, Mirante Celeste, Palco Aurora, Orla Cristalina e Píer da Orla.
 - **Criador de avatar**: nome, tom de pele, cabelo, olhos, roupa, cores, acessório e altura. O visual pode ser trocado depois no Ateliê Aero ou pelo EdenPhone.
 - **Exploração em terceira pessoa**: andar, correr, pular, nadar, sentar e acenar, com câmera que desvia de obstáculos.
+- **Rosto e gestos**: o avatar tem sobrancelhas, pálpebras e boca de verdade, com **sete expressões**, piscada automática e boca que acompanha a fala. São **12 gestos** (acenar, cumprimentar, falar, concordar, negar, pensar, apontar, rir, surpresa, despedir, aplaudir, espreguiçar) e todos funcionam **enquanto você anda**: o gesto é de tronco para cima e as pernas continuam no passo.
 - **128 pontos de interação**: a Esfera Aurora, fontes, bancos, placas, holomapa, painel de eventos, telescópios, portais e o ateliê.
 - **Coisas para encontrar**: 24 Cristais de Luz, 31 anotações no diário e 8 portais que, depois de ativados, permitem viagem rápida.
 - **Habitantes de Aurora City**: 54 moradores simulados ao mesmo tempo (até 18 visíveis, conforme a qualidade), cada um com nome, ocupação, roupa, velocidade e rotina que muda de madrugada, manhã, tarde e noite. Dá para conversar com qualquer um.
-- **O panteão em pessoa**: Aérion, Haru, Nexara, Suki‑Chan, Luma, Lilly, Akemi‑Chan, Saturno, Maze, Júpiter e Amara estão em pontos fixos da cidade, com aura, plaquinha de nome, diálogo em árvore, registro no diário e contato no EdenPhone.
+- **A cidade repara em você.** A nove metros o morador vira a cabeça e acompanha; a cinco e meio ele cumprimenta — no máximo uma vez a cada 26 segundos por pessoa, e nunca de madrugada, quando a cidade está quieta. Dois moradores que se cruzam param, se viram um para o outro e conversam por alguns segundos, com gesto e expressão. Aperte `G` numa praça cheia e quem estiver por perto **responde ao aceno**, cada um no seu tempo — não em bloco.
+- **Cada pessoa tem um jeito.** Os gestos preferidos, o humor da saudação e a frequência com que se mexe vêm de uma *persona*: Suki‑Chan gesticula sem parar, Saturno quase não se move, Haru demora mais para começar.
+- **O panteão em pessoa**: Aérion, Haru, Nexara, Suki‑Chan, Luma, Lilly, Akemi‑Chan, Saturno, Maze, Júpiter e Amara estão em pontos fixos da cidade, com aura, plaquinha de nome, diálogo em árvore, registro no diário e contato no EdenPhone. As **54 falas** da árvore de cada um trazem direção de atuação: o nó diz qual expressão e qual gesto acompanham aquela frase, então Suki comemora, Saturno pondera e Amara mede a distância.
+- **A conversa acontece no mundo, não por cima dele.** A fala aparece numa barra no pé da tela, com a cidade visível e iluminada atrás; o texto é datilografado com as pausas da pontuação, dá para pular com um toque, há histórico das últimas falas e as escolhas só aparecem quando a pessoa termina de falar. Enquanto conversam, os dois ficam virados um para o outro e a cabeça acompanha.
+- **Voz**: o jogo **não tem dublagem** e não finge ter. Em **Configurações → Áudio** existe a opção **Falas**: no padrão (*texto*) a boca do personagem se mexe no ritmo da datilografia; em *síntese* o jogo usa a voz sintética do próprio navegador, de graça e sem servidor, com tom e velocidade próprios de cada figura do panteão. Se um dia houver clipes gravados, eles entram no lugar sem mudar mais nada — a estrutura já está pronta e é entregue vazia.
 - **EdenOS no EdenPhone**, com 14 aplicativos: mapa com viagem rápida, diário, jornada, câmera (foto em PNG), céu, **Pessoas**, **EdenTalk**, **EdenGram**, **EdenFeed**, **EdenReads**, **Afters**, **EdenMusic**, eventos e ajustes.
 - **Afters 2.0 (Body Expansion Tech)**: seis produtos do cânone — AfterBust®, AfterCurve®, GelGrow®, CandyGrow®, AfterLove e AfterVelvet — liberados por Luma no Ateliê Aero.
   - **AfterBust®** e **AfterCurve®** são os dois produtos que **transformam o avatar**: silhueta superior e silhueta inferior, de **0% a 250%**, cada um com interruptor, slider, leitura numérica e botão **Reiniciar** próprios. Podem ser usados separados ou **combinados**, ligados e desligados de forma independente, e ajustados **enquanto você anda, corre ou conversa** — sem recarregar a cena, sem teleporte e sem trocar de avatar. A duração da transição é um controle à parte da intensidade. Em 0% a silhueta original volta exatamente como era.
@@ -25,7 +30,7 @@
   - **A cidade também usa.** Os moradores de Aurora City e as figuras do panteão passam pela mesma tecnologia, pelo mesmo sistema: cada um com a própria configuração de 0% a 250%, nos dois canais, separados ou combinados, estável enquanto a pessoa anda, corre ou está parada. Quem usa e quanto depende do perfil — a artista arrisca mais, o cuidador quase não usa —, e a escolha é sorteada da semente do habitante, então a cidade é a mesma em toda sessão. À noite quem tem esse gosto reforça um pouco; no **Palco Aurora** a cidade inteira sobe o tom. Um roteiro pode ligar, desligar ou trocar o preset de uma pessoa específica, e essa mudança é gravada no salvamento.
 - **Dia e noite** (um dia dura 24 minutos reais) e clima variável: céu limpo, brisa e neblina.
 - **Três formas de jogar**, com troca automática entre elas: teclado e mouse, tela de toque e controle. Teclas e botões podem ser remapeados.
-- **Configurações** de gráficos (três níveis de qualidade, sombras, reflexos, escala de resolução, resolução dinâmica), áudio, controles e jogo.
+- **Configurações** de gráficos (três níveis de qualidade, sombras, reflexos, escala de resolução, resolução dinâmica), áudio (incluindo volume de **voz** e o modo das **falas**), controles e jogo.
 - **Salvamento automático** no próprio navegador, com opções de continuar, novo jogo, exportar, importar e apagar.
 - **Interface em português do Brasil**, navegável por mouse, toque, teclado e controle.
 
@@ -167,11 +172,13 @@ Este arquivo não faz parte do repositório: a escolha da hospedagem fica com qu
 
 ```bash
 npm run typecheck   # tipos
-npm test            # 202 testes unitários (lógica pura, sistemas e telas do EdenOS)
+npm test            # 382 testes unitários (lógica pura, sistemas e telas do EdenOS)
 npm run test:e2e    # cinco cenários de ponta a ponta sobre o build de produção
 ```
 
 Os **testes unitários** (`tests/unit/`) cobrem matemática, colisão, movimento do personagem, relógio do mundo, aparência do avatar, configuração de controles, níveis de qualidade, interações e salvamento (incluindo a migração da versão 1 para a 2). Desde a Genesis 0.2 também cobrem a rede de caminhada e a rotina dos habitantes, a coerência do panteão e das árvores de diálogo, o acervo do EdenReads, o estado social do aparelho, o catálogo Afters e a transformação de silhueta do Afters 2.0 (0%, mínimo, máximo, valores intermediários, canais separados, modo combinado, desligamento independente, mudança ao vivo, persistência e compatibilidade com salvamentos antigos) — e, para a cidade, que habitante e jogador usam o mesmo ator de silhueta, que avatares reaproveitados não herdam a silhueta de quem saiu, que transformar ninguém reconstrói malha, que gente longe é atualizada em frequência reduzida sem perder o destino, e que o mesmo habitante fica igual para dois jogadores — e, em um DOM de teste (`happy-dom`), **as telas dos aplicativos**: cada botão precisa chamar o jogo de verdade, nenhum é enfeite.
+
+A Genesis 0.2 acrescentou ainda a cobertura do **diálogo e da vida social**: a datilografia e suas pausas, a barra de fala (histórico, marcador de página, escolhas que só aparecem quando a pessoa termina de falar), a regência da conversa (expressão, gesto, olhar e encerramento), a direção de atuação das árvores do panteão, os 12 gestos — com a garantia de que **nenhum deles toca nas pernas**, para continuarem funcionando enquanto o personagem anda —, os alvos de morph do rosto, as regras de notar, cumprimentar e conversar dos moradores, o giro suave para o interlocutor e os três degraus do sistema de voz (clipe, síntese do navegador, texto), incluindo a verificação de que, sem clipes e sem síntese, o jogo **não promete dublagem**.
 
 Os **testes de ponta a ponta** (`tests/e2e/`) abrem o jogo em um Chromium sem interface e o usam como um jogador:
 
@@ -203,16 +210,16 @@ src/
   core/                  Engine (orquestra tudo), laço do jogo, renderizador, configuração
   world/                 terreno, céu, água, luz, clima, relógio, vegetação, partículas
   cities/aurora-city/    planta, prédios, praça, parques e decoração de Aurora City
-  npc/                   rede de caminhada, rotina dos habitantes e desenho dos moradores
-  characters/            panteão do Éden (dados, lugares e árvores de diálogo)
+  npc/                   rede de caminhada, rotina, vida social e desenho dos moradores
+  characters/            panteão do Éden (dados, lugares, árvores de diálogo e personas)
   edenos/                acervo do EdenReads e estado social do aparelho
   afters/                catálogo, transformação de silhueta e efeitos em volta do avatar
   physics/               colisão e consultas ao cenário (sem biblioteca externa)
-  player/                avatar, animação, aparência e movimento
+  player/                avatar, animação, gestos, rosto e movimento
   camera/                câmera em terceira pessoa
   input/                 teclado e mouse, toque, controle e remapeamento
   interactions/          pontos de interação e colecionáveis
-  systems/               qualidade gráfica, salvamento, progresso e áudio
+  systems/               qualidade gráfica, salvamento, progresso, áudio e voz
   interface/             HUD, menus, criador de avatar, EdenPhone e configurações
   styles/                folha de estilo da interface
   utils/                 matemática e geometria de apoio
@@ -253,6 +260,9 @@ Com `?debug`, além do que já existia: `__eden.npcs()` lista a população e on
 - **Um jogador por vez.** Não há multijogador, contas nem serviços on-line nesta versão. O formato de troca da silhueta — do jogador e dos habitantes — já existe e é testado (`src/afters/AftersNet.ts`), mas nada é enviado: não há servidor para receber.
 - **O salvamento é local.** Para continuar em outro navegador ou aparelho é preciso exportar o arquivo de salvamento e importá-lo manualmente.
 - **Só Aurora City.** Bitnara, SkyStones, Rosas Park, Cidade da Liberdade, Noureja Nether e o Jardim Proibido existem por enquanto como lore no EdenReads e nas conversas — não dá para viajar até elas.
+- **Não há dublagem.** Nenhuma fala do jogo foi gravada por uma pessoa. O modo padrão é texto, com a boca acompanhando a datilografia; a síntese do navegador é opcional e depende de o navegador oferecê‑la (a tela de ajustes avisa quando não oferece). O lugar dos clipes existe no código e é entregue vazio.
+- **O rosto é estilizado.** São sete expressões desenhadas, não um sistema de músculos faciais: a boca abre e fecha no ritmo da fala, sem visema por fonema.
+- **A conversa entre dois moradores é mímica.** Eles param, se viram e gesticulam; não há texto trocado entre eles, e nenhuma tela sugere que haja.
 - **As conversas não têm resposta por mensagem.** O EdenTalk mostra o que cada figura do panteão já disse e diz, na própria tela, que responder depende do Éden Connect; para conversar de verdade é preciso procurar a pessoa na cidade.
 - **Afters muda a silhueta, não a anatomia.** O avatar é estilizado, feito de primitivas, e continua assim — para o jogador e para os habitantes: AfterBust® e AfterCurve® mudam o **volume suave** de uma região (com a roupa acompanhando), nunca detalhe anatômico. Não há câmera voltada para o corpo, o painel sempre mostra a porcentagem exata e o desligamento manual — inclusive "Desligar tudo" — está sempre à mão.
 - **A noite ainda não é a Era Vice Éden.** O EdenFeed já reconhece o período, mas a identidade visual própria da noite (néon, pôr do sol tropical) entra numa etapa seguinte.

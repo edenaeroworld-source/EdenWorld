@@ -515,6 +515,21 @@ describe('EdenMusic', () => {
   });
 });
 
+/**
+ * Clica no texto até o nó terminar (a caixa mostra uma página por vez).
+ * As respostas só aparecem depois da última página.
+ */
+function turnPages(screen: DialogueScreen, limit = 12): void {
+  for (let guard = 0; guard < limit; guard++) {
+    if (screen.element.querySelector('.talkbar__choice')) return;
+    const page = screen.element.querySelector<HTMLButtonElement>('.talkbar__page');
+    if (!page || page.hidden) return;
+    const before = screen.element.querySelector('.talkbar__text')?.textContent;
+    page.click();
+    if (screen.element.querySelector('.talkbar__text')?.textContent === before) return;
+  }
+}
+
 describe('tela de conversa', () => {
   it('mostra fala, papel e escolhas do personagem', () => {
     const character = getCharacter('haru')!;
@@ -522,13 +537,17 @@ describe('tela de conversa', () => {
     const screen = new DialogueScreen({
       speaker: { name: character.name, title: character.title, color: character.colors[0], place: character.place.label },
       runner,
+      instantText: true,
       onEffects: () => {},
       onClose: () => {},
     });
     document.body.appendChild(screen.element);
     expect(screen.element.textContent).toContain('Haru');
     expect(screen.element.textContent).toContain(character.title);
-    expect(screen.element.querySelectorAll('.talk__choices .btn').length).toBeGreaterThan(1);
+    // A faixa fica no rodapé e as respostas só aparecem no fim do texto.
+    expect(screen.element.querySelector('.talkbar')).not.toBeNull();
+    turnPages(screen);
+    expect(screen.element.querySelectorAll('.talkbar__choice').length).toBeGreaterThan(1);
   });
 
   it('entrega os efeitos da conversa ao jogo (contato, diário, bandeira)', () => {
@@ -538,6 +557,7 @@ describe('tela de conversa', () => {
     const screen = new DialogueScreen({
       speaker: { name: character.name, title: character.title, color: character.colors[0] },
       runner: new DialogueRunner(character.dialogue, flags),
+      instantText: true,
       onEffects: (list) => {
         for (const effect of list) effects.push(`${effect.kind}:${effect.id}`);
       },
@@ -555,13 +575,16 @@ describe('tela de conversa', () => {
     const screen = new DialogueScreen({
       speaker: { name: character.name, title: character.title, color: character.colors[0] },
       runner: new DialogueRunner(character.dialogue, new MemoryFlags()),
+      instantText: true,
       onEffects: () => {},
       onClose: closed,
     });
     document.body.appendChild(screen.element);
-    const before = screen.element.querySelector('.talk__text')?.textContent;
-    screen.element.querySelector<HTMLButtonElement>('.talk__choices .btn')?.click();
-    expect(screen.element.querySelector('.talk__text')?.textContent).not.toBe(before);
+    turnPages(screen);
+    const before = screen.element.querySelector('.talkbar__text')?.textContent;
+    screen.element.querySelector<HTMLButtonElement>('.talkbar__choice')?.click();
+    turnPages(screen);
+    expect(screen.element.querySelector('.talkbar__text')?.textContent).not.toBe(before);
     // Encerra pelo botão Voltar da interface.
     screen.onBack();
     expect(closed).toHaveBeenCalled();
@@ -575,6 +598,7 @@ describe('tela de conversa', () => {
     const screen = new DialogueScreen({
       speaker: { name: character.name, title: character.title, color: character.colors[0] },
       runner,
+      instantText: true,
       onEffects: (list) => {
         for (const effect of list) effects.push(effect.kind);
       },
@@ -583,7 +607,8 @@ describe('tela de conversa', () => {
     document.body.appendChild(screen.element);
     // Percorre a conversa inteira em largura, clicando em cada escolha disponível.
     for (let guard = 0; guard < 24 && !runner.isFinished; guard++) {
-      const buttons = screen.element.querySelectorAll<HTMLButtonElement>('.talk__choices .btn');
+      turnPages(screen);
+      const buttons = screen.element.querySelectorAll<HTMLButtonElement>('.talkbar__choice');
       if (buttons.length === 0) break;
       if (effects.includes('afters')) break;
       buttons[0].click();

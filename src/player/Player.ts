@@ -6,6 +6,8 @@ import { damp, dampAngle } from '../utils/math';
 import { Avatar } from './Avatar';
 import { AvatarAnimator } from './AvatarAnimator';
 import type { AvatarAppearance } from './AvatarAppearance';
+import type { Expression } from './AvatarFace';
+import type { GestureId } from './Gestures';
 import { type MotorListener, type MoveIntent, PlayerMotor } from './PlayerMotor';
 
 const IDLE_INTENT: MoveIntent = { x: 0, z: 0, run: false, jump: false, jumpHeld: false };
@@ -62,6 +64,31 @@ export class Player {
     this.animator.wave();
   }
 
+  /** Toca um gesto por cima da animação atual (não interrompe o andar). */
+  gesture(id: GestureId, options?: { duration?: number; strength?: number }): void {
+    this.animator.playGesture(id, options);
+  }
+
+  /** Troca a expressão do rosto. */
+  express(expression: Expression): void {
+    this.avatar.setExpression(expression);
+  }
+
+  /** Vira a cabeça para um ponto do mundo (ou `null` para soltar o olhar). */
+  lookAt(target: THREE.Vector3 | null): void {
+    if (!target) {
+      this.animator.clearLook();
+      return;
+    }
+    const yaw = Math.atan2(target.x - this.position.x, target.z - this.position.z) - this.visualHeading;
+    const wrapped = Math.atan2(Math.sin(yaw), Math.cos(yaw));
+    const dx = target.x - this.position.x;
+    const dz = target.z - this.position.z;
+    const flat = Math.hypot(dx, dz);
+    const pitch = Math.atan2(this.position.y + 1.5 - target.y, Math.max(0.4, flat));
+    this.animator.lookAt(wrapped, pitch);
+  }
+
   /** Alinha imediatamente o visual ao estado físico (após teleportes). */
   snapVisual(): void {
     const p = this.motor.position;
@@ -93,6 +120,7 @@ export class Player {
       elapsed,
     });
     this.avatar.applyPose(pose, elapsed);
+    this.avatar.updateFace(dt);
     this.avatar.fill = damp(this.avatar.fill, this.fillTarget, 6, dt);
     this.sync(elapsed);
   }
