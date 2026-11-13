@@ -33,6 +33,7 @@ import { Player } from '../player/Player';
 import type { MoveIntent } from '../player/PlayerMotor';
 import { LocalSocial, type SocialService } from '../social/SocialSystem';
 import { AudioSystem } from '../systems/AudioSystem';
+import { Benchmark, type BenchmarkReport, formatReport, readBenchmarkRequest } from '../systems/Benchmark';
 import { ProgressSystem } from '../systems/ProgressSystem';
 import { type GraphicsSettings, QualitySystem, defaultGraphicsSettings, isQualityLevel, suggestQualityLevel } from '../systems/QualitySystem';
 import { type LoadStatus, type SaveData, SaveSystem, createNewSave, getBrowserStorage } from '../systems/SaveSystem';
@@ -43,6 +44,7 @@ import { Zone } from '../world/ZoneMap';
 import { CAMERA, type DebugFlags, GAME, WORLD, readDebugFlags } from './Config';
 import { GameLoop } from './GameLoop';
 import { SystemRegistry } from './GameSystem';
+import { type Orientation, type PlatformInfo, detectPlatform, orientationOf, shouldSuggestLandscape } from './Platform';
 import { Renderer } from './Renderer';
 
 type Mode = 'menu' | 'creator' | 'play' | 'scenic' | 'photo';
@@ -160,6 +162,17 @@ export class Engine {
   private readonly talkTarget = new THREE.Vector3();
   private readonly saveSystem: SaveSystem;
   private readonly quality: QualitySystem;
+  /** Aparelho identificado na abertura: sistema, formato e toque. */
+  readonly platform: PlatformInfo = detectPlatform();
+  private orientation: Orientation = 'paisagem';
+  /** O aviso de "vire o aparelho" aparece uma vez por sessão. */
+  private landscapeHintShown = false;
+  /** Medição de desempenho em curso (`?bench`), quando pedida. */
+  private benchmark: Benchmark | null = null;
+  /** Duração pedida por `?bench`, à espera de o jogo começar. */
+  private pendingBenchmark: number | null = null;
+  /** Último relatório desta sessão (exposto em `__eden.desempenho()`). */
+  private lastBenchmark: BenchmarkReport | null = null;
   private readonly connect: EdenConnectService;
   private readonly social: SocialService;
   private save: SaveData;
@@ -235,16 +248,16 @@ export class Engine {
     this.musicMemory = this.save.settings.audio.music > 0 ? this.save.settings.audio.music : 0.55;
     if (loaded.status === 'corrompido') console.warn('[Save] Salvamento inválido: iniciando um novo jogo.');
 
-    // Qualidade gráfica: preferência salva, ou sugestão conforme o dispositivo.
-    const touch = (navigator.maxTouchPoints ?? 0) > 0;
+    // Qualidade gráfica: preferência salva, ou sugestão conforme o aparelho.
     const suggested = suggestQualityLevel({
-      isTouchDevice: touch,
+      isTouchDevice: this.platform.touch,
       hardwareConcurrency: navigator.hardwareConcurrency || 4,
       deviceMemory: (navigator as Navigator & { deviceMemory?: number }).deviceMemory,
       gpuName: probeGpuName(),
+      platform: this.platform,
     });
     this.graphicsChosen = this.save.settings.graphics !== null;
-    let graphics: GraphicsSettings = this.save.settings.graphics ?? defaultGraphicsSettings(suggested);
+    let graphics: GraphicsSettings = this.save.settings.graphics ?? defaultGraphicsSettings(suggested, this.platform.mobile);
     this.qualityOverride = isQualityLevel(this.flags.quality);
     if (isQualityLevel(this.flags.quality)) graphics = { ...graphics, quality: this.flags.quality };
     this.quality = new QualitySystem(graphics);
@@ -261,7 +274,7 @@ export class Engine {
     this.voice = new VoiceSystem();
     for (const [id, profile] of Object.entries(CHARACTER_VOICES)) this.voice.setProfile(id, profile);
     this.applyVoiceSettings();
-    this.input = new InputManager(canvas, uiRoot, this.save.settings.input);
+    this.input = new InputManager(canvas, uiRoot, this.save.settings.input, this.platform);
     this.input.keyboard.usePointerLock = this.save.settings.gameplay.pointerLock;
     this.rig.autoAlign = this.save.settings.gameplay.autoCamera;
 
@@ -438,17 +451,21 @@ export class Engine {
       this.renderer.setResolution(profile);
       this.world.applyQuality(profile);
       this.npcs.applyQuality(profile);
+      this.afters.applyQuality(profile.particleDensity, profile.environmentEffects);
       this.player.avatar.setShadows(profile.shadows);
       const size = this.renderer.size;
       this.world.setViewport(size.width, size.height, this.renderer.effectivePixelRatio, this.rig.fov);
     });
     this.world.applyQuality(this.quality.current);
+    this.afters.applyQuality(this.quality.current.particleDensity, this.quality.current.environmentEffects);
     this.player.avatar.setShadows(this.quality.current.shadows);
     this.renderer.onResize((width, height) => {
       this.rig.setViewport(width, height);
       this.world.setViewport(width, height, this.renderer.effectivePixelRatio, this.rig.fov);
       this.updateCreatorOffset(true);
+      this.applyOrientation(orientationOf(width, height));
     });
+    this.applyOrientation(orientationOf(this.renderer.size.width, this.renderer.size.height));
 
     // Compila os shaders antes de mostrar o mundo (evita travadas na primeira visão).
     loading.setProgress(0.95, 'Acendendo a aurora…');
@@ -473,6 +490,9 @@ export class Engine {
       this.showMenu();
     }
     if (this.flags.enabled) this.installDebugApi();
+    // `?bench` mede o desempenho real deste aparelho — começa quando o
+    // jogo começar, não no menu, onde não há cidade para desenhar.
+    this.pendingBenchmark = readBenchmarkRequest(typeof location !== 'undefined' ? location.search : '');
     void loading.finish();
     if (!this.saveSystem.persistent) {
       this.saveWarned = true;
@@ -491,6 +511,7 @@ export class Engine {
     });
     this.input.events.on('device', (device) => this.onDeviceChange(device));
     this.uiRoot.dataset.device = this.input.device;
+    this.uiRoot.dataset.platform = this.platform.form;
     this.input.events.on('gamepad', (status) => this.onGamepadStatus(status));
     this.input.events.on('pointerUnlock', () => {
       if (this.mode === 'play' && !this.ui.hasModal) this.pause();
@@ -551,6 +572,13 @@ export class Engine {
     // No criador o avatar recebe luz de estúdio: cores fiéis a qualquer hora do dia.
     this.player.fillTarget = mode === 'creator' ? AVATAR_FILL_STUDIO : AVATAR_FILL_WORLD;
     this.syncInputState();
+    this.maybeSuggestLandscape();
+    if (mode === 'play' && this.pendingBenchmark !== null) {
+      const seconds = this.pendingBenchmark;
+      this.pendingBenchmark = null;
+      // Um respiro para a cidade terminar de aparecer antes de cronometrar.
+      window.setTimeout(() => this.startBenchmark(seconds), 2000);
+    }
   }
 
   private syncInputState(): void {
@@ -851,6 +879,63 @@ export class Engine {
       default:
         break;
     }
+  }
+
+  /**
+   * Em pé ou deitado. O jogo funciona inteiro nas duas posições — deitado
+   * é só a orientação recomendada, porque cabe mais mundo na tela. O aviso
+   * aparece uma vez por sessão e some sozinho.
+   */
+  private applyOrientation(orientation: Orientation): void {
+    this.orientation = orientation;
+    this.uiRoot.dataset.orientation = orientation;
+    this.input.touch.setOrientation(orientation);
+    this.maybeSuggestLandscape();
+  }
+
+  /** O convite para deitar o aparelho. Uma vez por sessão, e só no jogo. */
+  private maybeSuggestLandscape(): void {
+    if (this.landscapeHintShown || this.mode !== 'play') return;
+    if (!shouldSuggestLandscape(this.platform, this.orientation)) return;
+    this.landscapeHintShown = true;
+    this.hud.toast('Deite o aparelho para ver mais da cidade. Em pé funciona igual.', 'info', 6);
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Medição de desempenho                                               */
+  /* ------------------------------------------------------------------ */
+
+  /**
+   * Inicia uma medição de FPS real neste aparelho.
+   *
+   * Não há como medir desempenho de celular sem um celular. O que dá para
+   * fazer é deixar a régua pronta: `?bench` liga a medição, e quem estiver
+   * com o aparelho na mão colhe o número.
+   */
+  startBenchmark(seconds = 20): void {
+    this.benchmark = new Benchmark(seconds);
+    this.hud.toast(`Medindo desempenho por ${Math.round(seconds)} s — ande pela cidade.`, 'info', 5);
+  }
+
+  private sampleBenchmark(dt: number): void {
+    const bench = this.benchmark;
+    if (!bench) return;
+    if (!bench.sample(dt)) return;
+    this.benchmark = null;
+    const info = this.renderer.three.info;
+    const report = bench.report({
+      device: this.platform.label,
+      quality: this.quality.current.level,
+      target: this.quality.fpsTarget,
+      resolutionScale: this.quality.current.resolutionScale,
+      drawCalls: info.render.calls,
+      triangles: info.render.triangles,
+    });
+    this.lastBenchmark = report;
+    const text = formatReport(report);
+    console.info(text);
+    (window as unknown as Record<string, unknown>).__edenBench = report;
+    this.hud.toast(`${report.averageFps.toFixed(0)} FPS médios · 1% pior ${report.onePercentLowFps.toFixed(0)} — relatório no console`, 'star', 9);
   }
 
   private onDeviceChange(device: InputDevice): void {
@@ -1682,6 +1767,7 @@ export class Engine {
       }
       if (playing && !modal) this.quality.monitor(0.5, this.loop.fps);
     }
+    if (this.benchmark) this.sampleBenchmark(dt);
     if (mode !== 'menu' && mode !== 'creator') {
       this.autosaveTimer += dt;
       if (this.autosaveTimer >= AUTOSAVE_SECONDS && (this.dirty || playing)) this.persist();
@@ -1777,6 +1863,15 @@ export class Engine {
         return true;
       },
       bandeiras: () => [...this.story.all],
+      /** Plataforma detectada: sistema, formato e esquema de comando. */
+      plataforma: () => ({ ...this.platform, esquema: this.input.scheme, orientacao: this.orientation }),
+      /** Mede o FPS real deste aparelho: `__eden.medir(20)`. */
+      medir: (seconds = 20) => {
+        this.startBenchmark(seconds);
+        return `Medindo por ${seconds} s…`;
+      },
+      /** Último relatório de desempenho desta sessão. */
+      desempenho: () => (this.lastBenchmark ? { ...this.lastBenchmark, texto: formatReport(this.lastBenchmark) } : null),
       afters: () => ({ ...this.afters.current, body: this.aftersBody.current, silhueta: this.aftersBody.status }),
       /** Silhueta da cidade: quantos usam, quem está fora do padrão. */
       aftersCidade: () => ({

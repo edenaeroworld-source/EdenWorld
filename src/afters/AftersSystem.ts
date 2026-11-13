@@ -56,6 +56,8 @@ export class AftersSystem implements GameSystem {
   /** 0 = desligado, 1 = totalmente visível (transição suave). */
   private activation = 0;
   private bodyHeight = 1.72;
+  /** Fração do orçamento de partículas liberada pela qualidade gráfica. */
+  private particleBudget = 1;
   private enabled = true;
   private disposed = false;
 
@@ -155,6 +157,15 @@ export class AftersSystem implements GameSystem {
     this.enabled = visible;
   }
 
+  /**
+   * Qualidade gráfica: a aura em volta do avatar é efeito de ambiente, e
+   * num celular modesto ela cabe com menos pontos. A transformação da
+   * silhueta **não** passa por aqui — essa é igual em todo aparelho.
+   */
+  applyQuality(particleDensity: number, environmentEffects: boolean): void {
+    this.particleBudget = environmentEffects ? Math.max(0.3, particleDensity) : 0.3;
+  }
+
   update(dt: number, elapsed: number): void {
     if (this.disposed) return;
     const wanted = this.product && this.enabled ? 1 : 0;
@@ -190,7 +201,7 @@ export class AftersSystem implements GameSystem {
     this.haloMaterial.opacity = 0.1 + intensity * 0.34 * product.glow;
 
     // Partículas com a assinatura de movimento do produto.
-    const count = this.config.particles ? Math.round(MAX_PARTICLES * product.particles * (0.4 + intensity * 0.6)) : 0;
+    const count = this.config.particles ? Math.round(MAX_PARTICLES * this.particleBudget * product.particles * (0.4 + intensity * 0.6)) : 0;
     this.points.geometry.setDrawRange(0, count);
     this.pointsMaterial.opacity = count > 0 ? 0.35 + intensity * 0.5 : 0;
     this.pointsMaterial.size = 0.1 + product.glow * 0.12;

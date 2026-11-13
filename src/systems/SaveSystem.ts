@@ -4,7 +4,7 @@ import { type SocialData, emptySocialData, sanitizeSocialData } from '../edenos/
 import { type InputSettingsData, defaultInputSettings, sanitizeInputSettings } from '../input/InputSettings';
 import { type AvatarAppearance, DEFAULT_APPEARANCE, sanitizeAppearance, sanitizePlayerName } from '../player/AvatarAppearance';
 import { clamp } from '../utils/math';
-import { type GraphicsSettings, isQualityLevel } from './QualitySystem';
+import { type GraphicsSettings, isFpsTarget, isQualityLevel } from './QualitySystem';
 import { isVoiceMode, type VoiceMode } from './VoiceSystem';
 
 export const SAVE_VERSION = 2;
@@ -145,7 +145,9 @@ export function sanitizeGraphicsSettings(raw: unknown): GraphicsSettings | null 
     shadows: bool(raw.shadows, true),
     waterReflections: bool(raw.waterReflections, true),
     resolutionScale: num(raw.resolutionScale, 1, 0.5, 1),
-    dynamicResolution: bool(raw.dynamicResolution, raw.quality !== 'alta'),
+    dynamicResolution: bool(raw.dynamicResolution, raw.quality !== 'ultra'),
+    // Salvamento anterior à meta de quadros: 60 no computador é o que havia.
+    fpsTarget: isFpsTarget(raw.fpsTarget) ? raw.fpsTarget : 60,
     showFps: bool(raw.showFps, false),
   };
 }

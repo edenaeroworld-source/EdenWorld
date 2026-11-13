@@ -12,7 +12,8 @@ import {
   padButtonLabel,
 } from '../input/InputSettings';
 import type { InputManager } from '../input/InputManager';
-import { QUALITY_LABELS, QUALITY_LEVELS, type GraphicsSettings, type QualityLevel, QualitySystem } from '../systems/QualitySystem';
+import { CONTROL_SCHEMES, CONTROL_SCHEME_LABELS, type ControlScheme } from '../core/Platform';
+import { FPS_TARGETS, type FpsTarget, QUALITY_LABELS, QUALITY_LEVELS, type GraphicsSettings, type QualityLevel, QualitySystem } from '../systems/QualitySystem';
 import type { SaveData } from '../systems/SaveSystem';
 import { VOICE_MODE_LABELS, VOICE_MODES } from '../systems/VoiceSystem';
 import { button, choiceGroup, clear, field, h, keyCapContent, percent, slider, spokenLabel, toggle } from './dom';
@@ -177,7 +178,20 @@ export class SettingsScreen implements Screen {
           set({ quality });
           this.refresh(() => this.body.querySelector<HTMLElement>('.segmented [aria-pressed="true"]'));
         }),
-        'Baixa para celulares e PCs modestos; Alta para placas de vídeo dedicadas.',
+        'Baixa e Média para celulares e PCs modestos; Alta para placas dedicadas; Ultra para quem tem folga de sobra.',
+      ),
+      field(
+        'Meta de quadros',
+        choiceGroup<FpsTarget>(
+          'Meta de quadros por segundo',
+          FPS_TARGETS.map((value) => ({ value, label: `${value} FPS` })),
+          g.fpsTarget,
+          (fpsTarget) => {
+            set({ fpsTarget });
+            this.refresh(() => this.body.querySelector<HTMLElement>('.segmented [aria-pressed="true"]'));
+          },
+        ),
+        'É a taxa que a resolução dinâmica tenta sustentar — uma meta, não uma promessa. Em celular, 30 estáveis costumam render mais que 60 aos trancos.',
       ),
       field(
         'Sombras',
@@ -198,7 +212,7 @@ export class SettingsScreen implements Screen {
       field(
         'Resolução dinâmica',
         toggle('Resolução dinâmica', g.dynamicResolution, (dynamicResolution) => set({ dynamicResolution })),
-        'Diminui a resolução automaticamente quando o jogo fica lento.',
+        `Diminui a resolução automaticamente quando o jogo cai abaixo de ${g.fpsTarget} FPS, e devolve quando sobra folga.`,
       ),
       field(
         'Mostrar FPS',
@@ -266,7 +280,23 @@ export class SettingsScreen implements Screen {
     const input = settings.input;
     const commit = (): void => this.host.commit('input');
 
+    const platform = this.host.input.platform;
+    const schemes = CONTROL_SCHEMES.map((value) => ({
+      value,
+      label: value === 'auto' ? `${CONTROL_SCHEME_LABELS.auto} (${CONTROL_SCHEME_LABELS[platform.scheme].toLowerCase()})` : CONTROL_SCHEME_LABELS[value],
+    }));
+
     this.body.append(
+      h('h3', { class: 'section-title', text: 'Esquema de comando' }),
+      field(
+        'Controles',
+        choiceGroup<ControlScheme>('Esquema de comando', schemes, input.scheme, (scheme) => {
+          input.scheme = scheme;
+          commit();
+          this.refresh(() => this.body.querySelector<HTMLElement>('.segmented [aria-pressed="true"]'));
+        }),
+        `Detectamos: ${platform.label}. No automático, o jogo troca sozinho assim que você usa o teclado, a tela ou um controle.`,
+      ),
       h('h3', { class: 'section-title', text: 'Câmera' }),
       field('Sensibilidade do mouse', slider({ label: 'Sensibilidade do mouse', min: 0.2, max: 3, step: 0.1, value: input.mouseSensitivity, format: multiplier, onInput: (v) => ((input.mouseSensitivity = v), commit()) })),
       field('Sensibilidade do toque', slider({ label: 'Sensibilidade do toque', min: 0.2, max: 3, step: 0.1, value: input.touchSensitivity, format: multiplier, onInput: (v) => ((input.touchSensitivity = v), commit()) })),

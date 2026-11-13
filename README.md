@@ -29,8 +29,10 @@
   - Desligar guarda a porcentagem escolhida; **Reiniciar** volta ao padrão de 0%. Intensidades, ativações, duração e preset são gravados no salvamento.
   - **A cidade também usa.** Os moradores de Aurora City e as figuras do panteão passam pela mesma tecnologia, pelo mesmo sistema: cada um com a própria configuração de 0% a 250%, nos dois canais, separados ou combinados, estável enquanto a pessoa anda, corre ou está parada. Quem usa e quanto depende do perfil — a artista arrisca mais, o cuidador quase não usa —, e a escolha é sorteada da semente do habitante, então a cidade é a mesma em toda sessão. À noite quem tem esse gosto reforça um pouco; no **Palco Aurora** a cidade inteira sobe o tom. Um roteiro pode ligar, desligar ou trocar o preset de uma pessoa específica, e essa mudança é gravada no salvamento.
 - **Dia e noite** (um dia dura 24 minutos reais) e clima variável: céu limpo, brisa e neblina.
+- **Um jogo só, em qualquer aparelho.** Não existe versão mobile: a mesma Aurora City, os mesmos moradores e o mesmo progresso rodam no computador, no Android e no iPhone/iPad. O jogo reconhece o aparelho sozinho — inclusive o iPad, que se apresenta como Mac, e o tablet Android, que omite a palavra *Mobile* — e escolhe o comando adequado. Em **Configurações → Teclado e toque** dá para fixar o esquema à mão (automático, teclado e mouse, tela de toque ou controle): serve para o tablet com teclado acoplado e para o notebook de tela sensível.
 - **Três formas de jogar**, com troca automática entre elas: teclado e mouse, tela de toque e controle. Teclas e botões podem ser remapeados.
-- **Configurações** de gráficos (três níveis de qualidade, sombras, reflexos, escala de resolução, resolução dinâmica), áudio (incluindo volume de **voz** e o modo das **falas**), controles e jogo.
+- **Deitado ou em pé.** A tela de toque funciona nas duas orientações: deitado se vê mais cidade (e o jogo sugere isso uma vez, sem obrigar), em pé a interface se reorganiza — analógico mais alto, botões menores, EdenPhone ocupando a largura.
+- **Configurações** de gráficos (**quatro** níveis de qualidade — Baixa, Média, Alta e Ultra —, meta de **30 ou 60 FPS**, sombras, reflexos, escala de resolução, resolução dinâmica), áudio (incluindo volume de **voz** e o modo das **falas**), controles e jogo. Cada nível mexe em resolução, sombra, distância de visão, densidade de partículas, efeitos de ambiente e também na **frequência de simulação dos moradores** — a parte que mais pesa num celular.
 - **Salvamento automático** no próprio navegador, com opções de continuar, novo jogo, exportar, importar e apagar.
 - **Interface em português do Brasil**, navegável por mouse, toque, teclado e controle.
 
@@ -61,7 +63,13 @@ Os recursos que ainda dependem de servidor, loja ou catálogo licenciado (Éden 
 | Girar a câmera | arrastar o dedo no restante da tela |
 | Zoom | movimento de pinça |
 | Pular, correr e interagir | botões no canto inferior direito |
-| EdenPhone e menu | botões no canto superior direito |
+| EdenPhone e pausa | botões dedicados acima dos de ação, à direita |
+| Orientação | funciona deitado e em pé; deitado se vê mais cidade |
+
+Durante o jogo, a pinça e o menu de toque longo do navegador ficam
+bloqueados sobre a cena 3D — mas rolar com um dedo nas listas, no feed e nas
+configurações continua funcionando normalmente, e fora do jogo o navegador
+volta ao comportamento de sempre.
 
 ### Controle (padrão Xbox / PlayStation)
 
@@ -172,7 +180,7 @@ Este arquivo não faz parte do repositório: a escolha da hospedagem fica com qu
 
 ```bash
 npm run typecheck   # tipos
-npm test            # 382 testes unitários (lógica pura, sistemas e telas do EdenOS)
+npm test            # 448 testes unitários (lógica pura, sistemas e telas do EdenOS)
 npm run test:e2e    # cinco cenários de ponta a ponta sobre o build de produção
 ```
 
@@ -207,7 +215,7 @@ public/                  logotipo, ícones e manifesto do aplicativo web
 design/brand/            logotipo original e a origem dos arquivos derivados
 src/
   main.ts                ponto de entrada: checa o WebGL2 e inicia o Engine
-  core/                  Engine (orquestra tudo), laço do jogo, renderizador, configuração
+  core/                  Engine (orquestra tudo), laço do jogo, renderizador, configuração, detecção de plataforma
   world/                 terreno, céu, água, luz, clima, relógio, vegetação, partículas
   cities/aurora-city/    planta, prédios, praça, parques e decoração de Aurora City
   npc/                   rede de caminhada, rotina, vida social e desenho dos moradores
@@ -217,9 +225,9 @@ src/
   physics/               colisão e consultas ao cenário (sem biblioteca externa)
   player/                avatar, animação, gestos, rosto e movimento
   camera/                câmera em terceira pessoa
-  input/                 teclado e mouse, toque, controle e remapeamento
+  input/                 teclado e mouse, toque, controle, remapeamento e guarda de gestos do navegador
   interactions/          pontos de interação e colecionáveis
-  systems/               qualidade gráfica, salvamento, progresso, áudio e voz
+  systems/               qualidade gráfica, medição de desempenho, salvamento, progresso, áudio e voz
   interface/             HUD, menus, criador de avatar, EdenPhone e configurações
   styles/                folha de estilo da interface
   utils/                 matemática e geometria de apoio
@@ -247,16 +255,17 @@ Modelos, texturas, céu, água, vegetação, sons e música são gerados em temp
 
 | Parâmetro | Efeito |
 | --- | --- |
-| `?quality=baixa`, `media` ou `alta` | Força um nível de qualidade gráfica |
+| `?quality=baixa`, `media`, `alta` ou `ultra` | Força um nível de qualidade gráfica |
+| `?bench` ou `?bench=45` | Mede o desempenho real do aparelho (padrão: 20 s) e imprime média, mediana, **1% pior** e quadros dentro da meta |
 | `?noaudio` | Inicia sem áudio |
 | `?skipmenu` | Pula o menu e entra direto no jogo |
 | `?debug` | Expõe `window.__eden` (estado e atalhos usados pelos testes) e aceita `x`, `z`, `heading`, `yaw`, `pitch`, `dist` e `h` para posicionar o jogador, a câmera e a hora |
 
-Com `?debug`, além do que já existia: `__eden.npcs()` lista a população e onde está cada figura do panteão, `__eden.irPara('haru')` leva você até ela, `__eden.bandeiras()` mostra as marcas de história e `__eden.afters()` mostra o estado do painel Afters, incluindo `body` (intensidades e ativações) e `silhueta` (o que o avatar mostra neste instante, com a transição em andamento). Para a cidade: `__eden.aftersCidade()` resume quantos habitantes usam a tecnologia e qual evento está em vigor, `__eden.aftersNpc('cidadao:41', { bust: 150 })` muda uma pessoa, `__eden.aftersNpcPreset('cidadao:41', 'aurora')` aplica um preset e `__eden.aftersEvento('palco')` força um evento de cidade.
+Com `?debug`, para desempenho e aparelho: `__eden.plataforma()` mostra o que foi detectado (sistema, formato, esquema e orientação), `__eden.medir(30)` roda uma medição de 30 segundos e `__eden.desempenho()` devolve o último relatório. Além do que já existia: `__eden.npcs()` lista a população e onde está cada figura do panteão, `__eden.irPara('haru')` leva você até ela, `__eden.bandeiras()` mostra as marcas de história e `__eden.afters()` mostra o estado do painel Afters, incluindo `body` (intensidades e ativações) e `silhueta` (o que o avatar mostra neste instante, com a transição em andamento). Para a cidade: `__eden.aftersCidade()` resume quantos habitantes usam a tecnologia e qual evento está em vigor, `__eden.aftersNpc('cidadao:41', { bust: 150 })` muda uma pessoa, `__eden.aftersNpcPreset('cidadao:41', 'aurora')` aplica um preset e `__eden.aftersEvento('palco')` força um evento de cidade.
 
 ## Limites conhecidos
 
-- **Ainda não testado em aparelhos reais.** Toda a verificação foi automatizada em um Chromium sem interface, com renderização por software. O desempenho em celulares e placas de vídeo reais não foi medido, e o áudio nunca foi ouvido por uma pessoa.
+- **O desempenho em celular não foi medido.** As metas do projeto são 30 FPS estáveis em celular intermediário e a opção de 60 FPS em hardware capaz — são **metas**, não resultados verificados: não há aparelho móvel nem GPU no ambiente em que o jogo foi desenvolvido. Para produzir o número no seu aparelho, abra o jogo com `?bench` (veja os parâmetros de URL acima). O áudio também nunca foi ouvido por uma pessoa.
 - **Um jogador por vez.** Não há multijogador, contas nem serviços on-line nesta versão. O formato de troca da silhueta — do jogador e dos habitantes — já existe e é testado (`src/afters/AftersNet.ts`), mas nada é enviado: não há servidor para receber.
 - **O salvamento é local.** Para continuar em outro navegador ou aparelho é preciso exportar o arquivo de salvamento e importá-lo manualmente.
 - **Só Aurora City.** Bitnara, SkyStones, Rosas Park, Cidade da Liberdade, Noureja Nether e o Jardim Proibido existem por enquanto como lore no EdenReads e nas conversas — não dá para viajar até elas.

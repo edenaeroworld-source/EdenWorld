@@ -67,7 +67,7 @@ describe('sanitizeSave', () => {
           sphereMode: 400,
         },
         settings: {
-          graphics: { quality: 'ultra' },
+          graphics: { quality: 'cinematica' },
           audio: { master: 4, music: -1, muted: 'não' },
           gameplay: { timePace: 'turbo', hints: false },
         },
@@ -126,8 +126,15 @@ describe('sanitizeSave', () => {
       waterReflections: true,
       resolutionScale: 0.5,
       dynamicResolution: true,
+      fpsTarget: 60,
       showFps: false,
     });
+    // Ultra é um nível de verdade desde a revisão de multiplataforma.
+    expect(sanitizeGraphicsSettings({ quality: 'ultra' })?.quality).toBe('ultra');
+    expect(sanitizeGraphicsSettings({ quality: 'ultra' })?.dynamicResolution).toBe(false);
+    // Meta de quadros: só 30 ou 60; qualquer outra coisa cai no padrão.
+    expect(sanitizeGraphicsSettings({ quality: 'baixa', fpsTarget: 30 })?.fpsTarget).toBe(30);
+    expect(sanitizeGraphicsSettings({ quality: 'baixa', fpsTarget: 144 })?.fpsTarget).toBe(60);
   });
 });
 

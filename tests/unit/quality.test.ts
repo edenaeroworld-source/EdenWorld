@@ -20,7 +20,8 @@ describe('QualitySystem', () => {
 
   it('valida níveis de qualidade', () => {
     expect(isQualityLevel('media')).toBe(true);
-    expect(isQualityLevel('ultra')).toBe(false);
+    expect(isQualityLevel('ultra')).toBe(true);
+    expect(isQualityLevel('cinematica')).toBe(false);
     expect(isQualityLevel(2)).toBe(false);
   });
 
