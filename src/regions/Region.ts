@@ -108,6 +108,8 @@ export const REGIONS: readonly WorldRegion[] = Object.freeze([
       { id: 'palco-aurora', name: 'Palco Aurora', x: 0, z: -150, kind: 'cultura' as const, note: 'Lilly toca aqui quando a noite chega.' },
       { id: 'torre-zenite', name: 'Torre Zênite', x: 118, z: -92, kind: 'servico' as const, note: 'Nexara mantém as redes do Éden funcionando.', interiorId: 'torre-zenite' },
       { id: 'estacao-aurora', name: 'Estação Aurora', x: -20, z: 120, kind: 'transporte' as const, note: 'De onde partem as viagens para as outras regiões.' },
+      { id: 'residencial-orvalho', name: 'Residencial Orvalho', x: -86, z: -30, kind: 'casa' as const, note: 'Moradias cercadas de verde. O Apartamento 12 fica no térreo.', interiorId: 'apto-aurora-12' },
+      { id: 'centro-edenconnect', name: 'Centro Éden Connect', x: 86, z: 30, kind: 'servico' as const, note: 'Registros, moradia e tudo que a cidade resolve no balcão.', interiorId: 'centro-edenconnect' },
     ]),
     shops: Object.freeze(['edentech-aurora', 'edenhome-aurora', 'edenpawl-aurora', 'afters-atelie']),
     wildlife: Object.freeze(['borboleta', 'passaro-cristal', 'esquilo']),

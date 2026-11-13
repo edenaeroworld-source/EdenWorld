@@ -1,49 +1,56 @@
 /**
- * A camada que faltava: geometria de verdade dentro dos prédios.
+ * A cena de um interior: a camada que transforma a planta em prédio.
  *
- * `InteriorManager` sempre soube entrar, sair e garantir que só um
- * interior esteja carregado. O que nunca existiu foi quem construísse
- * a cena. Este módulo é esse `InteriorLoader`.
+ * Ela orquestra três coisas, nesta ordem:
  *
- * É **genérico de propósito**: lê `InteriorDef` — cômodos, móveis,
- * iluminação, moradores — e monta piso, paredes, teto, portas, luzes,
- * colisão e móveis interativos a partir dos dados. Um interior novo
- * passa a existir só por ser declarado; não precisa de código novo.
+ *  1. **a casca** (`InteriorShell`) — piso, paredes, teto, janelas e
+ *     escada, de todos os andares, derivados da planta;
+ *  2. **o acabamento** (`fitouts/`) — a mobília que dá identidade ao
+ *     lugar, quando o ambiente tem um;
+ *  3. **a gente** (`InteriorPeople`) — atendentes, moradores e
+ *     clientes andando.
  *
- * Coordenadas: o interior é montado num canto do mundo bem longe do
- * exterior (`INTERIOR_ORIGIN`), e a câmera é levada até lá. É mais
- * simples e mais seguro do que descarregar o exterior — e, como o
- * exterior fica oculto, não custa quadro nenhum.
+ * Ambiente sem acabamento ainda sobe: ganha a casca completa e uma
+ * mobília genérica tirada de `props`. É o bastante para a porta não
+ * mentir — e não é o bastante para chamar de pronto.
+ *
+ * **Coordenadas.** O interior é montado num canto do mundo bem longe
+ * do exterior (`INTERIOR_ORIGIN`) e a câmera é levada até lá. Isso
+ * custava o bug mais feio do jogo: a essa distância o relevo vale
+ * −7 m e o limite circular da região fica a 5 km, então o jogador
+ * nadava e era arrancado da sala no primeiro passo. `physics.setIndoor`
+ * desliga as duas regras enquanto se está dentro.
  */
 
 import * as THREE from 'three';
 import type { Interactable, InteractionPayload } from '../interactions/Interactable';
 import type { Collider } from '../physics/Collision';
 import type { PhysicsWorld } from '../physics/PhysicsWorld';
-import { GeometryBatcher } from '../utils/geometry';
+import type { QualityProfile } from '../systems/QualitySystem';
 import { createRng, randRange } from '../utils/math';
 import type { MaterialLibrary } from '../world/Materials';
-
-/**
- * Os materiais de que um interior precisa.
- *
- * É um recorte da biblioteca do mundo, e não a biblioteca inteira, por
- * um motivo prático: assim esta camada pode ser montada e medida em
- * teste sem precisar de um canvas com contexto 2D.
- */
-export type InteriorMaterials = Pick<MaterialLibrary, 'wood' | 'stone' | 'white' | 'facade' | 'glass' | 'crystal' | 'metal'>;
 import type { InteriorDef, InteriorProp, InteriorRoom } from './Interior';
 import { roomsOnFloor } from './Interior';
+import { FLOOR_HEIGHT, InteriorBuild } from './InteriorKit';
 import type { InteriorLoader } from './InteriorManager';
+import { InteriorPalette } from './InteriorPalette';
+import { InteriorPeople, type PersonSpec } from './InteriorPeople';
+import { buildBackdrop, buildShell, buildStaircase, footprintOf, stairwellOf } from './InteriorShell';
+import { getFitout } from './fitouts';
+
+/**
+ * Os materiais do mundo de que um interior ainda se serve.
+ *
+ * A mobília e os acabamentos vêm da paleta própria dos interiores
+ * (`InteriorPalette`); estes continuam aqui porque alguns elementos
+ * devem combinar com a cidade lá fora.
+ */
+export type InteriorMaterials = Pick<MaterialLibrary, 'wood' | 'stone' | 'white' | 'facade' | 'glass' | 'crystal' | 'metal'>;
 
 /** Onde os interiores são montados, longe de qualquer terreno. */
 export const INTERIOR_ORIGIN = { x: 4000, z: 4000 };
 
-/** Altura livre de um andar e espessura das paredes. */
-const FLOOR_HEIGHT = 3.4;
-const WALL = 0.22;
-
-/** Cor e intensidade de cada clima de iluminação. */
+/** Clima de luz ambiente de cada tipo de interior. */
 const LIGHTING: Record<InteriorDef['lighting'], { color: number; intensity: number; ambient: number }> = {
   quente: { color: 0xffd9a6, intensity: 1.5, ambient: 0.55 },
   fria: { color: 0xcfe8ff, intensity: 1.4, ambient: 0.6 },
@@ -81,24 +88,19 @@ export interface InteriorSpawn {
   heading: number;
 }
 
-/**
- * Constrói e destrói a cena de um interior.
- *
- * Implementa `InteriorLoader`, então é só entregá-lo ao
- * `InteriorManager.setLoader` e as portas passam a levar a algum
- * lugar.
- */
 export class InteriorScene implements InteriorLoader {
   readonly group = new THREE.Group();
   private readonly options: InteriorSceneOptions;
+  private readonly palette = new InteriorPalette();
   private readonly interactables: Interactable[] = [];
   private readonly colliders: Collider[] = [];
   private readonly geometries = new Set<THREE.BufferGeometry>();
   private readonly lights: THREE.Light[] = [];
-  private readonly ownMaterials: THREE.Material[] = [];
+  private people: InteriorPeople | null = null;
   private current: InteriorDef | null = null;
   private spawn: InteriorSpawn | null = null;
   private floorY = 0;
+  private quality: QualityProfile | null = null;
 
   constructor(options: InteriorSceneOptions) {
     this.options = options;
@@ -126,74 +128,135 @@ export class InteriorScene implements InteriorLoader {
     return this.floorY;
   }
 
+  /** Quantas pessoas estão dentro do prédio agora. */
+  get population(): number {
+    return this.people?.count ?? 0;
+  }
+
   load(interior: InteriorDef): void {
     // Garantia dura: nunca dois ao mesmo tempo, mesmo que alguém chame
     // `load` duas vezes seguidas sem passar pelo manager.
     if (this.current) this.unload(this.current);
     this.current = interior;
-
-    const origin = INTERIOR_ORIGIN;
-    const light = LIGHTING[interior.lighting];
     this.floorY = 0;
 
-    const batch = new GeometryBatcher();
-    const rooms = roomsOnFloor(interior, 0);
-    const bounds = boundsOf(rooms);
+    const origin = INTERIOR_ORIGIN;
+    const climate = LIGHTING[interior.lighting];
+    const fitout = getFitout(interior.fitout);
+    const people: PersonSpec[] = [];
+    const peopleFloors: number[] = [];
 
-    for (const room of rooms) this.buildRoom(batch, room, origin, interior);
+    for (let floor = 0; floor < Math.max(1, interior.floors); floor += 1) {
+      const rooms = roomsOnFloor(interior, floor);
+      if (rooms.length === 0) continue;
+      const build = new InteriorBuild({
+        origin,
+        palette: this.palette,
+        physics: this.options.physics,
+        baseY: floor * FLOOR_HEIGHT,
+        tag: 'interior',
+      });
 
-    // Porta de saída: um vão no muro externo, junto ao ponto de entrada.
-    const spawnX = origin.x + interior.spawn.x;
-    const spawnZ = origin.z + interior.spawn.z;
-    this.spawn = { x: spawnX, y: this.floorY, z: spawnZ, heading: interior.spawn.heading };
-    this.buildDoor(batch, spawnX, spawnZ, interior);
+      buildShell(build, { interior, floor, hasFloorAbove: roomsOnFloor(interior, floor + 1).length > 0 });
 
-    const built = batch.build(`interior:${interior.id}`, { castShadow: true, receiveShadow: true });
-    this.group.add(built);
-    built.traverse((object) => {
-      const mesh = object as THREE.Mesh;
-      if (mesh.geometry) this.geometries.add(mesh.geometry);
+      // Escada para o andar de cima, com guarda-corpo no vão de lá.
+      if (roomsOnFloor(interior, floor + 1).length > 0) {
+        buildStaircase(build, stairwellOf(interior), { withRailing: true });
+      }
+
+      // Vista da janela: sem isto, as janelas dariam para o vazio,
+      // porque o exterior fica escondido enquanto se está dentro.
+      if (floor === 0) buildBackdrop(build, footprintOf(rooms));
+
+      // Mobília: do acabamento, quando há; genérica, quando não há.
+      const before = people.length;
+      if (fitout) {
+        fitout({ b: build, interior, floor, people, room: (id) => interior.rooms.find((room) => room.id === id) });
+      } else {
+        for (const prop of interior.props) {
+          if (prop.floor !== floor) continue;
+          this.buildGenericProp(build, prop);
+        }
+      }
+      for (let i = before; i < people.length; i += 1) peopleFloors.push(floor);
+
+      // Luz ambiente do andar.
+      const area = footprintOf(rooms);
+      const ambient = new THREE.HemisphereLight(climate.color, 0x3a4048, climate.ambient * 2);
+      ambient.position.set(origin.x + area.x + area.w / 2, floor * FLOOR_HEIGHT + FLOOR_HEIGHT, origin.z + area.z + area.d / 2);
+      this.group.add(ambient);
+      this.lights.push(ambient);
+      for (const room of rooms) {
+        build.light(
+          room.x + room.w / 2,
+          FLOOR_HEIGHT - 0.55,
+          room.z + room.d / 2,
+          climate.color,
+          climate.intensity * 4.5,
+          Math.max(room.w, room.d) * 1.5,
+        );
+      }
+
+      const mesh = build.finish(`interior:${interior.id}:andar-${floor}`);
+      mesh.traverse((object) => {
+        const candidate = object as THREE.Mesh;
+        if (candidate.geometry) this.geometries.add(candidate.geometry);
+      });
+      this.group.add(mesh);
+      this.colliders.push(...build.colliders);
+      for (const light of build.lights) {
+        this.group.add(light);
+        this.lights.push(light);
+      }
+      this.interactables.push(...build.interactables);
+    }
+
+    // Interativos dos móveis declarados: continuam vindo dos dados,
+    // com ou sem acabamento, para que a lista de ações do prédio não
+    // dependa de quem desenhou a cadeira.
+    for (const prop of interior.props) this.addPropInteractable(prop, interior);
+
+    // Entrada: a porta fica no muro, e o jogador nasce um passo para
+    // dentro dela — não em cima dela, como antes.
+    const entrance = interior.entrance ?? { x: interior.spawn.x, z: interior.spawn.z, yaw: interior.spawn.heading };
+    this.spawn = {
+      x: origin.x + interior.spawn.x,
+      y: this.floorY,
+      z: origin.z + interior.spawn.z,
+      heading: interior.spawn.heading,
+    };
+    this.buildEntrance(interior, entrance);
+
+    // Gente.
+    this.people = new InteriorPeople(this.palette, origin, 0);
+    people.forEach((spec, index) => {
+      this.people?.add({ ...spec, baseY: (peopleFloors[index] ?? 0) * FLOOR_HEIGHT });
     });
+    this.group.add(this.people.group);
 
-    // Luzes: uma ambiente e uma por cômodo.
-    const ambient = new THREE.HemisphereLight(light.color, 0x404048, light.ambient * 2);
-    ambient.position.set(origin.x + bounds.cx, this.floorY + FLOOR_HEIGHT, origin.z + bounds.cz);
-    this.group.add(ambient);
-    this.lights.push(ambient);
-    for (const room of rooms) {
-      const lamp = new THREE.PointLight(light.color, light.intensity * 6, Math.max(room.w, room.d) * 1.6, 1.8);
-      lamp.position.set(origin.x + room.x + room.w / 2, this.floorY + FLOOR_HEIGHT - 0.5, origin.z + room.z + room.d / 2);
-      this.group.add(lamp);
-      this.lights.push(lamp);
-    }
+    // A física passa a servir o interior: sem relevo, sem limite
+    // circular. É o que impede o jogador de "nadar" dentro do prédio.
+    this.options.physics.setIndoor(this.floorY);
 
-    // Móveis: geometria, colisão e interação.
-    for (const prop of interior.props) {
-      if (prop.floor !== 0) continue;
-      this.buildProp(prop, origin, interior);
-    }
-
-    // Andares de cima: uma escada e o aviso honesto de que o andar
-    // existe nos dados. Subir troca o andar no manager.
-    if (interior.floors > 1) this.buildStairs(bounds, origin, interior);
-
+    if (this.quality) this.applyQuality(this.quality);
     this.group.visible = true;
     this.options.onInteractables(this.interactables);
   }
 
   unload(_interior: InteriorDef): void {
     this.group.visible = false;
-    for (const id of this.colliders) this.options.physics.remove(id);
+    this.options.physics.setIndoor(null);
+    for (const collider of this.colliders) this.options.physics.remove(collider);
     this.colliders.length = 0;
     for (const light of this.lights) {
       light.removeFromParent();
       light.dispose?.();
     }
     this.lights.length = 0;
+    this.people?.dispose();
+    this.people = null;
     for (const geometry of this.geometries) geometry.dispose();
     this.geometries.clear();
-    for (const material of this.ownMaterials) material.dispose();
-    this.ownMaterials.length = 0;
     this.group.clear();
     this.interactables.length = 0;
     this.current = null;
@@ -201,230 +264,82 @@ export class InteriorScene implements InteriorLoader {
     this.options.onInteractables(this.interactables);
   }
 
+  /** Move quem mora aqui. Chamado todo quadro enquanto se está dentro. */
+  update(dt: number, elapsed: number): void {
+    if (!this.current) return;
+    this.people?.update(dt, elapsed);
+  }
+
+  /**
+   * Respeita o nível de qualidade escolhido.
+   *
+   * Num celular fraco, o que pesa num interior são as luzes pontuais e
+   * as sombras — não o número de caixas, que o batcher já funde. Então
+   * é isso que se corta, e a mobília continua inteira.
+   */
+  applyQuality(profile: QualityProfile): void {
+    this.quality = profile;
+    const budget = profile.level === 'baixa' ? 6 : profile.level === 'media' ? 12 : 64;
+    let used = 0;
+    for (const light of this.lights) {
+      if (light instanceof THREE.HemisphereLight) continue;
+      used += 1;
+      light.visible = used <= budget;
+    }
+    this.group.traverse((object) => {
+      const mesh = object as THREE.Mesh;
+      if (mesh.isMesh) mesh.castShadow = profile.shadows;
+    });
+  }
+
   dispose(): void {
     if (this.current) this.unload(this.current);
+    this.palette.dispose();
     this.group.removeFromParent();
   }
 
-  /* ------------------------------- cômodos ------------------------------ */
+  /* ------------------------------ entrada ------------------------------ */
 
-  private buildRoom(batch: GeometryBatcher, room: InteriorRoom, origin: { x: number; z: number }, interior: InteriorDef): void {
-    const materials = this.options.materials;
-    const x0 = origin.x + room.x;
-    const z0 = origin.z + room.z;
-    const cx = x0 + room.w / 2;
-    const cz = z0 + room.d / 2;
-    const top = this.floorY + FLOOR_HEIGHT;
-
-    // Piso.
-    const floor = new THREE.BoxGeometry(room.w, 0.2, room.d);
-    batch.add(floor, interior.category === 'casa' ? materials.wood : materials.stone, new THREE.Matrix4().makeTranslation(cx, this.floorY - 0.1, cz));
-    this.colliders.push(
-      this.options.physics.addBox({
-        x: cx,
-        z: cz,
-        halfX: room.w / 2,
-        halfZ: room.d / 2,
-        yMin: this.floorY - 0.2,
-        yMax: this.floorY,
-        walkable: true,
-        solid: false,
-        blocksCamera: false,
-        surface: interior.category === 'casa' ? 'wood' : 'stone',
-        topAt: () => this.floorY,
-        tag: `interior:piso:${room.id}`,
-      }),
-    );
-
-    // Teto.
-    const ceiling = new THREE.BoxGeometry(room.w, 0.18, room.d);
-    batch.add(ceiling, materials.white, new THREE.Matrix4().makeTranslation(cx, top, cz));
-
-    // Paredes: quatro, cada uma com vidro na metade de cima quando a
-    // iluminação é natural (estufa, viveiro) — é o Frutiger Aero.
-    const glassy = interior.lighting === 'natural';
-    const sides: { x: number; z: number; w: number; d: number }[] = [
-      { x: cx, z: z0 - WALL / 2, w: room.w + WALL * 2, d: WALL },
-      { x: cx, z: z0 + room.d + WALL / 2, w: room.w + WALL * 2, d: WALL },
-      { x: x0 - WALL / 2, z: cz, w: WALL, d: room.d },
-      { x: x0 + room.w + WALL / 2, z: cz, w: WALL, d: room.d },
-    ];
-    for (const side of sides) {
-      // Não erguer parede onde outro cômodo encosta: senão os cômodos
-      // ficam incomunicáveis e o interior vira um conjunto de caixas.
-      if (this.touchesAnotherRoom(side, room, interior, origin)) continue;
-      const lower = new THREE.BoxGeometry(side.w, glassy ? FLOOR_HEIGHT * 0.45 : FLOOR_HEIGHT, side.d);
-      batch.add(lower, materials.facade, new THREE.Matrix4().makeTranslation(side.x, this.floorY + (glassy ? FLOOR_HEIGHT * 0.225 : FLOOR_HEIGHT / 2), side.z));
-      if (glassy) {
-        const upper = new THREE.BoxGeometry(side.w, FLOOR_HEIGHT * 0.55, side.d);
-        batch.add(upper, materials.glass, new THREE.Matrix4().makeTranslation(side.x, this.floorY + FLOOR_HEIGHT * 0.725, side.z));
-      }
-      this.colliders.push(
-        this.options.physics.addBox({
-          x: side.x,
-          z: side.z,
-          halfX: side.w / 2,
-          halfZ: side.d / 2,
-          yMin: this.floorY,
-          yMax: top,
-          walkable: false,
-          tag: `interior:parede:${room.id}`,
-        }),
-      );
-    }
-
-    // Rodapé de luz: a assinatura visual dos interiores do Éden.
-    const strip = new THREE.BoxGeometry(room.w - 0.4, 0.06, 0.08);
-    batch.add(strip, materials.crystal, new THREE.Matrix4().makeTranslation(cx, this.floorY + 0.12, z0 + 0.2));
-  }
-
-  /** Há outro cômodo encostado deste lado? */
-  private touchesAnotherRoom(side: { x: number; z: number; w: number; d: number }, room: InteriorRoom, interior: InteriorDef, origin: { x: number; z: number }): boolean {
-    for (const other of interior.rooms) {
-      if (other === room || other.floor !== room.floor) continue;
-      const ox0 = origin.x + other.x;
-      const oz0 = origin.z + other.z;
-      // O centro da parede cai dentro do outro cômodo (com folga)?
-      if (side.x > ox0 - 0.4 && side.x < ox0 + other.w + 0.4 && side.z > oz0 - 0.4 && side.z < oz0 + other.d + 0.4) return true;
-    }
-    return false;
-  }
-
-  /* -------------------------------- porta ------------------------------- */
-
-  private buildDoor(batch: GeometryBatcher, x: number, z: number, interior: InteriorDef): void {
-    const materials = this.options.materials;
-    const frame = new THREE.BoxGeometry(2.2, 2.6, 0.3);
-    batch.add(frame, materials.crystal, new THREE.Matrix4().makeTranslation(x, this.floorY + 1.3, z));
-    const glow = new THREE.BoxGeometry(1.7, 2.2, 0.12);
-    batch.add(glow, materials.glass, new THREE.Matrix4().makeTranslation(x, this.floorY + 1.1, z));
+  private buildEntrance(interior: InteriorDef, entrance: { x: number; z: number; yaw: number }): void {
+    const build = new InteriorBuild({
+      origin: INTERIOR_ORIGIN,
+      palette: this.palette,
+      physics: this.options.physics,
+      baseY: 0,
+      tag: 'interior',
+    });
+    build.door(entrance.x, entrance.z, entrance.yaw, { label: 'entrada' });
+    const mesh = build.finish(`interior:${interior.id}:porta`);
+    mesh.traverse((object) => {
+      const candidate = object as THREE.Mesh;
+      if (candidate.geometry) this.geometries.add(candidate.geometry);
+    });
+    this.group.add(mesh);
+    this.colliders.push(...build.colliders);
 
     this.interactables.push({
       id: `interior:saida:${interior.id}`,
       name: interior.name,
       action: 'Sair',
-      position: new THREE.Vector3(x, this.floorY + 1.2, z),
-      range: 3,
+      position: new THREE.Vector3(INTERIOR_ORIGIN.x + entrance.x, this.floorY + 1.2, INTERIOR_ORIGIN.z + entrance.z),
+      range: 3.2,
       enabled: true,
       payload: { type: 'porta', interiorId: interior.id, exit: { regionId: interior.regionId, x: 0, z: 0, heading: 0 } },
     });
   }
 
-  /* -------------------------------- móveis ------------------------------ */
+  /* ------------------------------ móveis ------------------------------- */
 
-  private buildProp(prop: InteriorProp, origin: { x: number; z: number }, interior: InteriorDef): void {
-    const materials = this.options.materials;
-    const x = origin.x + prop.x;
-    const z = origin.z + prop.z;
-    const rng = createRng(prop.id.length * 131 + prop.x * 7 + prop.z * 13);
-    const batch = new GeometryBatcher();
-    const place = (geometry: THREE.BufferGeometry, material: THREE.Material, dx: number, dy: number, dz: number): void => {
-      batch.add(geometry, material, new THREE.Matrix4().makeTranslation(x + dx, this.floorY + dy, z + dz));
-    };
-
-    let height = 0.9;
-    let halfX = 0.6;
-    let halfZ = 0.6;
-
-    switch (prop.action) {
-      case 'sentar': {
-        // Banco/sofá/cama: assento, encosto e pés.
-        const wide = prop.name.toLowerCase().includes('cama') || prop.name.toLowerCase().includes('sofá');
-        halfX = wide ? 1.1 : 0.7;
-        halfZ = wide ? 0.95 : 0.6;
-        height = 0.55;
-        place(new THREE.BoxGeometry(halfX * 2, 0.22, halfZ * 2), materials.facade, 0, 0.45, 0);
-        place(new THREE.BoxGeometry(halfX * 2, 0.7, 0.18), materials.wood, 0, 0.8, -halfZ + 0.12);
-        for (const sx of [-1, 1]) {
-          for (const sz of [-1, 1]) {
-            place(new THREE.CylinderGeometry(0.07, 0.07, 0.42, 8), materials.wood, sx * (halfX - 0.16), 0.21, sz * (halfZ - 0.14));
-          }
-        }
-        break;
-      }
-      case 'comprar': {
-        // Balcão com tampo de vidro e frente iluminada.
-        halfX = 1.4;
-        halfZ = 0.6;
-        height = 1.1;
-        place(new THREE.BoxGeometry(halfX * 2, 1.0, halfZ * 2), materials.wood, 0, 0.5, 0);
-        place(new THREE.BoxGeometry(halfX * 2 + 0.2, 0.1, halfZ * 2 + 0.2), materials.glass, 0, 1.05, 0);
-        place(new THREE.BoxGeometry(halfX * 2 - 0.2, 0.1, 0.06), materials.crystal, 0, 0.3, halfZ);
-        break;
-      }
-      case 'olhar': {
-        // Estante/bancada: prateleiras com miudezas.
-        halfX = 1.0;
-        halfZ = 0.4;
-        height = 2.0;
-        place(new THREE.BoxGeometry(halfX * 2, 2.0, halfZ * 2), materials.wood, 0, 1.0, 0);
-        for (let i = 0; i < 3; i += 1) {
-          place(new THREE.BoxGeometry(halfX * 2 - 0.1, 0.06, halfZ * 2 - 0.08), materials.white, 0, 0.5 + i * 0.5, 0.04);
-          for (let k = 0; k < 4; k += 1) {
-            const s = randRange(rng, 0.1, 0.2);
-            place(new THREE.BoxGeometry(s, s * 2, s), materials.crystal, -halfX + 0.3 + k * 0.5, 0.6 + i * 0.5, 0.05);
-          }
-        }
-        break;
-      }
-      case 'conversar': {
-        // Quem atende fica num ponto marcado; a pessoa em si é um NPC.
-        halfX = 0.45;
-        halfZ = 0.45;
-        height = 0.1;
-        place(new THREE.CylinderGeometry(0.7, 0.75, 0.06, 20), materials.crystal, 0, 0.04, 0);
-        break;
-      }
-      case 'usar': {
-        halfX = 0.8;
-        halfZ = 0.6;
-        height = 1.2;
-        place(new THREE.BoxGeometry(halfX * 2, 0.9, halfZ * 2), materials.metal, 0, 0.45, 0);
-        place(new THREE.CylinderGeometry(0.34, 0.4, 0.5, 16), materials.glass, 0, 1.15, 0);
-        break;
-      }
-      default: {
-        // Escadas declaradas nos dados.
-        halfX = 0.9;
-        halfZ = 1.4;
-        height = 1.6;
-        for (let i = 0; i < 6; i += 1) {
-          place(new THREE.BoxGeometry(halfX * 2, 0.16, 0.44), materials.stone, 0, 0.16 + i * 0.26, -halfZ + 0.3 + i * 0.44);
-        }
-        break;
-      }
-    }
-
-    const mesh = batch.build(`interior:movel:${prop.id}`, { castShadow: true, receiveShadow: true });
-    mesh.traverse((object) => {
-      const m = object as THREE.Mesh;
-      if (m.geometry) this.geometries.add(m.geometry);
-    });
-    this.group.add(mesh);
-
-    // Colisão: o móvel ocupa espaço de verdade.
-    if (prop.action !== 'conversar') {
-      this.colliders.push(
-        this.options.physics.addBox({
-          x,
-          z,
-          halfX,
-          halfZ,
-          yMin: this.floorY,
-          yMax: this.floorY + height,
-          walkable: false,
-          blocksCamera: false,
-          tag: `interior:movel:${prop.id}`,
-        }),
-      );
-    }
-
+  private addPropInteractable(prop: InteriorProp, interior: InteriorDef): void {
+    const x = INTERIOR_ORIGIN.x + prop.x;
+    const z = INTERIOR_ORIGIN.z + prop.z;
+    const y = this.floorY + prop.floor * FLOOR_HEIGHT + 1.1;
     this.interactables.push({
       id: `interior:${interior.id}:${prop.id}`,
       name: prop.name,
       action: ACTION_LABEL[prop.action],
-      position: new THREE.Vector3(x, this.floorY + Math.min(height, 1.3), z),
-      range: 2.6,
+      position: new THREE.Vector3(x, y, z),
+      range: 2.8,
       enabled: true,
       payload: this.payloadFor(prop, interior, x, z),
     });
@@ -432,7 +347,7 @@ export class InteriorScene implements InteriorLoader {
 
   private payloadFor(prop: InteriorProp, interior: InteriorDef, x: number, z: number): InteractionPayload {
     if (prop.action === 'sentar') {
-      return { type: 'assento', seat: { x, y: this.floorY + 0.6, z, heading: 0 } };
+      return { type: 'assento', seat: { x, y: this.floorY + prop.floor * FLOOR_HEIGHT + 0.6, z, heading: 0 } };
     }
     if (prop.action === 'conversar') {
       const resolved = this.options.resolvePerson?.(interior.residents[0] ?? prop.id, prop);
@@ -446,52 +361,69 @@ export class InteriorScene implements InteriorLoader {
     };
   }
 
-  /* -------------------------------- escada ------------------------------ */
+  /**
+   * Mobília genérica, para ambientes sem acabamento próprio.
+   *
+   * Não tenta ser bonita: tenta ser **sólida e presente**, para que um
+   * interior recém-declarado já tenha volume, sombra e algo em que
+   * esbarrar enquanto ninguém o decorou.
+   */
+  private buildGenericProp(build: InteriorBuild, prop: InteriorProp): void {
+    const palette = build.palette;
+    const rng = createRng(prop.id.length * 131 + prop.x * 7 + prop.z * 13);
+    const place = build.at(prop.x, prop.z, 0);
 
-  private buildStairs(bounds: { cx: number; cz: number; maxX: number; maxZ: number }, origin: { x: number; z: number }, interior: InteriorDef): void {
-    const materials = this.options.materials;
-    const x = origin.x + bounds.maxX - 2;
-    const z = origin.z + bounds.maxZ - 2;
-    const batch = new GeometryBatcher();
-    for (let i = 0; i < 10; i += 1) {
-      const step = new THREE.BoxGeometry(1.8, 0.16, 0.4);
-      batch.add(step, materials.stone, new THREE.Matrix4().makeTranslation(x, this.floorY + 0.16 + i * 0.3, z - i * 0.4));
+    switch (prop.action) {
+      case 'sentar': {
+        const wide = /cama|sofá|sofa/i.test(prop.name);
+        place.box(wide ? 2.0 : 1.3, 0.24, wide ? 1.7 : 1.1, palette.fabric, 0, 0.46, 0);
+        place.box(wide ? 2.0 : 1.3, 0.62, 0.2, palette.wood, 0, 0.78, -(wide ? 0.78 : 0.48));
+        for (const sx of [-1, 1]) for (const sz of [-1, 1]) place.cyl(0.06, 0.06, 0.36, 8, palette.chrome, sx * 0.5, 0.18, sz * 0.42);
+        place.solid(wide ? 1.0 : 0.66, wide ? 0.86 : 0.56, 0.8, prop.id);
+        break;
+      }
+      case 'comprar': {
+        place.box(2.6, 1.0, 1.1, palette.gloss, 0, 0.5, 0);
+        place.box(2.8, 0.08, 1.25, palette.trim, 0, 1.03, 0);
+        place.box(2.4, 0.08, 0.04, palette.neonAqua, 0, 0.3, 0.56);
+        place.solid(1.4, 0.6, 1.08, prop.id);
+        break;
+      }
+      case 'olhar': {
+        place.box(1.9, 2.0, 0.44, palette.woodDark, 0, 1.0, 0);
+        for (let i = 0; i < 3; i += 1) {
+          place.box(1.8, 0.06, 0.4, palette.wood, 0, 0.52 + i * 0.5, 0.02);
+          for (let k = 0; k < 4; k += 1) {
+            const s = randRange(rng, 0.12, 0.22);
+            place.box(s, s * 1.9, s, k % 2 ? palette.glossAqua : palette.glossRose, -0.72 + k * 0.48, 0.62 + i * 0.5 + s, 0.06);
+          }
+        }
+        place.solid(0.95, 0.22, 2.0, prop.id);
+        break;
+      }
+      case 'conversar': {
+        place.cyl(0.78, 0.84, 0.07, 20, palette.neonAqua, 0, 0.04, 0);
+        place.cyl(0.6, 0.6, 0.02, 20, palette.gloss, 0, 0.08, 0);
+        break;
+      }
+      case 'usar': {
+        place.box(1.5, 0.9, 1.1, palette.aluminium, 0, 0.45, 0);
+        place.box(1.3, 0.06, 0.9, palette.trim, 0, 0.93, 0);
+        place.box(0.8, 0.5, 0.04, palette.screen, 0, 1.25, -0.2);
+        place.solid(0.78, 0.58, 1.2, prop.id);
+        break;
+      }
+      default: {
+        for (let i = 0; i < 6; i += 1) {
+          place.box(1.7, 0.16, 0.44, palette.floorLight, 0, 0.17 + i * 0.3, -1.2 + i * 0.44);
+          place.walkable(0.85, 0.22, 0.25 + i * 0.3, `degrau:${prop.id}:${i}`, 0, -1.2 + i * 0.44);
+        }
+        break;
+      }
     }
-    const mesh = batch.build(`interior:escada:${interior.id}`, { castShadow: true, receiveShadow: true });
-    mesh.traverse((object) => {
-      const m = object as THREE.Mesh;
-      if (m.geometry) this.geometries.add(m.geometry);
-    });
-    this.group.add(mesh);
-
-    this.interactables.push({
-      id: `interior:${interior.id}:escada`,
-      name: 'Escada',
-      action: 'Subir',
-      position: new THREE.Vector3(x, this.floorY + 1, z),
-      range: 2.8,
-      enabled: true,
-      payload: {
-        type: 'placa',
-        title: 'Escada',
-        paragraphs: [`${interior.name} tem ${interior.floors} andares. Os outros ainda não têm móveis colocados — por enquanto, só o térreo está montado.`],
-      },
-    });
   }
 }
 
-function boundsOf(rooms: readonly InteriorRoom[]): { cx: number; cz: number; maxX: number; maxZ: number } {
-  if (rooms.length === 0) return { cx: 0, cz: 0, maxX: 0, maxZ: 0 };
-  let minX = Infinity;
-  let minZ = Infinity;
-  let maxX = -Infinity;
-  let maxZ = -Infinity;
-  for (const room of rooms) {
-    minX = Math.min(minX, room.x);
-    minZ = Math.min(minZ, room.z);
-    maxX = Math.max(maxX, room.x + room.w);
-    maxZ = Math.max(maxZ, room.z + room.d);
-  }
-  return { cx: (minX + maxX) / 2, cz: (minZ + maxZ) / 2, maxX, maxZ };
-}
-
+/** Reexportado para quem precise medir a altura de um andar. */
+export { FLOOR_HEIGHT };
+export type { InteriorRoom };

@@ -80,10 +80,37 @@ export class PhysicsWorld {
   /** Raio do limite jogável (0 = sem limite). */
   boundaryRadius = 0;
 
+  /**
+   * Piso do interior em que o jogador está, ou `null` ao ar livre.
+   *
+   * Interiores são montados a milhares de metros do terreno, e duas
+   * regras do mundo aberto não fazem sentido lá dentro:
+   *
+   * - **o relevo**, que a essa distância vale vários metros negativos e
+   *   fazia o motor concluir que o jogador estava submerso (é a origem
+   *   do bug de "nadar dentro do prédio");
+   * - **o limite jogável**, um círculo centrado em (0,0) que arrancava
+   *   o jogador de dentro da sala no primeiro passo.
+   *
+   * Com o modo interior ligado, o chão base é o piso do prédio e o
+   * limite circular não se aplica. Quem delimita passa a ser a parede.
+   */
+  private indoorFloor: number | null = null;
+
   constructor(private heightSampler: HeightSampler) {}
 
   setHeightSampler(sampler: HeightSampler): void {
     this.heightSampler = sampler;
+  }
+
+  /** Liga o modo interior com o piso dado, ou desliga com `null`. */
+  setIndoor(floorY: number | null): void {
+    this.indoorFloor = floorY;
+  }
+
+  /** `true` enquanto a física está servindo um interior. */
+  get indoor(): boolean {
+    return this.indoorFloor !== null;
   }
 
   get colliderCount(): number {
@@ -209,10 +236,15 @@ export class PhysicsWorld {
    * `stepHeight` acima dos pés — acima disso é parede, não degrau.
    */
   groundAt(x: number, z: number, feetY: number, stepHeight: number, out: GroundInfo): GroundInfo {
-    const terrain = this.heightSampler.getHeight(x, z);
+    // Dentro de um prédio não há relevo: o chão base é o piso térreo.
+    // Os andares de cima continuam vindo dos colisores caminháveis
+    // abaixo, então cair por um vão de escada deixa o jogador no térreo
+    // em vez de atravessar o mundo.
+    const indoors = this.indoorFloor !== null;
+    const terrain = indoors ? (this.indoorFloor as number) : this.heightSampler.getHeight(x, z);
     out.height = terrain;
     out.onPlatform = false;
-    out.surface = this.heightSampler.getSurface ? this.heightSampler.getSurface(x, z) : 'grass';
+    out.surface = indoors ? 'stone' : this.heightSampler.getSurface ? this.heightSampler.getSurface(x, z) : 'grass';
 
     const list = this.cells.get(cellKey(Math.floor(x / CELL_SIZE), Math.floor(z / CELL_SIZE)));
     if (!list) return out;
@@ -261,7 +293,9 @@ export class PhysicsWorld {
       collided = true;
     }
 
-    if (this.boundaryRadius > 0) {
+    // O limite do mundo é um círculo em volta da região. Lá dentro ele
+    // não vale: quem segura o jogador são as paredes do prédio.
+    if (this.boundaryRadius > 0 && this.indoorFloor === null) {
       const limit = this.boundaryRadius - radius;
       const d = Math.hypot(pos.x, pos.z);
       if (d > limit) {
@@ -276,6 +310,7 @@ export class PhysicsWorld {
 
   /** `true` se o ponto está a menos de `margin` do limite jogável. */
   isNearBoundary(x: number, z: number, margin: number): boolean {
+    if (this.indoorFloor !== null) return false;
     return this.boundaryRadius > 0 && Math.hypot(x, z) > this.boundaryRadius - margin;
   }
 
