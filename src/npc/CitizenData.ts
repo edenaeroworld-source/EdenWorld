@@ -427,6 +427,24 @@ const PERIOD_LINES: Record<DayPeriod, readonly string[]> = {
   noite: ['Boa noite! Repare no néon, acabou de acender.', 'À noite Aurora vira outra cidade. Gosto mais assim.', 'Boa noite por aqui.'],
 };
 
+/** Respostas a um aceno do jogador. */
+const WAVE_BACK: readonly string[] = [
+  'Oi! Bom te ver por aqui.',
+  'Ei! Bom passeio por Aurora.',
+  'Tchau! Aparece de novo.',
+  'Oi, oi! Até a próxima.',
+];
+
+/**
+ * Resposta a um aceno.
+ * A escolha é estável por pessoa: a mesma sempre responde igual.
+ */
+export function citizenWaveBack(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i += 1) hash = (hash * 31 + name.charCodeAt(i)) % 9973;
+  return WAVE_BACK[hash % WAVE_BACK.length];
+}
+
 /** Saudação contextual de um cidadão (período, clima, lugar e nome). */
 export function citizenGreeting(profile: CitizenProfile, context: GreetingContext): string[] {
   const rng = context.rng ?? createRng(profile.seed * 31 + Math.floor(Date.now() / 60000));

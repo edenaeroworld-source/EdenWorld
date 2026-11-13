@@ -139,6 +139,8 @@ const AERION: EdenCharacter = {
     nodes: [
       {
         id: 'primeira',
+        mood: 'feliz',
+        gesture: 'cumprimentar',
         text: [
           'Seja bem-vindo(a) a Aurora City. Eu sou Aérion.',
           'Sim: este Éden é meu. Mas ser criador não me dá o direito de decidir quem você vai ser aqui.',
@@ -157,6 +159,8 @@ const AERION: EdenCharacter = {
       },
       {
         id: 'eden',
+        mood: 'neutra',
+        gesture: 'apontar',
         text: [
           'O Éden Aero é uma civilização de cerca de dez trilhões de habitantes espalhados por muitas cidades.',
           'Aqui o vidro cresce junto com a folha. A água atravessa a arquitetura. Um holograma pode florescer.',
@@ -169,6 +173,7 @@ const AERION: EdenCharacter = {
       },
       {
         id: 'concurso',
+        mood: 'animada',
         text: [
           'A cada cem anos do Éden acontece o Concurso Divino.',
           'Quem vence recebe vida infinita, escolhe um domínio e passa a fazer parte do panteão.',
@@ -178,6 +183,7 @@ const AERION: EdenCharacter = {
       },
       {
         id: 'caminhar',
+        mood: 'pensativa',
         text: [
           'Porque um criador distante vira estátua, e estátua não escuta.',
           'Eu gosto de ver a cidade pelos olhos de quem acabou de chegar. Você repara em coisas que eu já nem vejo.',
@@ -186,6 +192,8 @@ const AERION: EdenCharacter = {
       },
       {
         id: 'conselho',
+        mood: 'feliz',
+        gesture: 'apontar',
         text: [
           'Suba ao Mirante Celeste ao fim da tarde. Depois volte à praça quando a noite acender os letreiros.',
           'E converse com o panteão: Haru nos sistemas, Nexara nas redes, Suki-Chan no jardim de vidro, Luma no ateliê, Maze na água, Saturno com os bichos, Lilly no palco, Akemi no mercado, Júpiter na galeria e Amara no alto do mirante.',
@@ -194,6 +202,8 @@ const AERION: EdenCharacter = {
       },
       {
         id: 'reencontro',
+        mood: 'feliz',
+        gesture: 'acenar',
         text: ['De volta. O que Aurora City te mostrou desta vez?'],
         choices: [
           { label: 'Fale do Éden Aero', to: 'eden' },
@@ -243,6 +253,8 @@ const HARU: EdenCharacter = {
     nodes: [
       {
         id: 'primeira',
+        mood: 'curiosa',
+        gesture: 'acenar',
         text: [
           'Oi. Eu sou Haru.',
           'print:("Hello Eden") — é a primeira linha que todo sistema daqui executa. Inclusive o seu EdenPhone.',
@@ -261,6 +273,8 @@ const HARU: EdenCharacter = {
       },
       {
         id: 'edenos',
+        mood: 'neutra',
+        gesture: 'apontar',
         text: [
           'O EdenOS não é só um sistema operacional: é a infraestrutura viva do Éden Aero.',
           'Ele liga aparelhos, serviços, transporte, jardins automáticos e o seu EdenPhone na mesma malha.',
@@ -273,6 +287,7 @@ const HARU: EdenCharacter = {
       },
       {
         id: 'embreve',
+        mood: 'pensativa',
         text: [
           'Alguns serviços dependem de servidores que ainda não existem nesta versão de Aurora City.',
           'Prefiro que o seu aparelho diga "em breve" a fingir que está on-line. Sistema que mente é sistema quebrado.',
@@ -281,6 +296,7 @@ const HARU: EdenCharacter = {
       },
       {
         id: 'bluebloom',
+        mood: 'triste',
         text: [
           'BlueBloom foi uma corrupção que começou na tecnologia BET e se espalhou por falhas do EdenOS e dos Afters.',
           'Aurora City foi a principal área afetada: interfaces florescendo sozinhas, auras azuis presas em loop, gente sem conseguir desligar o próprio brilho.',
@@ -293,6 +309,8 @@ const HARU: EdenCharacter = {
       },
       {
         id: 'bluebloom2',
+        mood: 'neutra',
+        gesture: 'concordar',
         text: [
           'Hoje é história — e acervo. Está registrado no EdenReads, no seu EdenPhone.',
           'A cidade ficou mais cuidadosa: todo Afters tem desligamento manual, e todo estado visual tem log.',
@@ -302,6 +320,8 @@ const HARU: EdenCharacter = {
       },
       {
         id: 'sobre',
+        mood: 'neutra',
+        gesture: 'pensar',
         text: [
           'Pode. Eu sou autista — a primeira do panteão.',
           'Funciono melhor com conversa direta: pergunta clara, resposta clara. Se o ambiente ficar barulhento demais eu aviso e faço uma pausa, e isso não é desinteresse.',
@@ -311,6 +331,8 @@ const HARU: EdenCharacter = {
       },
       {
         id: 'reencontro',
+        mood: 'feliz',
+        gesture: 'acenar',
         text: ['Oi de novo. Sistemas estáveis, Aurora respirando.'],
         choices: [
           { label: 'Fale do EdenOS', to: 'edenos' },
@@ -357,6 +379,8 @@ const NEXARA: EdenCharacter = {
     nodes: [
       {
         id: 'primeira',
+        mood: 'curiosa',
+        gesture: 'cumprimentar',
         text: [
           'Oi! Nexara. Eu cuido das redes daqui.',
           'Já viu o EdenGram, o EdenTalk e o EdenFeed no seu EdenPhone? Eles funcionam — só não estão on-line ainda.',
@@ -375,6 +399,8 @@ const NEXARA: EdenCharacter = {
       },
       {
         id: 'local',
+        mood: 'neutra',
+        gesture: 'apontar',
         text: [
           'O Éden Connect — a conta única que liga todo mundo — ainda não abriu nesta cidade.',
           'Então o seu EdenGram guarda as suas fotos no seu aparelho, e o EdenTalk só tem quem você conheceu pessoalmente.',
@@ -384,6 +410,7 @@ const NEXARA: EdenCharacter = {
       },
       {
         id: 'feed',
+        mood: 'feliz',
         text: [
           'O EdenFeed é a batida do coração da cidade: hora, clima, o que abriu, o que você descobriu.',
           'Em Bitnara ele vira lista de shows. Em SkyStones, grade de festival. Aqui, ele conta Aurora para você.',
@@ -392,6 +419,8 @@ const NEXARA: EdenCharacter = {
       },
       {
         id: 'bluebloom',
+        mood: 'pensativa',
+        gesture: 'concordar',
         text: [
           'Trabalhei. A BlueBloom se espalhou rápido porque passou pelas redes antes de chegar nos corpos.',
           'Eu isolei a propagação; Haru reescreveu o estado dos Afters. Fechamos a investigação com a cura em 100%.',
@@ -401,6 +430,8 @@ const NEXARA: EdenCharacter = {
       },
       {
         id: 'reencontro',
+        mood: 'feliz',
+        gesture: 'concordar',
         text: ['Ei! Alguma foto nova no EdenGram?'],
         choices: [
           { label: 'Fale do EdenFeed', to: 'feed' },
@@ -448,6 +479,8 @@ const SUKI: EdenCharacter = {
     nodes: [
       {
         id: 'primeira',
+        mood: 'animada',
+        gesture: 'acenar',
         text: [
           'Olá! Suki-Chan. Dou aula aqui na Estufa Celeste.',
           'Se você acabou de chegar ao Éden Aero, tem algumas coisas sobre a vida daqui que vale a pena saber.',
@@ -466,6 +499,8 @@ const SUKI: EdenCharacter = {
       },
       {
         id: 'vida',
+        mood: 'feliz',
+        gesture: 'rir',
         text: [
           'Um habitante do Éden costuma viver até 200 anos, e envelhece de forma harmoniosa — o corpo acompanha o tempo sem pressa.',
           'A gestação dura 100 meses. Parece muito? É o tempo de quem nasce já chegar com desenvolvimento físico equivalente a uns 14 anos da Terra.',
@@ -476,6 +511,8 @@ const SUKI: EdenCharacter = {
       },
       {
         id: 'populacao',
+        mood: 'surpresa',
+        gesture: 'surpresa',
         text: [
           'Cerca de dez trilhões de habitantes, espalhados por todas as cidades do Éden Aero.',
           'Aurora City é só uma delas. Tem Bitnara, SkyStones, Rosas Park, Cidade da Liberdade, Noureja Nether, Jardim Proibido…',
@@ -484,6 +521,8 @@ const SUKI: EdenCharacter = {
       },
       {
         id: 'escola',
+        mood: 'feliz',
+        gesture: 'aplaudir',
         text: [
           'Botânica aplicada, engenharia de materiais vivos, história do Éden e ética de tecnologia corporal.',
           'Depois da BlueBloom, ética virou matéria obrigatória. Entender o que a gente liga no próprio corpo é parte da educação.',
@@ -492,6 +531,8 @@ const SUKI: EdenCharacter = {
       },
       {
         id: 'reencontro',
+        mood: 'animada',
+        gesture: 'aplaudir',
         text: ['Que bom te ver! Alguma dúvida nova?'],
         choices: [
           { label: 'Fale da vida no Éden', to: 'vida' },
@@ -544,6 +585,8 @@ const LUMA: EdenCharacter = {
     nodes: [
       {
         id: 'primeira',
+        mood: 'feliz',
+        gesture: 'cumprimentar',
         text: [
           'Oi, querida pessoa. Eu sou Luma, e este é o Ateliê Aero.',
           'Aqui a gente trata aparência como linguagem: silhueta, luz, cor, presença.',
@@ -562,6 +605,8 @@ const LUMA: EdenCharacter = {
       },
       {
         id: 'afters',
+        mood: 'animada',
+        gesture: 'apontar',
         text: [
           'Afters é a nossa família de produtos: AfterBust®, AfterCurve®, GelGrow®, CandyGrow®, AfterLove e AfterVelvet.',
           'Os dois primeiros mudam a silhueta do seu avatar de verdade: AfterBust® trabalha a parte de cima, AfterCurve® a de baixo. De 0% a 250%, cada um no seu controle, juntos ou separados.',
@@ -579,6 +624,8 @@ const LUMA: EdenCharacter = {
       },
       {
         id: 'desligar',
+        mood: 'neutra',
+        gesture: 'concordar',
         text: [
           'Um toque. Desligamento manual é lei desde a BlueBloom.',
           'Ninguém no Éden fica preso a um efeito que não escolheu continuar usando.',
@@ -587,6 +634,7 @@ const LUMA: EdenCharacter = {
       },
       {
         id: 'bet',
+        mood: 'curiosa',
         text: [
           'BET quer dizer Body Expansion Tech: a área que cuida de ampliar expressão corporal com tecnologia.',
           'No Éden isso é tratado com a mesma seriedade de arquitetura ou medicina. Tem norma, tem ética, tem aula na escola de Suki-Chan.',
@@ -595,6 +643,8 @@ const LUMA: EdenCharacter = {
       },
       {
         id: 'visual',
+        mood: 'animada',
+        gesture: 'rir',
         text: [
           'O Ateliê Aero é todo seu: entre na Estação de Estilo ali atrás e mude o que quiser.',
           'Cabelo, cor, roupa, altura, acessório. Quantas vezes você quiser, sem custo nenhum.',
@@ -603,6 +653,8 @@ const LUMA: EdenCharacter = {
       },
       {
         id: 'reencontro',
+        mood: 'feliz',
+        gesture: 'acenar',
         text: ['Olha quem voltou! Como está a sua presença hoje?'],
         choices: [
           { label: 'Fale dos Afters', to: 'afters' },
@@ -650,6 +702,8 @@ const LILLY: EdenCharacter = {
     nodes: [
       {
         id: 'primeira',
+        mood: 'feliz',
+        gesture: 'cumprimentar',
         text: ['Oi! Lilly. Estou medindo a acústica do Palco Aurora.', 'Som bom não é som alto: é som que cabe no lugar.'],
         effects: [
           { kind: 'contato', id: 'lilly' },
@@ -665,6 +719,8 @@ const LILLY: EdenCharacter = {
       },
       {
         id: 'show',
+        mood: 'animada',
+        gesture: 'aplaudir',
         text: [
           'O palco está pronto, a cidade ainda não tem data marcada.',
           'Quando os shows de Aurora entrarem no calendário, o seu EdenPhone avisa no EdenFeed. Nada de promessa vazia.',
@@ -673,6 +729,7 @@ const LILLY: EdenCharacter = {
       },
       {
         id: 'bitnara',
+        mood: 'animada',
         text: [
           'Bitnara é a capital oficial do K-pop do Éden: arenas, estúdios, academias de dança, empresas de entretenimento, ruas inteiras tematizadas.',
           'A abertura oficial é em 14 de novembro de 2026. Vai ser enorme.',
@@ -682,6 +739,7 @@ const LILLY: EdenCharacter = {
       },
       {
         id: 'skystones',
+        mood: 'curiosa',
         text: [
           'SkyStones é a capital do rock: casas de show grandes, estúdios de gravação, chão de festival e muita história ao vivo.',
           'É o oposto de Bitnara no estilo e igualzinha no coração.',
@@ -690,6 +748,8 @@ const LILLY: EdenCharacter = {
       },
       {
         id: 'reencontro',
+        mood: 'feliz',
+        gesture: 'concordar',
         text: ['Você de novo! Trouxe ouvido bom?'],
         choices: [
           { label: 'Fale de Bitnara', to: 'bitnara' },
@@ -736,6 +796,8 @@ const AKEMI: EdenCharacter = {
     nodes: [
       {
         id: 'primeira',
+        mood: 'surpresa',
+        gesture: 'acenar',
         text: ['Oooi! Akemi-Chan, muito prazer!', 'Montei banca aqui no Mercado Éden hoje. Em casa, na Cidade da Liberdade, a rua inteira é assim.'],
         effects: [
           { kind: 'contato', id: 'akemi' },
@@ -750,6 +812,7 @@ const AKEMI: EdenCharacter = {
       },
       {
         id: 'liberdade',
+        mood: 'animada',
         text: [
           'Distrito de anime e mangá, galeria de arte, centro de convenções, comunidade criativa, instalação pública em cada esquina.',
           'É onde quem cria encontra quem gosta. Barulhenta do jeito bom.',
@@ -758,6 +821,8 @@ const AKEMI: EdenCharacter = {
       },
       {
         id: 'edencon',
+        mood: 'curiosa',
+        gesture: 'surpresa',
         text: [
           'A convenção dos fãs e criadores do Éden: estandes, painéis, cosplay, lançamento.',
           'Ainda não tem data marcada nesta cidade — quando tiver, aparece no EdenFeed. Eu não dou spoiler de data falsa.',
@@ -766,6 +831,8 @@ const AKEMI: EdenCharacter = {
       },
       {
         id: 'reencontro',
+        mood: 'feliz',
+        gesture: 'acenar',
         text: ['Voltou! Trouxe novidade?'],
         choices: [
           { label: 'Fale da Cidade da Liberdade', to: 'liberdade' },
@@ -814,6 +881,8 @@ const SATURNO: EdenCharacter = {
     nodes: [
       {
         id: 'primeira',
+        mood: 'neutra',
+        gesture: 'cumprimentar',
         text: ['Oi, chegue perto devagar — tem bicho dormindo ali dentro.', 'Eu sou Saturno. Cuido dos animais do Éden.'],
         effects: [
           { kind: 'contato', id: 'saturno' },
@@ -828,6 +897,7 @@ const SATURNO: EdenCharacter = {
       },
       {
         id: 'pawl',
+        mood: 'pensativa',
         text: [
           'EdenPawl é o ecossistema de cuidado animal do Éden: abrigo, saúde, adoção e companhia.',
           'Nesta Aurora City a Casa já existe, mas os companheiros de verdade ainda não foram liberados. Prefiro esperar a fazer mal feito.',
@@ -836,6 +906,8 @@ const SATURNO: EdenCharacter = {
       },
       {
         id: 'origem',
+        mood: 'pensativa',
+        gesture: 'pensar',
         text: [
           'Sim. Sou a primeira filha de Adão e Eva.',
           'Cresci vendo o Éden aprender a conviver com o que não é humano. Alguém tinha que ficar desse lado da conversa.',
@@ -844,6 +916,8 @@ const SATURNO: EdenCharacter = {
       },
       {
         id: 'reencontro',
+        mood: 'neutra',
+        gesture: 'concordar',
         text: ['Ei! Hoje está calmo por aqui.'],
         choices: [
           { label: 'Fale do EdenPawl', to: 'pawl' },
@@ -889,6 +963,8 @@ const MAZE: EdenCharacter = {
     nodes: [
       {
         id: 'primeira',
+        mood: 'feliz',
+        gesture: 'acenar',
         text: ['Shh. Escuta a água por um segundo.', '…pronto. Oi, eu sou Maze. Cuido do verde do Éden.'],
         effects: [
           { kind: 'contato', id: 'maze' },
@@ -903,6 +979,8 @@ const MAZE: EdenCharacter = {
       },
       {
         id: 'convivencia',
+        mood: 'neutra',
+        gesture: 'concordar',
         text: [
           'No Éden a gente planta primeiro e constrói depois. O prédio se encaixa na raiz, não o contrário.',
           'Esse lago alimenta o rio que atravessa o parque até o mar. Tudo o que Aurora bebe passa por aqui.',
@@ -911,6 +989,8 @@ const MAZE: EdenCharacter = {
       },
       {
         id: 'jardim',
+        mood: 'curiosa',
+        gesture: 'apontar',
         text: [
           'Vegetação densa, estruturas antigas, plantas bioluminescentes, cachoeiras e caminhos que só aparecem para quem anda devagar.',
           'É região de exploração — e de respeito. Saturno vai junto quando tem bicho envolvido.',
@@ -920,6 +1000,8 @@ const MAZE: EdenCharacter = {
       },
       {
         id: 'reencontro',
+        mood: 'feliz',
+        gesture: 'apontar',
         text: ['De volta ao parque? Ótima escolha.'],
         choices: [
           { label: 'Fale do Jardim Proibido', to: 'jardim' },
@@ -966,6 +1048,8 @@ const JUPITER: EdenCharacter = {
     nodes: [
       {
         id: 'primeira',
+        mood: 'feliz',
+        gesture: 'cumprimentar',
         text: ['Pare aí. Essa luz em você está ótima.', 'Júpiter. Arte e criação estética. Prazer.'],
         effects: [
           { kind: 'contato', id: 'jupiter' },
@@ -980,6 +1064,8 @@ const JUPITER: EdenCharacter = {
       },
       {
         id: 'galeria',
+        mood: 'animada',
+        gesture: 'apontar',
         text: [
           'Holografia, pintura com luz e instalações que mudam de forma conforme o sol anda.',
           'Nenhuma obra do Éden fica igual o dia inteiro. Isso é proposital.',
@@ -988,6 +1074,8 @@ const JUPITER: EdenCharacter = {
       },
       {
         id: 'estetica',
+        mood: 'feliz',
+        gesture: 'rir',
         text: [
           'Vidro transparente, cristal translúcido, água refletindo, gradiente suave, bolha no ar, verde por toda parte.',
           'E à noite Aurora troca de pele: néon rosa, violeta e laranja. A gente chama de Vice Éden.',
@@ -997,6 +1085,8 @@ const JUPITER: EdenCharacter = {
       },
       {
         id: 'reencontro',
+        mood: 'feliz',
+        gesture: 'rir',
         text: ['Voltou! A luz mudou desde a última vez.'],
         choices: [
           { label: 'Fale da estética do Éden', to: 'estetica' },
@@ -1042,6 +1132,8 @@ const AMARA: EdenCharacter = {
     nodes: [
       {
         id: 'primeira',
+        mood: 'feliz',
+        gesture: 'cumprimentar',
         text: ['Daqui dá para ver a cidade inteira respirando.', 'Eu sou Amara. Já ouviu falar de mim, provavelmente — e provavelmente ouviu errado.'],
         effects: [
           { kind: 'contato', id: 'amara' },
@@ -1056,6 +1148,8 @@ const AMARA: EdenCharacter = {
       },
       {
         id: 'dominio',
+        mood: 'neutra',
+        gesture: 'concordar',
         text: [
           'Essa é a pergunta que todo mundo faz primeiro.',
           'Cada cidade do Éden conta uma versão diferente da minha história, e nenhuma delas é oficial ainda.',
@@ -1065,6 +1159,8 @@ const AMARA: EdenCharacter = {
       },
       {
         id: 'vista',
+        mood: 'pensativa',
+        gesture: 'apontar',
         text: [
           'Daqui eu vejo o Distrito Cristal de manhã, a Orla Cristalina ao meio-dia e o néon começando por volta das sete.',
           'Vejo gente mudando de ideia sobre o próprio caminho o tempo todo. É a parte bonita.',
@@ -1073,6 +1169,7 @@ const AMARA: EdenCharacter = {
       },
       {
         id: 'reencontro',
+        mood: 'feliz',
         text: ['A vista continua boa. Você também.'],
         choices: [
           { label: 'Fale da vista', to: 'vista' },

@@ -1,7 +1,9 @@
 import { AREAS } from '../cities/aurora-city/Layout';
+import { archetypePersona } from '../characters/Personas';
 import { clamp01, dampAngle, type Rng } from '../utils/math';
 import type { DayPeriod } from '../world/WorldClock';
 import type { CitizenProfile } from './CitizenData';
+import { NpcLife } from './NpcLife';
 import type { WalkNetwork } from './WalkNetwork';
 
 /**
@@ -24,9 +26,13 @@ const PAUSE_MIN = 2.5;
 const PAUSE_MAX = 9;
 /** Distância (m) para considerar que chegou ao nó. */
 const ARRIVE_EPSILON = 0.35;
+/** Rapidez com que a pessoa se vira para quem puxou conversa. */
+const TURN_RATE = 6;
 
 export class CitizenSim {
   readonly profile: CitizenProfile;
+  /** Expressão, gestos e atenção desta pessoa (sobrevive ao avatar). */
+  readonly life: NpcLife;
   x = 0;
   z = 0;
   y = 0;
@@ -42,6 +48,8 @@ export class CitizenSim {
   private route: number[] = [];
   private pauseTimer = 0;
   private talkTimer = 0;
+  /** Direção que a pessoa está buscando enquanto conversa. */
+  private facing: number | null = null;
   private goalArea: string | null = null;
   private repathTimer = 0;
 
@@ -53,6 +61,7 @@ export class CitizenSim {
     private readonly options: CitizenSimOptions = {},
   ) {
     this.profile = profile;
+    this.life = new NpcLife(archetypePersona(profile.archetype.id), profile.seed);
     this.node = startNode;
     this.target = startNode;
     const node = network.node(startNode);
@@ -89,11 +98,35 @@ export class CitizenSim {
     }
   }
 
-  /** Interrompe a caminhada para conversar com o jogador. */
+  /**
+   * Interrompe a caminhada para conversar.
+   *
+   * A pessoa não gira de uma vez: ela guarda a direção de quem chamou e
+   * se vira em alguns décimos de segundo, como alguém que ouve o próprio
+   * nome. Enquanto a conversa dura, ela continua acompanhando o ponto.
+   */
   startTalking(lookAtX: number, lookAtZ: number, seconds = 6): void {
     this.activity = 'conversando';
     this.talkTimer = seconds;
-    this.heading = Math.atan2(lookAtX - this.x, lookAtZ - this.z);
+    this.facing = Math.atan2(lookAtX - this.x, lookAtZ - this.z);
+  }
+
+  /** Atualiza o ponto que a pessoa encara sem reiniciar a conversa. */
+  faceTowards(x: number, z: number): void {
+    this.facing = Math.atan2(x - this.x, z - this.z);
+  }
+
+  /** Prolonga a conversa (o jogador continua lendo). */
+  keepTalking(seconds: number): void {
+    if (seconds > this.talkTimer) this.talkTimer = seconds;
+    this.activity = 'conversando';
+  }
+
+  /** Encerra a conversa agora e devolve a pessoa à rotina. */
+  stopTalking(): void {
+    this.talkTimer = 0;
+    this.facing = null;
+    this.activity = 'andando';
   }
 
   private pickNextTarget(): void {
@@ -109,13 +142,19 @@ export class CitizenSim {
     if (this.talkTimer > 0) {
       this.talkTimer -= dt;
       this.speed = 0;
-      if (this.talkTimer <= 0) this.activity = 'andando';
+      if (this.facing !== null) this.heading = dampAngle(this.heading, this.facing, TURN_RATE, dt);
+      if (this.talkTimer <= 0) {
+        this.activity = 'andando';
+        this.facing = null;
+      }
       return;
     }
     if (this.pauseTimer > 0) {
       this.pauseTimer -= dt;
       this.speed = 0;
       this.activity = 'parado';
+      // Parado de papo com alguém: a pessoa se vira para o outro.
+      if (this.facing !== null) this.heading = dampAngle(this.heading, this.facing, TURN_RATE, dt);
       return;
     }
 
@@ -130,6 +169,7 @@ export class CitizenSim {
         this.target = this.route.shift() as number;
       } else {
         this.goalArea = null;
+        this.facing = null;
         if (this.rng() < PAUSE_CHANCE) {
           this.pauseTimer = PAUSE_MIN + this.rng() * (PAUSE_MAX - PAUSE_MIN);
           this.speed = 0;
@@ -156,6 +196,19 @@ export class CitizenSim {
       this.repathTimer = 0;
       if (this.route.length === 0) this.goalArea = null;
     }
+  }
+
+  /** Faz a pessoa parar onde está por alguns segundos (bate-papo). */
+  pause(seconds: number): void {
+    if (this.talkTimer > 0) return;
+    this.pauseTimer = Math.max(this.pauseTimer, seconds);
+    this.speed = 0;
+    this.activity = 'parado';
+  }
+
+  /** `true` quando a pessoa está parada e livre para um bate-papo. */
+  get idleHere(): boolean {
+    return this.talkTimer <= 0 && this.activity !== 'andando';
   }
 
   /** Distância horizontal até um ponto. */

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { AftersBodySystem } from '../afters/AftersBodySystem';
 import { type AftersBody, type AftersChannelId, clampIntensity, fromPercent, getAftersPreset, sanitizeAftersBody, toPercent } from '../afters/AftersState';
 import { PANTHEON, type EdenCharacter } from '../characters/Pantheon';
+import { characterPersona } from '../characters/Personas';
 import type { GameSystem } from '../core/GameSystem';
 import type { Interactable } from '../interactions/Interactable';
 import { Avatar } from '../player/Avatar';
@@ -11,6 +12,7 @@ import { createRng, type Rng } from '../utils/math';
 import type { DayPeriod } from '../world/WorldClock';
 import { citizenAftersId, makeCitizen } from './CitizenData';
 import { CitizenSim } from './CitizenSim';
+import { NpcLife } from './NpcLife';
 import { buildAuroraWalkNetwork, type WalkNetwork } from './WalkNetwork';
 
 /**
@@ -55,6 +57,10 @@ const MAX_SLOTS = 18;
 const DEITY_RANGE = 150;
 /** Distância (m) em que a plaquinha com o nome some. */
 const LABEL_RANGE = 46;
+/** Distância (m) entre dois habitantes para um bate-papo começar. */
+const CHAT_RANGE = 2.6;
+/** Intervalo (s) entre tentativas de formar uma dupla de conversa. */
+const CHAT_INTERVAL = 3.5;
 
 interface VisualSlot {
   /** Criado sob demanda (um por quadro, no máximo). */
@@ -68,6 +74,8 @@ interface VisualSlot {
 
 interface DeityNpc {
   character: EdenCharacter;
+  /** Expressão, gestos e atenção do personagem. */
+  life: NpcLife;
   x: number;
   y: number;
   z: number;
@@ -77,7 +85,6 @@ interface DeityNpc {
   aura: THREE.Mesh | null;
   label: THREE.Sprite | null;
   interactable: Interactable;
-  waveCooldown: number;
   /** Ator Afters do personagem, quando ele usa a tecnologia. */
   aftersId: string | null;
 }
@@ -162,6 +169,7 @@ export class NpcSystem implements GameSystem {
   private visibleRange: number;
   private shadows: boolean;
   private assignTimer = 0;
+  private chatTimer = 0;
   private period: DayPeriod | null = null;
   private routineCursor = 0;
   /** Reconstruções de avatar pendentes (no máximo uma por quadro). */
@@ -233,12 +241,12 @@ export class NpcSystem implements GameSystem {
         y,
         z,
         heading: character.place.heading,
+        life: new NpcLife(characterPersona(character.id), character.id.length * 31 + character.name.length),
         avatar: null,
         animator: new AvatarAnimator(),
         aura: null,
         label: null,
         interactable,
-        waveCooldown: 0,
         aftersId: character.afters ? characterAftersId(character.id) : null,
       });
     }
@@ -457,14 +465,48 @@ export class NpcSystem implements GameSystem {
     return slot?.citizen ?? null;
   }
 
+  /**
+   * Alguém acenou para a cidade: quem está perto e desenhado responde.
+   *
+   * Nem todo mundo acena de volta — cada pessoa tem seu intervalo de
+   * cumprimento e o seu jeito. Uma praça inteira acenando em uníssono
+   * seria estranho.
+   */
+  greetBack(x: number, z: number, range = 12): void {
+    for (const slot of this.slots) {
+      const citizen = slot.citizen;
+      if (!citizen || !slot.avatar) continue;
+      if (citizen.life.inConversation) continue;
+      if (citizen.distanceTo(x, z) > range) continue;
+      citizen.life.greetBack(x, z);
+    }
+    for (const deity of this.deities) {
+      if (deity.life.inConversation) continue;
+      if (Math.hypot(deity.x - x, deity.z - z) > range) continue;
+      deity.life.greetBack(x, z);
+    }
+  }
+
+  /** Vida (expressão, gestos, atenção) de quem está em um ponto de conversa. */
+  lifeOf(interactableId: string): NpcLife | null {
+    return this.citizenOf(interactableId)?.life ?? null;
+  }
+
+  /** Vida de um personagem do panteão. */
+  characterLife(characterId: string): NpcLife | null {
+    return this.deityOf(characterId)?.life ?? null;
+  }
+
   deityOf(characterId: string): DeityNpc | undefined {
     return this.deities.find((deity) => deity.character.id === characterId);
   }
 
-  /** Faz o personagem acenar de volta. */
+  /** Faz o personagem acenar de volta, com o rosto que ele usa para isso. */
   waveBack(characterId: string): void {
     const deity = this.deityOf(characterId);
-    deity?.animator.wave();
+    if (!deity) return;
+    deity.life.setExpression(deity.life.persona.greetMood);
+    deity.life.request('acenar', deity.life.persona.energy);
   }
 
   /** Posição do personagem no mundo (para câmera e olhares). */
@@ -558,6 +600,13 @@ export class NpcSystem implements GameSystem {
       this.assignVisuals();
     }
 
+    // 3b. Duplas de conversa entre habitantes (de poucos em poucos segundos).
+    this.chatTimer += dt;
+    if (this.chatTimer >= CHAT_INTERVAL) {
+      this.chatTimer = 0;
+      this.pairChats();
+    }
+
     // 4. Uma reconstrução de avatar por quadro (evita engasgos).
     const next = this.pending.shift();
     if (next && next.slot.citizen === next.citizen) {
@@ -580,6 +629,11 @@ export class NpcSystem implements GameSystem {
         if (!citizen) slot.interactable.enabled = false;
         continue;
       }
+      // A vida da pessoa decide; o avatar só executa.
+      const distance = citizen.distanceTo(focus.x, focus.z);
+      citizen.life.update(dt, { playerX: focus.x, playerZ: focus.z, distance, period: this.period, visible: true });
+      this.perform(slot.animator, slot.avatar, citizen.life, citizen.x, citizen.z, citizen.heading);
+
       const pose = slot.animator.update(dt, {
         state: citizen.activity === 'andando' && citizen.speed > 0.15 ? (citizen.speed > 2.4 ? 'run' : 'walk') : 'idle',
         speed: citizen.speed,
@@ -588,6 +642,7 @@ export class NpcSystem implements GameSystem {
         elapsed,
       });
       slot.avatar.applyPose(pose, elapsed);
+      slot.avatar.updateFace(dt);
       slot.avatar.root.position.set(citizen.x, citizen.y, citizen.z);
       slot.avatar.root.rotation.y = citizen.heading;
       slot.interactable.position.set(citizen.x, citizen.y, citizen.z);
@@ -595,6 +650,78 @@ export class NpcSystem implements GameSystem {
 
     // 6. Panteão.
     this.updateDeities(dt, elapsed);
+  }
+
+  /**
+   * Devolve o avatar do conjunto ao estado neutro.
+   *
+   * Sem isto, a próxima pessoa a usar este avatar herdaria o sorriso (ou
+   * o gesto a meio caminho) de quem saiu de vista.
+   */
+  private resetSlotFace(slot: VisualSlot): void {
+    slot.animator.stopGesture();
+    slot.animator.setTalking(0);
+    slot.animator.clearLook();
+    slot.avatar?.face.reset();
+  }
+
+  /**
+   * Passa a intenção de uma pessoa para o avatar que a desenha.
+   *
+   * Três camadas, todas somadas por cima da locomoção: gesto, olhar e
+   * fala. Nenhuma delas substitui a animação de andar — é por isso que
+   * um habitante pode acenar enquanto atravessa a praça.
+   */
+  private perform(animator: AvatarAnimator, avatar: Avatar, life: NpcLife, x: number, z: number, heading: number): void {
+    const gesture = life.takeGesture();
+    if (gesture) animator.playGesture(gesture.id, { strength: gesture.strength });
+
+    const look = life.lookTarget;
+    if (look) {
+      const yaw = Math.atan2(look.x - x, look.z - z) - heading;
+      animator.lookAt(Math.atan2(Math.sin(yaw), Math.cos(yaw)));
+    } else {
+      animator.clearLook();
+    }
+
+    animator.setTalking(life.talking);
+    avatar.setExpression(life.expression);
+    avatar.setTalking(life.talking);
+  }
+
+  /**
+   * Conversas entre habitantes.
+   *
+   * Só vale para quem está desenhado (no máximo 18 pessoas) e parado:
+   * duas pessoas paradas perto uma da outra começam um papo curto, se
+   * viram e gesticulam. Ninguém interrompe caminhada por isso, e quem
+   * está conversando com o jogador fica de fora.
+   */
+  private pairChats(): void {
+    const candidates: CitizenSim[] = [];
+    for (const slot of this.slots) {
+      const citizen = slot.citizen;
+      if (!citizen || !slot.avatar) continue;
+      if (citizen.life.inConversation || citizen.life.chatting) continue;
+      if (!citizen.idleHere) continue;
+      candidates.push(citizen);
+    }
+    for (let i = 0; i < candidates.length; i++) {
+      const a = candidates[i];
+      if (a.life.chatting) continue;
+      for (let j = i + 1; j < candidates.length; j++) {
+        const b = candidates[j];
+        if (b.life.chatting) continue;
+        if (a.distanceTo(b.x, b.z) > CHAT_RANGE) continue;
+        a.life.startChat(b.x, b.z);
+        b.life.startChat(a.x, a.z);
+        a.faceTowards(b.x, b.z);
+        b.faceTowards(a.x, a.z);
+        a.pause(CHAT_INTERVAL + 3);
+        b.pause(CHAT_INTERVAL + 3);
+        break;
+      }
+    }
   }
 
   private assignVisuals(): void {
@@ -610,6 +737,7 @@ export class NpcSystem implements GameSystem {
     // Libera quem saiu do alcance.
     for (const slot of this.slots) {
       if (slot.citizen && !wanted.has(slot.citizen)) {
+        this.resetSlotFace(slot);
         slot.citizen = null;
         this.releaseSlotAfters(slot);
         if (slot.avatar) slot.avatar.root.visible = false;
@@ -622,6 +750,7 @@ export class NpcSystem implements GameSystem {
       if (assigned.has(entry.citizen)) continue;
       const slot = this.slots.slice(0, this.maxVisible).find((candidate) => candidate.citizen === null);
       if (!slot) break;
+      this.resetSlotFace(slot);
       slot.citizen = entry.citizen;
       // O avatar é reaproveitado: zera a silhueta de quem estava nele.
       this.releaseSlotAfters(slot);
@@ -651,12 +780,8 @@ export class NpcSystem implements GameSystem {
       }
       if (!active) continue;
 
-      // Acena quando o jogador chega perto (com intervalo).
-      deity.waveCooldown -= dt;
-      if (distance < 6 && deity.waveCooldown <= 0 && !deity.animator.isWaving) {
-        deity.animator.wave();
-        deity.waveCooldown = 22;
-      }
+      // Vida própria: cumprimenta quem chega, gesticula, muda de rosto.
+      deity.life.update(dt, { playerX: focus.x, playerZ: focus.z, distance, period: this.period, visible: true });
       // Olha para o jogador quando ele está perto.
       if (distance < 9) {
         const target = Math.atan2(focus.x - deity.x, focus.z - deity.z);
@@ -671,8 +796,10 @@ export class NpcSystem implements GameSystem {
         deity.heading += delta * Math.min(1, dt * 1.2);
       }
 
+      this.perform(deity.animator, deity.avatar, deity.life, deity.x, deity.z, deity.heading);
       const pose = deity.animator.update(dt, { state: 'idle', speed: 0, stridePhase: 0, verticalSpeed: 0, elapsed });
       deity.avatar.applyPose(pose, elapsed);
+      deity.avatar.updateFace(dt);
       deity.avatar.root.position.set(deity.x, deity.y, deity.z);
       deity.avatar.root.rotation.y = deity.heading;
       if (deity.aura) {

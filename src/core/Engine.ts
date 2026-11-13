@@ -8,7 +8,9 @@ import { type DialogueEffect, DialogueRunner, MemoryFlags, type DialogueTree } f
 import { CHARACTER_JOURNAL, PANTHEON, getCharacter } from '../characters/Pantheon';
 import { EdenSocial } from '../edenos/EdenSocial';
 import { libraryFor } from '../edenos/Library';
-import { citizenGreeting } from '../npc/CitizenData';
+import { citizenGreeting, citizenWaveBack } from '../npc/CitizenData';
+import type { CitizenSim } from '../npc/CitizenSim';
+import type { NpcLife } from '../npc/NpcLife';
 import { type AftersCityEvent, NpcSystem } from '../npc/NpcSystem';
 import { DialogueScreen } from '../interface/DialogueScreen';
 import { AREAS, BUILDINGS, PLAZA, SPAWN, areaAt, coastRadius } from '../cities/aurora-city/Layout';
@@ -34,6 +36,7 @@ import { AudioSystem } from '../systems/AudioSystem';
 import { ProgressSystem } from '../systems/ProgressSystem';
 import { type GraphicsSettings, QualitySystem, defaultGraphicsSettings, isQualityLevel, suggestQualityLevel } from '../systems/QualitySystem';
 import { type LoadStatus, type SaveData, SaveSystem, createNewSave, getBrowserStorage } from '../systems/SaveSystem';
+import { CHARACTER_VOICES, VoiceSystem } from '../systems/VoiceSystem';
 import { clamp01, formatDistance, formatDuration, wrapAngle } from '../utils/math';
 import { World } from '../world/World';
 import { Zone } from '../world/ZoneMap';
@@ -132,6 +135,13 @@ function timestamp(): string {
  * Orquestra o jogo: cria os sistemas, conecta-os entre si e conduz o
  * fluxo carregamento → menu → criador de avatar → exploração.
  */
+/**
+ * Quanto tempo (s) o habitante fica de conversa antes de voltar a andar.
+ * É renovado a cada quadro enquanto a caixa de diálogo estiver aberta,
+ * então só conta depois que a conversa acaba ou é interrompida.
+ */
+const CONVERSATION_HOLD = 8;
+
 export class Engine {
   readonly systems = new SystemRegistry();
   private readonly flags: DebugFlags;
@@ -144,6 +154,10 @@ export class Engine {
   private readonly hud: HUD;
   private readonly input: InputManager;
   private readonly audio: AudioSystem;
+  private readonly voice: VoiceSystem;
+  /** Conversa em andamento (quem fala com o jogador agora). */
+  private talking: { citizen: CitizenSim | null; characterId: string | null; life: NpcLife | null } | null = null;
+  private readonly talkTarget = new THREE.Vector3();
   private readonly saveSystem: SaveSystem;
   private readonly quality: QualitySystem;
   private readonly connect: EdenConnectService;
@@ -242,6 +256,11 @@ export class Engine {
     this.ui = new UIManager(uiRoot);
     this.audio = new AudioSystem(this.save.settings.audio, !this.flags.noAudio);
     this.ui.sound = (kind) => this.audio.ui(kind);
+    // Voz: sem dublagem gravada no jogo. O sistema existe para clipes
+    // futuros e para a síntese do navegador, que o jogador liga se quiser.
+    this.voice = new VoiceSystem();
+    for (const [id, profile] of Object.entries(CHARACTER_VOICES)) this.voice.setProfile(id, profile);
+    this.applyVoiceSettings();
     this.input = new InputManager(canvas, uiRoot, this.save.settings.input);
     this.input.keyboard.usePointerLock = this.save.settings.gameplay.pointerLock;
     this.rig.autoAlign = this.save.settings.gameplay.autoCamera;
@@ -820,7 +839,10 @@ export class Engine {
       case 'emote':
         if (!this.player.motor.swimming) {
           this.player.wave();
+          this.player.express('feliz');
           this.social.sendEmote('acenar');
+          // Quem está por perto responde: acenar para a cidade tem efeito.
+          this.npcs.greetBack(this.player.position.x, this.player.position.z);
         }
         break;
       case 'cameraReset':
@@ -978,11 +1000,26 @@ export class Engine {
     if (!tree) return;
     const character = divino ? getCharacter(personId) : undefined;
     const citizen = divino ? null : this.npcs.citizenOf(interactableId);
-    if (character) this.npcs.lookAt(character.id, this.player.position.x, this.player.position.z);
+    const life = divino ? this.npcs.characterLife(personId) : this.npcs.lifeOf(interactableId);
+    const player = this.player.position;
+
+    // O personagem para o que estava fazendo, se vira para quem chamou e
+    // cumprimenta. A rotina dele fica guardada para depois.
+    if (character) this.npcs.lookAt(character.id, player.x, player.z);
     if (citizen) {
-      citizen.startTalking(this.player.position.x, this.player.position.z, 14);
+      citizen.startTalking(player.x, player.z, CONVERSATION_HOLD);
       if (this.edenSocial.meetCitizen(citizen.profile.name)) this.dirty = true;
     }
+    life?.beginConversation(player.x, player.z);
+
+    // O jogador também participa: olha para quem está falando.
+    const target = character ? this.npcs.characterPosition(character.id) : citizen ? { x: citizen.x, y: citizen.y, z: citizen.z } : null;
+    if (target) {
+      this.talkTarget.set(target.x, target.y + 1.5, target.z);
+      this.player.lookAt(this.talkTarget);
+    }
+
+    const voiceId = divino ? personId : `cidadao:${citizen?.profile.seed ?? 0}`;
     const runner = new DialogueRunner(tree.tree, this.story, tree.start);
     const screen = new DialogueScreen({
       speaker: {
@@ -992,12 +1029,31 @@ export class Engine {
         place: character?.place.label ?? this.areaName,
       },
       runner,
+      playerName: this.save.profile.name,
       onEffects: (effects) => this.applyDialogueEffects(effects),
+      onLine: (line) => {
+        // Cada fala move o rosto e, quando há gesto no roteiro, o corpo.
+        life?.speak(line.mood, line.first ? line.gesture : undefined);
+        if (citizen) citizen.keepTalking(CONVERSATION_HOLD);
+        this.voice.speak({ characterId: voiceId, nodeId: line.nodeId, line: line.pageIndex, text: line.text, profile: this.voice.profileOf(divino ? personId : 'cidadao') });
+      },
+      onTalking: (level) => {
+        life?.setTalking(level);
+        if (level <= 0) this.voice.stop();
+      },
+      onChoice: () => this.audio.ui('click'),
       onClose: () => {
+        // Fim da conversa: despedida, rosto de descanso e volta à rotina.
+        life?.endConversation();
+        citizen?.stopTalking();
+        this.voice.stop();
+        this.player.lookAt(null);
+        this.talking = null;
         this.ui.close(screen);
         this.interactions.clearTarget();
       },
     });
+    this.talking = { citizen, characterId: character?.id ?? null, life };
     this.audio.ui('open');
     this.ui.open(screen);
   }
@@ -1019,16 +1075,25 @@ export class Engine {
       area: this.areaName,
       playerName: this.save.profile.name,
     });
+    const persona = citizen.life.persona;
     const tree: DialogueTree = {
       start: 'fala',
       nodes: [
         {
           id: 'fala',
+          mood: persona.greetMood,
           text: lines,
           choices: [
-            { label: 'Acenar', effects: [{ kind: 'mensagem', id: 'acenar' }] },
+            { label: 'Acenar', to: 'aceno', effects: [{ kind: 'mensagem', id: 'acenar' }] },
             { label: 'Boa conversa. Até mais!' },
           ],
+        },
+        {
+          // O aceno do jogador tem resposta: ninguém acena para o vazio.
+          id: 'aceno',
+          mood: persona.greetMood,
+          gesture: 'acenar',
+          text: [citizenWaveBack(citizen.profile.name)],
         },
       ],
     };
@@ -1063,7 +1128,10 @@ export class Engine {
           break;
         }
         case 'mensagem': {
-          if (effect.id === 'acenar' && !this.player.motor.swimming) this.player.wave();
+          if (effect.id === 'acenar' && !this.player.motor.swimming) {
+            this.player.wave();
+            this.player.express('feliz');
+          }
           break;
         }
         case 'bandeira':
@@ -1177,6 +1245,7 @@ export class Engine {
     const settings = this.save.settings;
     if (kind === 'audio') {
       this.audio.applySettings(settings.audio);
+      this.applyVoiceSettings();
     } else if (kind === 'input') {
       this.input.applySettings(settings.input);
       this.showPrompt(this.interactions.current);
@@ -1187,6 +1256,43 @@ export class Engine {
       if (!settings.gameplay.hints) this.hud.setHints(null);
     }
     this.dirty = true;
+  }
+
+  /**
+   * Mantém a conversa de pé a cada quadro.
+   *
+   * O habitante continua encarando o jogador (ele pode ter se mexido) e
+   * o relógio de conversa é renovado, para ninguém sair andando no meio
+   * de uma frase. O jogador, por sua vez, segue olhando para quem fala.
+   */
+  private holdConversation(): void {
+    const talking = this.talking;
+    if (!talking) return;
+    const p = this.player.position;
+    if (talking.citizen) {
+      talking.citizen.faceTowards(p.x, p.z);
+      talking.citizen.keepTalking(CONVERSATION_HOLD);
+      this.talkTarget.set(talking.citizen.x, talking.citizen.y + 1.5, talking.citizen.z);
+      this.player.lookAt(this.talkTarget);
+    } else if (talking.characterId) {
+      this.npcs.lookAt(talking.characterId, p.x, p.z);
+      const position = this.npcs.characterPosition(talking.characterId);
+      if (position) {
+        this.talkTarget.set(position.x, position.y + 1.6, position.z);
+        this.player.lookAt(this.talkTarget);
+      }
+    }
+    talking.life?.lookAt(p.x, p.z, Number.POSITIVE_INFINITY);
+    // Sincronia labial: com voz, a boca segue as sílabas que saem do
+    // sintetizador; sem voz, segue o texto que aparece na tela.
+    if (talking.life && this.voice.active) talking.life.setTalking(this.voice.level);
+  }
+
+  /** Leva o volume e o modo de voz escolhidos para o sistema de fala. */
+  private applyVoiceSettings(): void {
+    const audio = this.save.settings.audio;
+    this.voice.setMode(audio.voiceMode);
+    this.voice.setVolume(audio.voice, audio.muted || this.flags.noAudio);
   }
 
   /** Grava o estado atual no armazenamento local. */
@@ -1524,6 +1630,11 @@ export class Engine {
       this.hud.toast(count >= total ? 'Você encontrou todos os Cristais de Luz de Aurora City!' : `Cristal de Luz encontrado! (${count}/${total})`, 'crystal', 4.2);
       this.dirty = true;
     }
+
+    // Conversa em andamento: a voz respira e os dois continuam de frente
+    // um para o outro, mesmo que alguém se mexa um pouco.
+    this.voice.update(dt);
+    if (this.talking) this.holdConversation();
 
     const worldActive = (playing || mode === 'scenic' || mode === 'photo') && !this.ui.isOpen(this.pauseScreen.id);
     // Habitantes: a simulação acompanha o jogador e o horário do mundo.

@@ -33,6 +33,14 @@ describe('grafo de módulos', () => {
       import('../../src/interface/EdenApps'),
       import('../../src/interface/EdenPhoneUI'),
       import('../../src/interface/DialogueScreen'),
+      import('../../src/interface/DialogueBox'),
+      import('../../src/characters/DialogueSequence'),
+      import('../../src/characters/Personas'),
+      import('../../src/npc/NpcLife'),
+      import('../../src/player/AvatarFace'),
+      import('../../src/player/Expressions'),
+      import('../../src/player/Gestures'),
+      import('../../src/systems/VoiceSystem'),
     ]);
     for (const module of modules) expect(Object.keys(module).length).toBeGreaterThan(0);
   });
