@@ -15,6 +15,7 @@ import { BUILDINGS } from './Layout';
 import { buildParks } from './Parks';
 import { interiorsInRegion } from '../../interiors/Interior';
 import type { GardenBed } from './Zones';
+import { keepOutsFor } from '../../world/KeepOut';
 
 export interface AuroraCityOptions {
   materials: MaterialLibrary;
@@ -51,6 +52,11 @@ export class AuroraCity {
     this.buildStation(ctx);
     this.buildDoors(ctx);
     props.finalize();
+    // Aurora não tem nenhuma área proibida declarada hoje, e por isso
+    // esta chamada não faz nada. Ela fica aqui mesmo assim: o dia em
+    // que uma estrutura de Aurora precisar ser fechada, basta
+    // declará-la em `keepOutsFor` — nenhuma linha de código a mais.
+    ctx.sealKeepOuts(keepOutsFor(this.id));
   }
 
   /**

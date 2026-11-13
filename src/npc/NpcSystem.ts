@@ -16,6 +16,7 @@ import { citizenAftersId, makeCitizen } from './CitizenData';
 import { CitizenSim } from './CitizenSim';
 import { DestinationBoard } from './DestinationBoard';
 import { getRegion } from '../regions/Region';
+import { KEEP_OUT_CLEARANCE, insideKeepOut, keepOutsFor, pushOutOfKeepOut } from '../world/KeepOut';
 import { NpcLife } from './NpcLife';
 import { buildAuroraWalkNetwork, buildRosasWalkNetwork, type WalkNetwork } from './WalkNetwork';
 import { AREAS, type NamedArea } from '../cities/aurora-city/Layout';
@@ -471,8 +472,21 @@ export class NpcSystem implements GameSystem {
    * todas as vezes.
    */
   private settlePlacement(x: number, z: number, taken: readonly { x: number; z: number }[]): { x: number; y: number; z: number } {
-    let px = x;
-    let pz = z;
+    const forbidden = keepOutsFor(this.regionId);
+
+    // Primeiro de tudo: o ponto pretendido não pode ser dentro de uma
+    // área proibida.
+    //
+    // Era exatamente este o buraco. O ponto oficial do Roseiral Maior
+    // é (0, −24), que é o centro exato do Coração do Roseiral, e
+    // **nada neste método olhava para ele** — `blocked` só era
+    // consultado no anel de desempate, que nem chega a rodar quando
+    // ninguém mais disputa o lugar. O ponto entrava como veio e o
+    // personagem pousava dentro da estrutura. Trocar quem recebe o
+    // lugar passaria a vez para o próximo da fila; o que faltava era
+    // esta linha.
+    let { x: px, z: pz } = pushOutOfKeepOut(forbidden, x, z);
+
     const nodeId = this.network.nearest(px, pz);
     if (nodeId >= 0) {
       const node = this.network.node(nodeId);
@@ -491,13 +505,59 @@ export class NpcSystem implements GameSystem {
           const cx = px + Math.cos(angle) * radius;
           const cz = pz + Math.sin(angle) * radius;
           if (clashes(cx, cz) || this.blocked(cx, cz)) continue;
+          if (insideKeepOut(forbidden, cx, cz, KEEP_OUT_CLEARANCE)) continue;
           px = cx;
           pz = cz;
           break outer;
         }
       }
     }
+
+    // E por último, de novo: o salto para a rede e o anel de desempate
+    // mexeram no ponto depois da primeira conferência. Repetir é
+    // barato e fecha a porta — um empurrão que caísse dentro da
+    // estrutura desfaria tudo o que veio antes.
+    ({ x: px, z: pz } = pushOutOfKeepOut(forbidden, px, pz));
+
+    // A altura só é perguntada no fim, com o ponto já definitivo. Com
+    // o ponto dentro da barreira, a física devolveria o topo dela —
+    // seis metros no ar.
     return { x: px, y: this.groundFor(px, pz), z: pz };
+  }
+
+  /**
+   * Tira de dentro das áreas proibidas quem tiver entrado nelas.
+   *
+   * O último recurso do bloqueio, e o que responde à exigência de
+   * "mesmo que algum sistema tente posicionar um personagem lá
+   * dentro". Vale para habitantes e para o panteão, sem exceção e sem
+   * citar ninguém pelo nome: um personagem criado amanhã é empurrado
+   * pela mesma linha.
+   *
+   * O empurrão é radial e determinístico, então um personagem
+   * encostado na borda não oscila entre dois pontos a cada quadro.
+   */
+  enforceKeepOuts(): void {
+    const forbidden = keepOutsFor(this.regionId);
+    if (forbidden.length === 0) return;
+
+    for (const citizen of this.citizens) {
+      if (!insideKeepOut(forbidden, citizen.x, citizen.z)) continue;
+      const out = pushOutOfKeepOut(forbidden, citizen.x, citizen.z);
+      citizen.x = out.x;
+      citizen.z = out.z;
+    }
+
+    for (const deity of this.deities) {
+      if (!deity.interactable.enabled) continue;
+      if (!insideKeepOut(forbidden, deity.x, deity.z)) continue;
+      const out = pushOutOfKeepOut(forbidden, deity.x, deity.z);
+      deity.x = out.x;
+      deity.z = out.z;
+      deity.y = this.groundFor(out.x, out.z);
+      deity.interactable.position.set(deity.x, deity.y, deity.z);
+      if (deity.avatar) deity.avatar.root.position.set(deity.x, deity.y, deity.z);
+    }
   }
 
   /**
@@ -924,6 +984,20 @@ export class NpcSystem implements GameSystem {
         citizen.z += (dz / distance) * push;
       }
     }
+
+    // 1b. Rede de segurança das áreas proibidas.
+    //
+    //     As três defesas anteriores — barreira sólida, rede de
+    //     caminhada e posicionamento — cobrem os caminhos conhecidos.
+    //     Esta cobre os que ainda não existem: um empurrão de espaço
+    //     pessoal, uma correção de rota, um sistema futuro que mova
+    //     alguém à força. Nenhum deles sabe da estrutura; este laço
+    //     sabe, e roda depois de todos.
+    //
+    //     Custa um `hypot` por pessoa e por zona, e só mexe em quem
+    //     está de fato dentro. Numa região sem zona declarada o laço
+    //     não roda.
+    this.enforceKeepOuts();
 
     // 2. Rotinas: alguns cidadãos por quadro, para diluir o custo.
     if (this.period) {

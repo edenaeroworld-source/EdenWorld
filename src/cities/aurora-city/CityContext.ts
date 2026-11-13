@@ -5,6 +5,7 @@ import { GeometryBatcher } from '../../utils/geometry';
 import { type Rng, createRng } from '../../utils/math';
 import type { AtmosphereState } from '../../world/Atmosphere';
 import type { HeightField } from '../../world/HeightField';
+import type { KeepOutZone } from '../../world/KeepOut';
 import type { MaterialLibrary } from '../../world/Materials';
 import type { Vegetation } from '../../world/Vegetation';
 import { Zone, type ZoneMap } from '../../world/ZoneMap';
@@ -137,6 +138,57 @@ export class CityContext {
   /** Reserva uma área circular: a vegetação aleatória não cresce ali. */
   reserve(x: number, z: number, radius: number): void {
     this.zones.stampCircle(x, z, radius, Zone.Reserved);
+  }
+
+  /**
+   * Fecha as áreas proibidas desta região com barreiras invisíveis.
+   *
+   * Uma única chamada por região, no fim da construção: tudo o que a
+   * região tiver declarado em `keepOutsFor` vira colisor sólido. Quem
+   * não declarou nada não paga nada.
+   *
+   * A barreira é **a estrutura inteira**, não um anel em volta dela:
+   * o disco maciço é o que garante que não há fresta nem abertura por
+   * onde entrar, que é o pedido. Nada de geometria é criado — o
+   * colisor não tem malha, então a estrutura continua exatamente com
+   * a aparência que tinha.
+   *
+   * A altura vem do terreno **medido**, não do centro: o chão do
+   * roseiral é em terraços e sobe para dentro. Mede-se o ponto mais
+   * baixo e o mais alto sob o disco, enterra-se a base dois metros
+   * abaixo do mais baixo (para não sobrar um vão por onde escorregar)
+   * e leva-se o topo a `zone.height` acima do mais alto.
+   */
+  sealKeepOuts(zones: readonly KeepOutZone[]): void {
+    for (const zone of zones) {
+      let lowest = Infinity;
+      let highest = -Infinity;
+      // Centro mais quatro anéis de oito amostras: o bastante para
+      // acompanhar um terraço sem transformar isto num laço caro.
+      for (const ring of [0, 0.25, 0.5, 0.75, 1]) {
+        const samples = ring === 0 ? 1 : 8;
+        for (let i = 0; i < samples; i += 1) {
+          const angle = (i / samples) * Math.PI * 2;
+          const y = this.ground(zone.x + Math.cos(angle) * zone.radius * ring, zone.z + Math.sin(angle) * zone.radius * ring);
+          lowest = Math.min(lowest, y);
+          highest = Math.max(highest, y);
+        }
+      }
+      this.physics.addCylinder({
+        x: zone.x,
+        z: zone.z,
+        radius: zone.radius,
+        yMin: lowest - 2,
+        yMax: highest + zone.height,
+        // Sólido e **não caminhável**: não se entra por baixo nem se
+        // fica de pé em cima. Um topo caminhável transformaria a
+        // barreira num pedestal, e subir nela também é entrar.
+        solid: true,
+        walkable: false,
+        surface: 'stone',
+        tag: `keep-out:${zone.id}`,
+      });
+    }
   }
 
   /** Cria um lote de geometria estática; chame `commit` ao terminar. */

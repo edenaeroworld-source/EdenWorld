@@ -1,4 +1,5 @@
 import { AVENUES, BUILDINGS, PLAZA, RING, TERRAIN_PATHS, forecourtRadius } from '../cities/aurora-city/Layout';
+import { KEEP_OUT_CLEARANCE, type KeepOutZone, crossesKeepOut, insideKeepOut, keepOutsFor } from '../world/KeepOut';
 import { BRIDGES as ROSAS_BRIDGES, PATHS as ROSAS_PATHS, PAVILIONS as ROSAS_PAVILIONS, ROSE_GARDEN as ROSAS_ROSE_GARDEN } from '../cities/rosas-park/RosasLayout';
 import { TAU, type Point2, type Rng } from '../utils/math';
 
@@ -52,6 +53,16 @@ export interface WalkNetworkOptions {
    * chão para quem já subiu.
    */
   pointBlocked?: (x: number, z: number, fromX: number, fromZ: number) => boolean;
+  /**
+   * Áreas proibidas desta região.
+   *
+   * O padrão é a lista declarada para a região, que é o que o jogo
+   * usa. O parâmetro existe para que se possa **medir a regra
+   * sozinha**: com uma zona de mentira sobre um trecho movimentado
+   * dá para provar que a rede a contorna, sem depender de a física
+   * estar ligada.
+   */
+  keepOuts?: readonly KeepOutZone[];
   /** Distância máxima (m) para ligar dois trechos vizinhos. */
   joinRadius?: number;
   /** Espaçamento (m) entre nós ao longo de um trecho. */
@@ -65,6 +76,12 @@ interface RawNode {
 }
 
 /** Distância máxima entre dois nós para serem considerados o mesmo ponto. */
+/**
+ * Folga entre a borda de uma área proibida e o ponto de passagem mais
+ * próximo. Encostar a rede na barreira põe gente andando raspando nela.
+ */
+const KEEP_OUT_MARGIN = KEEP_OUT_CLEARANCE;
+
 const MERGE_DISTANCE = 3.2;
 
 /** `true` se o ponto cai dentro da base de um edifício (ou do seu pátio). */
@@ -358,7 +375,7 @@ function largestComponent(nodeCount: number, adjacency: number[][]): Set<number>
  * @param options.blocked consulta do mundo (água, declive, zona proibida).
  */
 export function buildAuroraWalkNetwork(options: WalkNetworkOptions = {}): WalkNetwork {
-  return buildWalkNetwork(auroraChains, { ...options, insideLot: insideBuilding });
+  return buildWalkNetwork(auroraChains, { ...options, insideLot: insideBuilding, keepOuts: options.keepOuts ?? keepOutsFor('aurora-city') });
 }
 
 /** Trechos caminháveis de Rosas Park: os caminhos, as pontes e o roseiral. */
@@ -406,6 +423,7 @@ function rosasChains(spacing: number): RawNode[][] {
 export function buildRosasWalkNetwork(options: WalkNetworkOptions = {}): WalkNetwork {
   return buildWalkNetwork(rosasChains, {
     ...options,
+    keepOuts: options.keepOuts ?? keepOutsFor('rosas-park'),
     insideLot: (x, z, margin = 0.5) => ROSAS_PAVILIONS.some((pavilion) => Math.hypot(x - pavilion.x, z - pavilion.z) < pavilion.radius + margin),
   });
 }
@@ -413,14 +431,28 @@ export function buildRosasWalkNetwork(options: WalkNetworkOptions = {}): WalkNet
 /** A rede de caminhada de qualquer região: os trechos é que mudam. */
 function buildWalkNetwork(
   chainsOf: (spacing: number) => RawNode[][],
-  options: WalkNetworkOptions & { insideLot: (x: number, z: number, margin?: number) => boolean },
+  options: WalkNetworkOptions & {
+    insideLot: (x: number, z: number, margin?: number) => boolean;
+    /** Áreas em que a rede não pode entrar. */
+    keepOuts?: readonly KeepOutZone[];
+  },
 ): WalkNetwork {
   const spacing = options.spacing ?? 9;
   const joinRadius = options.joinRadius ?? 11;
   const blocked = options.blocked ?? (() => false);
   const edgeBlocked = options.edgeBlocked ?? (() => false);
   const pointBlocked = options.pointBlocked ?? (() => false);
-  const isFree = (x: number, z: number): boolean => !options.insideLot(x, z) && !blocked(x, z);
+  const keepOuts = options.keepOuts ?? [];
+  // Um ponto dentro de uma área proibida não é lugar de passagem.
+  //
+  // Vale reparar que a física **sozinha** já daria quase isto: a
+  // barreira é sólida, e `pointBlocked` pergunta à física. Quase não
+  // basta. A rede é montada com `blocked` e `pointBlocked`
+  // opcionais — um chamador sem física teria a rede entrando no meio
+  // da estrutura. A zona é geometria declarada, e não depende de
+  // ninguém ter lembrado de ligar a física.
+  const isFree = (x: number, z: number): boolean =>
+    !options.insideLot(x, z) && !blocked(x, z) && !insideKeepOut(keepOuts, x, z, KEEP_OUT_MARGIN);
 
   const nodes: WalkNode[] = [];
   const adjacency: number[][] = [];
@@ -446,6 +478,12 @@ function buildWalkNetwork(
 
   /** `true` se o trecho entre dois pontos é caminhável de ponta a ponta. */
   const edgeFree = (ax: number, az: number, bx: number, bz: number): boolean => {
+    // A zona proibida é medida pela distância do centro ao segmento,
+    // não por amostragem: dois nós em lados opostos da estrutura
+    // estão ambos livres, e mesmo assim a reta entre eles passa por
+    // dentro. É essa aresta que faria um habitante cortar caminho
+    // pelo meio do Coração em vez de contorná-lo.
+    if (crossesKeepOut(keepOuts, ax, az, bx, bz, KEEP_OUT_MARGIN)) return false;
     const samples = Math.max(2, Math.ceil(Math.hypot(bx - ax, bz - az) / 3));
     for (let i = 1; i < samples; i++) {
       const t = i / samples;
