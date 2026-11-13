@@ -25,7 +25,6 @@ import { PLAYER } from '../../src/core/Config';
 import { getInterior, type InteriorDef, type InteriorRoom, roomsOnFloor } from '../../src/interiors/Interior';
 import { FLOOR_HEIGHT } from '../../src/interiors/InteriorKit';
 import { INTERIOR_ORIGIN, InteriorScene } from '../../src/interiors/InteriorScene';
-import type { InteriorMaterials } from '../../src/interiors/InteriorScene';
 import { footprintOf, stairwellOf } from '../../src/interiors/InteriorShell';
 import { furnishedInteriorIds } from '../../src/interiors/fitouts';
 import { PhysicsWorld } from '../../src/physics/PhysicsWorld';
@@ -38,19 +37,6 @@ const MARCO = [
   { id: 'edenpawl-aurora', titulo: 'EdenPawl' },
   { id: 'centro-edenconnect', titulo: 'Edifício público' },
 ] as const;
-
-function stubMaterials(): InteriorMaterials {
-  const make = (): THREE.MeshStandardMaterial => new THREE.MeshStandardMaterial();
-  return {
-    wood: make(),
-    stone: make(),
-    white: make(),
-    facade: make(),
-    glass: make(),
-    crystal: make(),
-    metal: make(),
-  } as unknown as InteriorMaterials;
-}
 
 function countTriangles(root: THREE.Object3D): number {
   let total = 0;
@@ -140,12 +126,15 @@ describe('os cinco ambientes do marco I', () => {
     // a medição mostra na hora.
     physics = new PhysicsWorld({ getHeight: () => -7, getSurface: () => 'grass' });
     physics.boundaryRadius = 268;
-    interiors = new InteriorScene({ scene, materials: stubMaterials(), physics, onInteractables: () => {} });
+    interiors = new InteriorScene({ scene, physics, onInteractables: () => {} });
   });
 
   it('os cinco existem, e todos têm acabamento próprio', () => {
+    // Contagem mínima, não exata: acabamento novo é ganho, não
+    // regressão. O que este marco exige é que estes cinco tenham o
+    // seu — e quem vier depois será cobrado pelo seu próprio teste.
     const furnished = furnishedInteriorIds();
-    expect(furnished).toHaveLength(5);
+    expect(furnished.length).toBeGreaterThanOrEqual(5);
     for (const { id, titulo } of MARCO) {
       const interior = getInterior(id);
       expect(interior, titulo).toBeDefined();

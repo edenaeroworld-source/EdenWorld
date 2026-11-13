@@ -141,6 +141,7 @@ const INTERIORS: InteriorDef[] = [
     category: 'tecnologia',
     regionId: 'aurora-city',
     placeId: 'atelie-aero',
+    fitout: 'atelie-aero',
     floors: 1,
     rooms: [
       { id: 'salao', name: 'Salão', x: 0, z: 0, w: 14, d: 10, floor: 0 },
@@ -148,7 +149,7 @@ const INTERIORS: InteriorDef[] = [
     ],
     props: [
       { id: 'balcao', name: 'Balcão', x: 7, z: 2, floor: 0, action: 'comprar', note: 'O catálogo Afters inteiro.' },
-      { id: 'espelho', name: 'Espelho de ajuste', x: 17, z: 5, floor: 0, action: 'usar', note: 'Abre o painel Afters.' },
+      { id: 'espelho', name: 'Espelho de ajuste', x: 18.1, z: 5, floor: 0, action: 'usar', note: 'Abre o painel Afters.' },
       { id: 'sofa-espera', name: 'Sofá de espera', x: 3, z: 8, floor: 0, action: 'sentar', note: 'Confortável demais para a pressa de ninguém.' },
     ],
     residents: ['luma'],

@@ -26,22 +26,8 @@ import { rosasHeight } from '../../src/cities/rosas-park/RosasTerrain';
 import { PLAYER, WORLD } from '../../src/core/Config';
 import { allInteriors, getInterior } from '../../src/interiors/Interior';
 import { INTERIOR_ORIGIN, InteriorScene } from '../../src/interiors/InteriorScene';
-import type { InteriorMaterials } from '../../src/interiors/InteriorScene';
 import { PhysicsWorld } from '../../src/physics/PhysicsWorld';
 import { PlayerMotor } from '../../src/player/PlayerMotor';
-
-function stubMaterials(): InteriorMaterials {
-  const make = (): THREE.MeshStandardMaterial => new THREE.MeshStandardMaterial();
-  return {
-    wood: make(),
-    stone: make(),
-    white: make(),
-    facade: make(),
-    glass: make(),
-    crystal: make(),
-    metal: make(),
-  } as unknown as InteriorMaterials;
-}
 
 /** O relevo de Aurora, como o motor o enxerga quando a cidade está carregada. */
 const auroraSampler = {
@@ -58,7 +44,7 @@ describe('o chão dos interiores', () => {
     scene = new THREE.Scene();
     physics = new PhysicsWorld(auroraSampler);
     physics.boundaryRadius = 268; // o mesmo valor que Aurora City usa
-    interiors = new InteriorScene({ scene, materials: stubMaterials(), physics, onInteractables: () => {} });
+    interiors = new InteriorScene({ scene, physics, onInteractables: () => {} });
   });
 
   it('o relevo a 4000 m é fundo de mar — é daí que vinha a natação', () => {

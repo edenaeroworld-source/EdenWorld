@@ -14,18 +14,12 @@ import { allInteriors, getInterior, interiorsInRegion } from '../../src/interior
 import { InteriorManager } from '../../src/interiors/InteriorManager';
 import { INTERIOR_ORIGIN, InteriorScene } from '../../src/interiors/InteriorScene';
 import { PhysicsWorld } from '../../src/physics/PhysicsWorld';
-import type { InteriorMaterials } from '../../src/interiors/InteriorScene';
 
 /**
  * Materiais mínimos: a biblioteca real do mundo precisa de um canvas
  * com contexto 2D, que o ambiente de teste não tem. A geometria, a
  * colisão e as luzes — que é o que se mede aqui — não dependem disso.
  */
-function stubMaterials(): InteriorMaterials {
-  const make = (): THREE.MeshStandardMaterial => new THREE.MeshStandardMaterial();
-  return { wood: make(), stone: make(), white: make(), facade: make(), glass: make(), crystal: make(), metal: make() } as unknown as InteriorMaterials;
-}
-
 function countMeshes(root: THREE.Object3D): number {
   let total = 0;
   root.traverse((object) => {
@@ -51,17 +45,14 @@ function countTriangles(root: THREE.Object3D): number {
 describe('geometria dos interiores', () => {
   let scene: THREE.Scene;
   let physics: PhysicsWorld;
-  let materials: InteriorMaterials;
   let interiorScene: InteriorScene;
   let items: readonly Interactable[] = [];
 
   beforeEach(() => {
     scene = new THREE.Scene();
     physics = new PhysicsWorld({ getHeight: () => 0, getSurface: () => 'grass' });
-    materials = stubMaterials();
     interiorScene = new InteriorScene({
       scene,
-      materials,
       physics,
       onInteractables: (next) => {
         items = next;

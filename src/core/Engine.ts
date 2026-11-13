@@ -1432,10 +1432,14 @@ export class Engine {
     this.audio.portal();
     await this.hud.fade(true);
 
-    // Interior aberto não atravessa viagem.
+    // Interior aberto não atravessa viagem. `leaveInterior` já manda
+    // a cena desmontar — e a cena desmonta na física em que montou,
+    // que daqui a pouco deixa de existir.
     if (this.universe.interiors.isInside) {
       this.universe.leaveInterior();
-      this.interiorScene?.unload(this.universe.interiors.current?.interior ?? ({} as never));
+      this.setExteriorVisible(true);
+      this.interiorInteractables = [];
+      this.interiorReturn = null;
     }
 
     const loading = new LoadingScreen(this.uiRoot);
@@ -1515,10 +1519,21 @@ export class Engine {
     this.interiorReturn = { x: exit.x, z: exit.z, heading: exit.heading + Math.PI, y: motor.position.y };
 
     const spawn = scene.spawnPoint;
-    if (spawn) {
-      this.player.teleport(spawn.x, spawn.z, spawn.heading, spawn.y + 0.4);
-      this.rig.reset(spawn.heading, true);
+    // Sem ponto de entrada, o prédio não subiu. Entrar assim mesmo
+    // deixaria o jogador do lado de fora com o cenário escondido —
+    // a tela preta que parecia "ambiente vazio". Melhor não abrir a
+    // porta e dizer isso.
+    if (!spawn || !this.world.physics.indoor) {
+      this.universe.leaveInterior();
+      this.setExteriorVisible(true);
+      this.transitioning = false;
+      this.syncInputState();
+      await this.hud.fade(false);
+      this.hud.toast('Esta porta não abriu. Tente de novo.', 'info');
+      return;
     }
+    this.player.teleport(spawn.x, spawn.z, spawn.heading, spawn.y + 0.4);
+    this.rig.reset(spawn.heading, true);
     // O exterior some de vista: nada dele é desenhado lá dentro.
     this.setExteriorVisible(false);
     this.interiorInteractables = scene.items;
@@ -1563,8 +1578,11 @@ export class Engine {
     if (this.interiorScene) return this.interiorScene;
     const scene = new InteriorScene({
       scene: this.scene,
-      materials: this.world.materials,
-      physics: this.world.physics,
+      // Função, não referência: `World.build` troca a física a cada
+      // viagem, e esta cena vive a sessão inteira. Entregar o objeto
+      // de hoje era entregar o mundo de ontem no primeiro prédio
+      // aberto depois de viajar.
+      physics: () => this.world.physics,
       onInteractables: (items) => {
         this.interiorInteractables = items;
         if (this.universe.interiors.isInside) this.refreshInteractables();
@@ -2078,7 +2096,13 @@ export class Engine {
       this.wildlifePeriod = period;
       if (!this.universe.interiors.isInside) this.refreshWildlife();
     }
-    this.npcs.enabled = worldActive;
+    // Dentro de um prédio, a cidade lá fora espera. Não é economia: é
+    // que `setIndoor` faz toda consulta de chão responder "o piso do
+    // interior", e desliga o limite da região. Os habitantes, que
+    // reconsultam o chão a cada quadro, afundariam no andar do prédio
+    // e poderiam andar para fora do mapa enquanto o jogador faz
+    // compras. Invisíveis, a esta altura — mas voltariam errados.
+    this.npcs.enabled = worldActive && !this.universe.interiors.isInside;
     // Afters: o brilho acompanha o avatar (ou o manequim do criador).
     this.afters.setTarget(p.x, p.y, p.z, this.player.avatar.appearance.height);
     this.afters.setVisible(this.player.visible && mode !== 'menu');
