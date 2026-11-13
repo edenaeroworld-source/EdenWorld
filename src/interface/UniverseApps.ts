@@ -71,6 +71,13 @@ export function buildAtlas(host: UniverseAppHost, content: HTMLElement): void {
 
     if (known) {
       card.appendChild(h('p', { class: 'muted', text: region.description }));
+      // Dizer antes de clicar se há cenário para pisar ou não.
+      card.appendChild(
+        h('p', {
+          class: region.playable ? 'eden-note' : 'muted',
+          text: region.playable ? 'Cenário 3D pronto: dá para andar por lá.' : 'Sem cenário 3D ainda.',
+        }),
+      );
       card.appendChild(h('p', { class: 'muted', text: `Lugares: ${region.places.map((place) => place.name).join(' · ')}` }));
       if (!region.playable) {
         // Honestidade: a região existe como lugar do mundo, mas o cenário
@@ -83,17 +90,21 @@ export function buildAtlas(host: UniverseAppHost, content: HTMLElement): void {
       if (here) row.appendChild(h('span', { class: 'muted', text: 'Você está aqui.' }));
       else {
         const blocker = universe.regions.travelBlocker(region.id);
-        row.appendChild(
-          button({
-            class: 'btn btn--ghost btn--small',
-            icon: icon('map', 18),
-            label: blocker ?? 'Viajar para cá',
-            onClick: () => {
-              host.requestTravel(region.id);
-              host.refresh();
-            },
-          }),
-        );
+        const travel = button({
+          class: 'btn btn--small' + (region.playable ? '' : ' btn--ghost'),
+          icon: icon('map', 18),
+          label: blocker ?? (region.playable ? `Viajar para ${region.name}` : 'Viajar mesmo assim'),
+          onClick: () => {
+            if (blocker) return;
+            host.requestTravel(region.id);
+            host.refresh();
+          },
+        });
+        // Um botão que não leva a lugar nenhum não deve parecer clicável.
+        travel.disabled = blocker !== null;
+        travel.setAttribute('aria-label', blocker ?? `Viajar para ${region.name}`);
+        row.appendChild(travel);
+        if (region.playable) row.appendChild(h('span', { class: 'muted', text: `${Math.round(universe.regions.travelTimeTo(region.id) * 10) / 10}s de viagem` }));
       }
       card.appendChild(row);
     }

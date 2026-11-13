@@ -60,8 +60,9 @@ describe('tela · Mapa do Éden', () => {
   it('o botão de viajar viaja mesmo — e o jogador muda de região', () => {
     const { host, world } = makeHost();
     buildAtlas(host, content);
-    const travel = buttonWith('Viajar para cá');
+    const travel = buttonWith('Viajar para Rosas Park');
     expect(travel).toBeDefined();
+    expect(travel?.disabled).toBe(false);
     travel?.click();
     expect(world.regions.currentRegionId).toBe('rosas-park');
   });

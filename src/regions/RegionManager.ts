@@ -166,6 +166,11 @@ export class RegionManager {
     return null;
   }
 
+  /** Quanto tempo leva a viagem daqui até lá, em segundos. */
+  travelTimeTo(toId: string): number {
+    return travelTime(this.currentId, toId);
+  }
+
   canTravelTo(toId: string): boolean {
     return this.travelBlocker(toId) === null;
   }

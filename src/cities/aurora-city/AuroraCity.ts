@@ -6,6 +6,7 @@ import type { MaterialLibrary } from '../../world/Materials';
 import type { Vegetation } from '../../world/Vegetation';
 import type { ZoneMap } from '../../world/ZoneMap';
 import { buildBuildings } from './Buildings';
+import { buildTravelStation } from '../shared/TravelStation';
 import { buildCentralPlaza } from './CentralPlaza';
 import { CityContext, type CityFrame, type CollectibleSpot, type JetEmitter, type LightSpot, type PortalStation, type SphereController, type WaterSoundSource } from './CityContext';
 import { Props } from './Decorations';
@@ -47,6 +48,7 @@ export class AuroraCity {
     buildBuildings(ctx, props, BUILDINGS);
     buildParks(ctx, props);
     buildLandscape(ctx, props, options.beds);
+    this.buildStation(ctx);
     this.buildDoors(ctx);
     props.finalize();
   }
@@ -58,6 +60,19 @@ export class AuroraCity {
    * praça, que é de onde todo mundo chega. Um interior novo declarado
    * em `Interior.ts` ganha porta sozinho.
    */
+  /**
+   * Estação do Éden, na praça central.
+   *
+   * Terceiro pilar do mesmo anel do holomapa e do painel de eventos —
+   * 157,5°, raio 21,5 — para a praça continuar simétrica.
+   */
+  private buildStation(ctx: CityContext): void {
+    const angle = (157.5 * Math.PI) / 180;
+    const x = Math.cos(angle) * 21.5;
+    const z = Math.sin(angle) * 21.5;
+    buildTravelStation(ctx, { id: 'estacao-aurora', name: 'Estação do Éden · Aurora City', x, z, color: 0x8fe6ff });
+  }
+
   private buildDoors(ctx: CityContext): void {
     for (const interior of interiorsInRegion('aurora-city')) {
       const lot = BUILDINGS.find((candidate) => candidate.id === interior.placeId);

@@ -119,6 +119,31 @@ WebGL; chamar isso de screenshot seria mentira. É um instrumento de
 medida, e foi ele que mostrou a cunha do paredão que nenhum teste tinha
 pegado.
 
+## Como se chega a Rosas Park
+
+Dois caminhos, os dois de verdade:
+
+1. **Estação do Éden** — a construção de pedra com um arco e uma esfera
+   girando. Há uma na Praça Central de Aurora City (a 157,5°, no mesmo
+   anel do holomapa) e outra ao lado do portão de Rosas Park. Chegue
+   perto e interaja: a lista de destinos abre direto.
+2. **EdenPhone → Mapa do Éden** — a mesma lista, de qualquer lugar. O
+   mapa da região também tem um atalho *Viajar para outra região*.
+
+Rosas Park é conhecida desde o primeiro minuto (`initialRegions`), tem
+rota direta a partir de Aurora City e `travelBlocker` devolve `null`:
+não há nada a destravar.
+
+Ao viajar, `Engine.enterRegion` desmonta o cenário anterior inteiro e
+monta o novo a partir do `RegionBlueprint`. Você chega no portão do
+parque — o ponto de chegada da região é o mesmo que o cenário usa para
+nascer, e há teste que compara os dois para todas as regiões
+construídas. A volta devolve o jogador **onde ele estava** em Aurora,
+não na entrada.
+
+O que atravessa a viagem: cristais, inventário, bichos, casa, missões,
+avistamentos, diário e salvamento. Nada disso mora no cenário.
+
 ## Testes
 
 Quatro arquivos novos, 65 testes:
@@ -130,6 +155,8 @@ Quatro arquivos novos, 65 testes:
 | `interiores-3d.test.ts` | Malha, luz por cômodo, colisão, interativo por móvel, um interior por vez, descarte sem lixo, e que **todo** interior declarado monta |
 | `bichos-3d.test.ts` | Corpo para toda espécie, anatomia conforme o movimento, habitat respeitado, orçamento de qualidade, animação, fuga e liberação |
 | `rosas-npcs.test.ts` | Malha de caminhada: uma peça só, sem nó solto, fora d'água e das paredes, encostando na porta de cada construção e chegando à ilha |
+| `viagem-regional.test.ts` | O destino existe, a rota existe, o ponto de chegada é pisável e bate com o do cenário, e ida/volta não perdem cristais, inventário, bicho, casa nem missão |
+| `estacao-viagem.test.ts` | A Estação do Éden existe **nas duas regiões**, com piso pisável, luz e interativo; e a troca de cenário solta Aurora inteira antes de montar Rosas |
 
 Quatro dos cinco erros de geometria acima foram **encontrados por esses
 testes antes de qualquer execução do jogo**. O quinto foi encontrado
