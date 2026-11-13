@@ -50,7 +50,7 @@ import { type FloorHeight, InteriorPeople, type PersonSpec } from './InteriorPeo
 import { createOfficialAvatar } from '../characters/CharacterModels';
 import { AvatarAnimator } from '../player/AvatarAnimator';
 import type { Avatar } from '../player/Avatar';
-import { buildBackdrop, buildShell, buildStaircase, footprintOf, stairHeightAt, stairwellOf } from './InteriorShell';
+import { buildBackdrop, buildShell, buildStaircase, footprintOf, stairHeightAt, stairKeepOut, stairwellOf } from './InteriorShell';
 import { getFitout } from './fitouts';
 
 /**
@@ -210,6 +210,13 @@ export class InteriorScene implements InteriorLoader {
       });
 
       buildShell(build, { interior, floor, hasFloorAbove: roomsOnFloor(interior, floor + 1).length > 0 });
+
+      // Num prédio de mais de um andar, o vão da escada e o patamar
+      // da boca ficam reservados **antes** do acabamento entrar. É a
+      // regra que mantém a subida utilizável em todo interior: o
+      // acabamento decora o resto da sala à vontade, mas não fecha a
+      // porta do andar de cima com uma prateleira.
+      if (interior.floors > 1) build.reserve(stairKeepOut(stairwellOf(interior)));
 
       // Escada para o andar de cima, com guarda-corpo no vão de lá.
       if (roomsOnFloor(interior, floor + 1).length > 0) {

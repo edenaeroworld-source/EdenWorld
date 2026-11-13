@@ -18,7 +18,17 @@ import { PLAYER } from '../../src/core/Config';
 import { allInteriors, getInterior, type InteriorDef } from '../../src/interiors/Interior';
 import { FLOOR_HEIGHT } from '../../src/interiors/InteriorKit';
 import { INTERIOR_ORIGIN, InteriorScene } from '../../src/interiors/InteriorScene';
-import { stairFlight, stairHeightAt, stairwellOf } from '../../src/interiors/InteriorShell';
+import { STAIR_LANDING_DEPTH, stairFlight, stairHeightAt, stairKeepOut, stairwellOf } from '../../src/interiors/InteriorShell';
+
+/** O que o teste precisa enxergar de um colisor da física. */
+interface ColliderLike {
+  tag?: string;
+  solid?: boolean;
+  x: number;
+  z: number;
+  halfX: number;
+  halfZ: number;
+}
 import { HUD } from '../../src/interface/HUD';
 import { PhysicsWorld } from '../../src/physics/PhysicsWorld';
 import { ThirdPersonCamera } from '../../src/camera/ThirdPersonCamera';
@@ -257,6 +267,98 @@ describe('escadas dos interiores', () => {
     expect(previous).toBeCloseTo(FLOOR_HEIGHT, 5);
     // Fora do vão não existe degrau nenhum.
     expect(stairHeightAt(stair, stair.x - 1, stair.z - 1)).toBeNull();
+  });
+
+  /* ------------------------------------------------------------------ */
+  /* Chegar em cima é diferente de subir                                 */
+  /* ------------------------------------------------------------------ */
+
+  /**
+   * Subir a escada inteira e não conseguir pôr o pé no andar.
+   *
+   * O marco anterior endireitou a boca do vão — o guarda-corpo deixou
+   * de ficar em cima do último degrau. Sobrou a outra metade do
+   * problema: o acabamento mobiliava o andar **sem saber** que havia
+   * uma escada ali. Na Torre Zênite uma vitrine ficou a 70 cm da
+   * boca, e quem subia andava 36 cm e parava de cara nela.
+   *
+   * Medir a altura alcançada não pega isso: o topo do último degrau
+   * já tem a altura do andar. Só andar para fora do vão pega.
+   */
+  describe('o patamar na boca da escada fica livre', () => {
+    it.each(MULTI.map((interior) => [interior.id, interior] as const))(
+      '%s: quem sobe consegue andar para dentro do andar de cima',
+      (_id, interior) => {
+        interiorScene.load(interior);
+        const stair = stairwellOf(interior);
+        const flight = stairFlight(stair);
+        const { motor, intent } = atStairFoot(interior);
+
+        walk(motor, intent, 20);
+
+        const lx = motor.position.x - INTERIOR_ORIGIN.x;
+        const lz = motor.position.z - INTERIOR_ORIGIN.z;
+        const along = flight.alongZ ? lz : lx;
+        // Quanto se andou para além da boca, no sentido da subida.
+        const past = (along - flight.end) * flight.forward;
+
+        expect(motor.position.y, 'nem chegou ao andar de cima').toBeGreaterThanOrEqual(FLOOR_HEIGHT - 0.05);
+        // Um corpo tem 68 cm de diâmetro: andar menos de um metro para
+        // fora do vão é continuar preso na boca da escada.
+        expect(past, 'parou na boca da escada').toBeGreaterThan(1.0);
+        // E saiu mesmo do retângulo do vão.
+        const inWell = lx >= stair.x && lx <= stair.x + stair.w && lz >= stair.z && lz <= stair.z + stair.d;
+        expect(inWell, 'continua dentro do vão').toBe(false);
+      },
+    );
+
+    it.each(MULTI.map((interior) => [interior.id, interior] as const))(
+      '%s: o corredor de saída da escada está fisicamente livre',
+      (_id, interior) => {
+        interiorScene.load(interior);
+        const stair = stairwellOf(interior);
+        const flight = stairFlight(stair);
+
+        // Caminha pelo miolo da boca, do último degrau para dentro do
+        // andar, e pergunta à física se o corpo cabe. É a pergunta que
+        // o jogador faz com as pernas — e a única que não depende de
+        // aritmética de caixas.
+        for (let step = 0.25; step <= STAIR_LANDING_DEPTH; step += 0.25) {
+          const along = flight.end + flight.forward * step;
+          const lx = flight.alongZ ? flight.cross : along;
+          const lz = flight.alongZ ? along : flight.cross;
+          const point = { x: INTERIOR_ORIGIN.x + lx, z: INTERIOR_ORIGIN.z + lz };
+          physics.resolveCircle(point, PLAYER.radius, FLOOR_HEIGHT + 0.05, PLAYER.height, PLAYER.stepHeight);
+          const pushed = Math.hypot(point.x - (INTERIOR_ORIGIN.x + lx), point.z - (INTERIOR_ORIGIN.z + lz));
+          expect(pushed, `algo ocupa o corredor a ${step.toFixed(2)} m da boca`).toBeLessThan(0.02);
+        }
+      },
+    );
+
+    it('a área reservada cobre o vão e o patamar, do lado da boca', () => {
+      // Mercado Éden: vão em x 19–23,6 / z 12,4–17, boca ao norte.
+      const stair = stairwellOf(getInterior('mercado-eden')!);
+      const keepOut = stairKeepOut(stair);
+      expect(stairFlight(stair).mouth).toBe('norte');
+      // O patamar cresce para o norte (z menor), não para o sul.
+      expect(keepOut.z).toBeLessThan(stair.z);
+      expect(keepOut.z + keepOut.d).toBeCloseTo(stair.z + stair.d, 5);
+      // A largura do vão não muda.
+      expect(keepOut.x).toBe(stair.x);
+      expect(keepOut.w).toBe(stair.w);
+    });
+
+    it('a escada, o corrimão e o guarda-corpo continuam lá', () => {
+      // A reserva é contra mobília, não contra estrutura. Remover a
+      // proteção do vão para "abrir caminho" seria trocar um bug por
+      // uma queda de três metros.
+      interiorScene.load(getInterior('mercado-eden')!);
+      const tags = (physics as unknown as { colliders: ColliderLike[] }).colliders.map((collider) => collider.tag ?? '');
+      expect(tags.some((tag) => tag.includes('escada'))).toBe(true);
+      expect(tags.some((tag) => tag.includes('corrimao'))).toBe(true);
+      expect(tags.filter((tag) => tag.includes('guarda-corpo')).length).toBe(3);
+      expect(tags.some((tag) => tag.includes('parede'))).toBe(true);
+    });
   });
 });
 
@@ -738,4 +840,5 @@ describe('um prédio por vez, e nada fica para trás', () => {
     expect(second).toBeCloseTo(first, 2);
     expect(second).toBeGreaterThan(FLOOR_HEIGHT - 0.1);
   });
+
 });

@@ -44,6 +44,15 @@ export interface GameplaySettings {
   timePace: TimePaceSetting;
 }
 
+/**
+ * Estado guardado de cada portal, por id.
+ *
+ * `phase` é um dos cinco degraus de `PortalPhase`. Campo novo: um
+ * salvamento anterior a esta versão não o tem, e a migração deduz o
+ * estado da lista `portals` sem apagar nada.
+ */
+export type PortalStateData = Record<string, { phase: string; charge: number }>;
+
 export interface ProgressData {
   /** Cristais de Luz coletados. */
   crystals: string[];
@@ -59,6 +68,16 @@ export interface ProgressData {
   distance: number;
   playSeconds: number;
   sphereMode: number;
+  /**
+   * De que região é cada id de progresso (`categoria:id` → região).
+   *
+   * É o que permite limpar o que sobrou de uma região sem tocar no
+   * progresso das outras. Ausente em salvamentos antigos: o jogo
+   * reaprende sozinho ao carregar cada região.
+   */
+  origins?: Record<string, string>;
+  /** Os cinco estados de cada portal. Ausente em salvamentos antigos. */
+  portalStates?: PortalStateData;
 }
 
 export interface SaveData {
@@ -114,7 +133,7 @@ export function defaultGameplaySettings(): GameplaySettings {
 }
 
 export function emptyProgress(): ProgressData {
-  return { crystals: [], entries: [], areas: [], portals: [], wishes: 0, photos: 0, distance: 0, playSeconds: 0, sphereMode: 0 };
+  return { crystals: [], entries: [], areas: [], portals: [], wishes: 0, photos: 0, distance: 0, playSeconds: 0, sphereMode: 0, origins: {}, portalStates: {} };
 }
 
 export function createNewSave(now: number = Date.now()): SaveData {
@@ -165,6 +184,43 @@ function idList(value: unknown, limit = 512): string[] {
     if (seen.size >= limit) break;
   }
   return [...seen];
+}
+
+/**
+ * Mapa `categoria:id` → região, descartando chaves estranhas.
+ *
+ * Um registro corrompido aqui não pode custar progresso ao jogador:
+ * o pior que acontece é o jogo reaprender de quem é o id na próxima
+ * vez que montar a região.
+ */
+function originMap(value: unknown, limit = 2048): Record<string, string> {
+  if (!isRecord(value)) return {};
+  const out: Record<string, string> = {};
+  let count = 0;
+  for (const [key, region] of Object.entries(value)) {
+    if (count >= limit) break;
+    if (typeof region !== 'string' || !/^[\w\-.]{1,64}$/.test(region)) continue;
+    if (!/^(crystals|entries|areas|portals):[\w\-.:]{1,64}$/.test(key)) continue;
+    out[key] = region;
+    count += 1;
+  }
+  return out;
+}
+
+const PORTAL_PHASES = new Set(['desconhecido', 'descoberto', 'parcial', 'ativado', 'pronto']);
+
+function portalStateMap(value: unknown, limit = 256): PortalStateData {
+  if (!isRecord(value)) return {};
+  const out: PortalStateData = {};
+  let count = 0;
+  for (const [id, raw] of Object.entries(value)) {
+    if (count >= limit) break;
+    if (!/^[\w\-.:]{1,64}$/.test(id) || !isRecord(raw)) continue;
+    const phase = typeof raw.phase === 'string' && PORTAL_PHASES.has(raw.phase) ? raw.phase : 'desconhecido';
+    out[id] = { phase, charge: num(raw.charge, 0, 0, 1) };
+    count += 1;
+  }
+  return out;
 }
 
 export function sanitizeGraphicsSettings(raw: unknown): GraphicsSettings | null {
@@ -268,6 +324,8 @@ export function sanitizeSave(raw: unknown, now: number = Date.now()): SaveData |
       distance: num(progress.distance, 0, 0, 1e9),
       playSeconds: num(progress.playSeconds, 0, 0, 1e9),
       sphereMode: Math.floor(num(progress.sphereMode, 0, 0, 16)),
+      origins: originMap(progress.origins),
+      portalStates: portalStateMap(progress.portalStates),
     },
     // Campos novos da versão 2: salvamentos antigos entram com o padrão.
     flags: idList(raw.flags, 256),
