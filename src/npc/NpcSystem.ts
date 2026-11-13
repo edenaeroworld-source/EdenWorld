@@ -48,6 +48,14 @@ export interface NpcSystemOptions {
   body?: CharacterGround;
   quality: QualityProfile;
   seed?: number;
+  /**
+   * Região em que a população começa.
+   *
+   * Dar a região já no construtor é o que faz a primeira carga e a
+   * viagem percorrerem o mesmo caminho: abrir o jogo salvo em Rosas
+   * Park monta Rosas Park, e não Aurora com o cenário de Rosas.
+   */
+  regionId?: string;
 }
 
 /*
@@ -64,6 +72,15 @@ const CITIZEN_COUNT = 54;
  * de uma vez, para que a lista entregue ao sistema de interação nunca mude.
  */
 const MAX_SLOTS = 18;
+
+/**
+ * Distância mínima (m) entre dois personagens do panteão.
+ *
+ * Um pouco mais larga que o raio de conversa, para que dois deuses
+ * próximos continuem sendo duas pessoas distintas na tela e no alvo
+ * da interação — e não um dentro do outro.
+ */
+const PLACE_SPACING = 4.5;
 
 /** Distância (m) em que um personagem do panteão aparece. */
 const DEITY_RANGE = 150;
@@ -256,9 +273,10 @@ export class NpcSystem implements GameSystem {
 
     this.blocked = options.blocked;
     this.network = buildAuroraWalkNetwork({ blocked: options.blocked, edgeBlocked: this.edgeBlocked, pointBlocked: this.pointBlocked });
-    this.spawnCitizens(CITIZEN_COUNT);
+    this.createPantheon();
     this.createSlots();
-    this.spawnPantheon();
+    // Um único caminho de entrada numa região, usado aqui e na viagem.
+    this.setRegion(options.regionId ?? this.regionId);
   }
 
   /**
@@ -362,40 +380,138 @@ export class NpcSystem implements GameSystem {
    * região que mais combina com eles. Um deus não é teleportado para
    * uma região que não é dele só porque o jogador viajou.
    */
+  /**
+   * Põe o panteão de pé na região montada.
+   *
+   * Vale para **qualquer** região, inclusive a primeira que abre: é o
+   * mesmo método no arranque e na viagem, e é isso que faz uma cidade
+   * voltar igual a como ficou. Antes, começar em Rosas Park deixava o
+   * panteão nas coordenadas de Aurora, porque só a viagem reposicionava.
+   *
+   * Três regras, nesta ordem:
+   *
+   * 1. **Quem mora aqui.** Em Aurora, todos. Fora dela, só os
+   *    `patrons` da região — um deus não é arrastado para uma cidade
+   *    que não é dele porque o jogador viajou.
+   * 2. **Um lugar para cada um.** Os lugares são tomados sem repetir.
+   *    Dois deuses com nomes do mesmo tamanho caíam no mesmo ponto —
+   *    era por isso que Suki-Chan e Maze apareciam dentro um do outro
+   *    em Rosas Park.
+   * 3. **Pé no chão.** A altura vem da física da região recém-montada,
+   *    nunca de um valor guardado da região anterior.
+   */
   private placePantheon(): void {
     const region = getRegion(this.regionId);
     const places = region?.places ?? [];
+    const home = this.deities.filter(
+      (deity) => this.regionId === 'aurora-city' || (region?.patrons.includes(deity.character.id) ?? false),
+    );
+
     for (const deity of this.deities) {
-      const isHome = this.regionId === 'aurora-city' || (region?.patrons.includes(deity.character.id) ?? false);
+      const isHome = home.includes(deity);
       deity.interactable.enabled = isHome;
-      if (!isHome) {
-        if (deity.avatar) deity.avatar.root.visible = false;
-        if (deity.label) deity.label.visible = false;
-        if (deity.aura) deity.aura.visible = false;
-        continue;
+      if (isHome) continue;
+      if (deity.avatar) deity.avatar.root.visible = false;
+      if (deity.label) deity.label.visible = false;
+      if (deity.aura) deity.aura.visible = false;
+    }
+
+    // Ordem estável por id: a mesma distribuição em toda sessão, sem
+    // depender de como o panteão foi carregado.
+    const ordered = [...home].sort((a, b) => (a.character.id < b.character.id ? -1 : a.character.id > b.character.id ? 1 : 0));
+    const taken: { x: number; z: number }[] = [];
+
+    for (const deity of ordered) {
+      const spot =
+        this.regionId === 'aurora-city'
+          ? { x: deity.character.place.x, z: deity.character.place.z }
+          : this.claimPlace(places, taken, deity.character.id);
+      const settled = this.settlePlacement(spot.x, spot.z, taken);
+      taken.push({ x: settled.x, z: settled.z });
+      deity.x = settled.x;
+      deity.y = settled.y;
+      deity.z = settled.z;
+      deity.interactable.position.set(settled.x, settled.y, settled.z);
+      if (deity.avatar) deity.avatar.root.position.set(settled.x, settled.y, settled.z);
+    }
+  }
+
+  /**
+   * Escolhe um lugar da região ainda livre para este personagem.
+   *
+   * O ponto de partida continua sendo estável por id — o mesmo deus
+   * procura sempre na mesma ordem —, mas um lugar já tomado faz a
+   * busca andar para o próximo em vez de empilhar dois personagens no
+   * mesmo canteiro.
+   */
+  private claimPlace(
+    places: readonly { x: number; z: number }[],
+    taken: readonly { x: number; z: number }[],
+    characterId: string,
+  ): { x: number; z: number } {
+    if (places.length === 0) return { x: 0, z: 0 };
+    let seed = 0;
+    for (let i = 0; i < characterId.length; i += 1) seed = (seed * 31 + characterId.charCodeAt(i)) >>> 0;
+    const start = seed % places.length;
+    for (let step = 0; step < places.length; step += 1) {
+      const place = places[(start + step) % places.length];
+      const clash = taken.some((other) => Math.hypot(other.x - place.x, other.z - place.z) < PLACE_SPACING);
+      if (!clash) return { x: place.x, z: place.z };
+    }
+    return { x: places[start].x, z: places[start].z };
+  }
+
+  /**
+   * Leva um ponto pretendido até onde dá para ficar de pé.
+   *
+   * Encosta na rede de caminhada quando o ponto oficial caiu em água
+   * ou dentro de uma construção, afasta de quem já está no lugar e só
+   * então pergunta à física qual é a altura. Nenhum deslocamento é
+   * aleatório: o anel de desempate é fixo, então a cidade monta igual
+   * todas as vezes.
+   */
+  private settlePlacement(x: number, z: number, taken: readonly { x: number; z: number }[]): { x: number; y: number; z: number } {
+    let px = x;
+    let pz = z;
+    const nodeId = this.network.nearest(px, pz);
+    if (nodeId >= 0) {
+      const node = this.network.node(nodeId);
+      if (Math.hypot(node.x - px, node.z - pz) > 18) {
+        px = node.x;
+        pz = node.z;
       }
-      let x = deity.character.place.x;
-      let z = deity.character.place.z;
-      if (this.regionId !== 'aurora-city' && places.length > 0) {
-        // Escolha estável: o mesmo deus cai sempre no mesmo lugar.
-        const place = places[deity.character.id.length % places.length];
-        x = place.x;
-        z = place.z;
-      }
-      const nodeId = this.network.nearest(x, z);
-      if (nodeId >= 0) {
-        const node = this.network.node(nodeId);
-        if (Math.hypot(node.x - x, node.z - z) > 18) {
-          x = node.x;
-          z = node.z;
+    }
+    const clashes = (cx: number, cz: number): boolean =>
+      taken.some((other) => Math.hypot(other.x - cx, other.z - cz) < PLACE_SPACING);
+    if (clashes(px, pz)) {
+      // Anel de desempate: oito direções fixas, raios crescentes.
+      outer: for (const radius of [PLACE_SPACING, PLACE_SPACING * 1.8, PLACE_SPACING * 2.6]) {
+        for (let i = 0; i < 8; i += 1) {
+          const angle = (i / 8) * Math.PI * 2;
+          const cx = px + Math.cos(angle) * radius;
+          const cz = pz + Math.sin(angle) * radius;
+          if (clashes(cx, cz) || this.blocked(cx, cz)) continue;
+          px = cx;
+          pz = cz;
+          break outer;
         }
       }
-      const y = this.groundFor(x, z);
-      deity.x = x;
-      deity.y = y;
-      deity.z = z;
-      deity.interactable.position.set(x, y, z);
     }
+    return { x: px, y: this.groundFor(px, pz), z: pz };
+  }
+
+  /**
+   * Onde cada personagem do panteão ficou, para a conferência da
+   * transição. Só os que esta região mostra entram na lista.
+   */
+  placedCharacters(): { id: string; x: number; y: number; z: number; active: boolean }[] {
+    return this.deities.map((deity) => ({
+      id: deity.character.id,
+      x: deity.x,
+      y: deity.y,
+      z: deity.z,
+      active: deity.interactable.enabled,
+    }));
   }
 
   /**
@@ -410,25 +526,22 @@ export class NpcSystem implements GameSystem {
     return this.body ? this.body.settle(x, z) : this.ground(x, z);
   }
 
-  private spawnPantheon(): void {
+  /**
+   * Cria o panteão — identidade, não posição.
+   *
+   * Quem cada personagem é não muda com a região: o nome, o modelo
+   * oficial, a persona e o ponto de conversa são os mesmos em todo o
+   * Éden. **Onde** ele está é assunto de `placePantheon`, que roda a
+   * cada região montada. Separar as duas coisas é o que garante que
+   * viajar não cria um segundo Saturno nem perde o original.
+   */
+  private createPantheon(): void {
     for (const character of PANTHEON) {
-      let { x, z } = character.place;
-      // Segurança: se o ponto oficial cair em água ou dentro de uma construção,
-      // o personagem vai para o nó caminhável mais próximo.
-      const nodeId = this.network.nearest(x, z);
-      if (nodeId >= 0) {
-        const node = this.network.node(nodeId);
-        if (Math.hypot(node.x - x, node.z - z) > 18) {
-          x = node.x;
-          z = node.z;
-        }
-      }
-      const y = this.groundFor(x, z);
       const interactable: Interactable = {
         id: `divino:${character.id}`,
         name: character.name,
         action: 'Conversar',
-        position: new THREE.Vector3(x, y, z),
+        position: new THREE.Vector3(character.place.x, 0, character.place.z),
         range: 3.2,
         enabled: true,
         payload: { type: 'conversa', personId: character.id, divino: true },
@@ -436,9 +549,9 @@ export class NpcSystem implements GameSystem {
       this.interactables.push(interactable);
       this.deities.push({
         character,
-        x,
-        y,
-        z,
+        x: character.place.x,
+        y: 0,
+        z: character.place.z,
         heading: character.place.heading,
         life: new NpcLife(characterPersona(character.id), character.id.length * 31 + character.name.length),
         avatar: null,

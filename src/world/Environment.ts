@@ -20,6 +20,24 @@ export interface EnvironmentQuality {
  * Ambiente do mundo: relógio, atmosfera, céu, luzes, névoa, clima e o
  * mapa de ambiente usado nos reflexos de vidro e superfícies glossy.
  */
+/**
+ * Devolve a cena ao estado neutro de iluminação.
+ *
+ * A intensidade do ambiente, o mapa de reflexo e a névoa pertencem à
+ * **cena**, não ao `Environment` que os escreveu. Ao trocar de região o
+ * objeto antigo é descartado, mas a cena continua a mesma — e sem esta
+ * limpeza ela chegava à região seguinte ainda vestindo a luz da
+ * anterior. Era metade do sintoma "Aurora volta lavada de luz".
+ *
+ * Fica separada da classe de propósito: assim o contrato pode ser
+ * conferido sem construir um renderizador.
+ */
+export function resetSceneAtmosphere(scene: THREE.Scene): void {
+  scene.environment = null;
+  scene.fog = null;
+  scene.environmentIntensity = 1;
+}
+
 export class Environment {
   readonly clock = new WorldClock();
   readonly atmosphere = new AtmosphereState();
@@ -123,8 +141,7 @@ export class Environment {
   }
 
   dispose(): void {
-    this.scene.environment = null;
-    this.scene.fog = null;
+    resetSceneAtmosphere(this.scene);
     this.pmremTarget?.dispose();
     this.cubeTarget.dispose();
     this.pmrem.dispose();

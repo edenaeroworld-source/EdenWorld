@@ -45,6 +45,7 @@ import { type LoadStatus, type SaveData, SaveSystem, createNewSave, getBrowserSt
 import { CHARACTER_VOICES, VoiceSystem } from '../systems/VoiceSystem';
 import { clamp01, formatDistance, formatDuration, wrapAngle } from '../utils/math';
 import { World } from '../world/World';
+import { type RegionValidation, checkRegionIntegrity, runRegionTransition } from '../world/RegionTransition';
 import { Zone } from '../world/ZoneMap';
 import { getRegion } from '../regions/Region';
 import { UniverseSystem } from '../universe/UniverseSystem';
@@ -421,6 +422,7 @@ export class Engine {
           return this.world.zones.has(x, z, Zone.Water | Zone.Building);
         },
         quality: this.quality.current,
+        regionId: this.universe.regions.currentRegionId,
       }),
     );
     this.afters = this.systems.register(
@@ -455,30 +457,18 @@ export class Engine {
     this.npcs.restoreAftersOverrides(this.save.afters.citizens);
     this.npcs.applyAftersEvent(this.cityAftersEvent(), true);
 
-    // Registros do diário: uma entrada por placa com `entryId`.
-    const seen = new Set<string>();
-    for (const item of city.interactables) {
-      if (item.payload.type !== 'placa' || !item.payload.entryId || seen.has(item.payload.entryId)) continue;
-      seen.add(item.payload.entryId);
-      this.journalEntries.push({ id: item.payload.entryId, title: item.payload.title, paragraphs: item.payload.paragraphs });
-    }
-    // Encontros com o panteão também viram registros do diário.
+    // Encontros com o panteão viram registros do diário. Valem no
+    // universo inteiro, não numa cidade só, então entram uma vez.
     for (const entry of CHARACTER_JOURNAL) this.journalEntries.push(entry);
-    this.progress.totals = { crystals: city.collectibles.length, entries: this.journalEntries.length, areas: this.world.areas.length, portals: city.portals.length };
-    this.progress.retainKnown({
-      crystals: city.collectibles.map((spot) => spot.id),
-      entries: this.journalEntries.map((entry) => entry.id),
-      areas: this.world.areas.map((area) => area.id),
-      portals: city.portals.map((portal) => portal.id),
-    });
 
-    this.interactions = new InteractionSystem([...city.interactables, ...this.npcs.interactables]);
+    this.interactions = new InteractionSystem([]);
     this.registerInteractions();
     this.interactions.onTargetChange = (item) => this.showPrompt(item);
-    city.sphere?.setMode(this.progress.sphereMode);
 
-    this.applyClockFromSave();
-    this.refreshWildlife();
+    // A primeira carga é uma transição como qualquer outra: daqui em
+    // diante abrir o jogo e viajar percorrem exatamente o mesmo
+    // caminho de religação.
+    this.applyRegionState(this.universe.regions.currentRegionId);
     this.wireEvents();
 
     this.quality.onChange((profile) => {
@@ -748,6 +738,106 @@ export class Engine {
   }
 
   /**
+   * Grava a hora do mundo antes de desmontar a região.
+   *
+   * `World.build` cria um relógio novo, que começa às 9h30 — a manhã
+   * clara do primeiro dia. Sem guardar a hora corrente antes de
+   * descarregar, atravessar um portal à noite devolvia Aurora City em
+   * plena manhã: não era um vazamento de material nem de iluminação,
+   * era o relógio voltando ao início. Esta é a etapa A da travessia.
+   */
+  private captureWorldClock(): void {
+    const clock = this.world.environment.clock;
+    this.save.world = { hours: clock.hours, day: clock.day };
+  }
+
+  /**
+   * Religa todos os sistemas à região que acabou de ser montada.
+   *
+   * **Um método só, usado pela primeira carga e por toda viagem.** A
+   * razão de existir é essa: enquanto abrir o jogo e atravessar um
+   * portal eram dois caminhos diferentes, o segundo esquecia metade
+   * do que o primeiro fazia — o relógio, a esfera, os Afters da
+   * população, a limpeza do progresso — e a cidade voltava diferente
+   * de como tinha ficado.
+   *
+   * Qualquer região nova que entre no jogo herda isto de graça: basta
+   * existir um blueprint, e o cenário, a população, a luz e o
+   * progresso são religados pelas mesmas regras.
+   */
+  private applyRegionState(regionId: string): void {
+    const region = this.world.city;
+
+    // Diário: uma entrada por placa com `entryId`, sem repetir as que
+    // já foram lidas noutra região.
+    const known = new Set(this.journalEntries.map((entry) => entry.id));
+    for (const item of region.interactables) {
+      if (item.payload.type !== 'placa' || !item.payload.entryId || known.has(item.payload.entryId)) continue;
+      known.add(item.payload.entryId);
+      this.journalEntries.push({ id: item.payload.entryId, title: item.payload.title, paragraphs: item.payload.paragraphs });
+    }
+
+    // A física antiga foi embora com a cidade antiga: a população
+    // precisa do chão da região nova antes de dar o primeiro passo.
+    this.characterGround = this.makeCharacterGround();
+    this.npcs.setBody(this.characterGround);
+    this.npcs.setRegion(regionId);
+    // Trocar de região respawna os habitantes; a silhueta de cada um
+    // volta do salvamento, e não do padrão.
+    this.npcs.restoreAftersOverrides(this.save.afters.citizens);
+    this.npcs.applyAftersEvent(this.cityAftersEvent(), true);
+
+    // Progresso: contagens e faxina sempre no escopo desta região. O
+    // que pertence às outras não é tocado.
+    this.progress.setRegion(regionId);
+    this.progress.totals = {
+      crystals: region.collectibles.length,
+      entries: this.journalEntries.length,
+      areas: this.world.areas.length,
+      portals: region.portals.length,
+    };
+    this.progress.retainKnown(
+      {
+        crystals: region.collectibles.map((spot) => spot.id),
+        entries: this.journalEntries.map((entry) => entry.id),
+        areas: this.world.areas.map((area) => area.id),
+        portals: region.portals.map((portal) => portal.id),
+      },
+      regionId,
+    );
+    this.progress.refreshPortalReadiness();
+
+    this.refreshInteractables();
+    region.sphere?.setMode(this.progress.sphereMode);
+    this.applyClockFromSave();
+    this.refreshWildlife();
+    this.world.applyQuality(this.quality.current);
+    this.baseMapCanvas = null;
+  }
+
+  /**
+   * Etapa D da travessia: a região está jogável?
+   *
+   * Confere o que o jogador veria de imediato — personagem duplicado,
+   * enterrado, flutuando ou fora do mapa. O laudo vai para o console
+   * de depuração; o jogo não trava por causa dele, mas nenhum
+   * problema passa silenciosamente.
+   */
+  private validateRegion(regionId: string): RegionValidation {
+    const ground = this.characterGround;
+    const report = checkRegionIntegrity({
+      regionId,
+      characters: this.npcs.placedCharacters(),
+      groundAt: (x, z) => (ground ? ground.settle(x, z) : this.world.heightField.getHeight(x, z)),
+      boundaryRadius: this.world.boundaryRadius,
+    });
+    if (!report.ok && this.flags.enabled) {
+      for (const problem of report.problems) console.warn(`[eden] ${problem}`);
+    }
+    return report;
+  }
+
+  /**
    * @param stand posição de estúdio (Estação de Estilo); sem ela, o avatar
    *   apenas se vira para o lado em que a câmera tem a vista mais livre.
    */
@@ -844,7 +934,10 @@ export class Engine {
     this.rig.enterFollow();
     this.rig.reset(this.player.motor.heading, true);
     this.lastDistance = this.player.motor.distanceTravelled;
-    this.progress.unlockPortal('praca');
+    // O portal da praça é o ponto de partida: já nasce ativado. Quem
+    // decide se dá para viajar é a rede, logo abaixo.
+    this.progress.advancePortal('praca', 'ativado', 1);
+    this.progress.refreshPortalReadiness();
     this.currentAreaId = null;
     this.hud.setMode('normal');
     this.hud.setVisible(true);
@@ -1088,13 +1181,18 @@ export class Engine {
     });
 
     interactions.register('portal', (item, payload) => {
-      const isNew = this.progress.unlockPortal(payload.portalId);
+      // O portal sobe a escada de estados em vez de acender de uma vez:
+      // descoberto -> ativado -> pronto. Tocar nele ativa; ficar pronto
+      // depende da rede ter um destino, o que `refreshPortalReadiness`
+      // decide. Assim um portal salvo pela metade volta pela metade.
+      const isNew = this.progress.advancePortal(payload.portalId, 'ativado', 1);
+      this.progress.refreshPortalReadiness();
       if (isNew) {
         this.audio.discovery();
         this.hud.toast(`Portal ativado: ${item.name}`, 'portal', 4.5);
         this.dirty = true;
       }
-      if (this.progress.portalCount >= 2) this.openPhone('mapa');
+      if (this.progress.travelReady(payload.portalId)) this.openPhone('mapa');
       else if (!isNew) this.hud.toast('Ative outros portais para viajar entre eles.', 'portal');
     });
 
@@ -1451,44 +1549,49 @@ export class Engine {
     loading.setProgress(0.03, 'Guardando as suas coisas…');
     await nextFrame();
 
-    this.collectibles.dispose();
-    this.scene.remove(this.collectibles.group);
-    this.world.dispose();
+    // A travessia inteira em quatro tempos — a mesma ordem para todas
+    // as regiões, hoje e para as que ainda não existem.
+    await runRegionTransition(
+      {
+        // A. Guardar: a hora do mundo e o progresso saem antes de
+        // qualquer coisa ser destruída.
+        save: () => {
+          this.captureWorldClock();
+          this.progress.refreshPortalReadiness();
+        },
+        // B. Descarregar: cenário, coletáveis e física da região antiga.
+        unload: () => {
+          this.collectibles.dispose();
+          this.scene.remove(this.collectibles.group);
+          this.world.dispose();
+        },
+        // C. Carregar: monta a região nova e religa tudo nela.
+        load: async (progress) => {
+          await this.world.build(async (fraction, label) => {
+            await progress(fraction, label);
+          }, regionId);
+          this.player.motor.setPhysics(this.world.physics);
+          this.collectibles = new Collectibles(this.world.city.collectibles, (id) => this.progress.hasCrystal(id));
+          this.scene.add(this.collectibles.group);
+          this.applyRegionState(regionId);
 
-    await this.world.build(async (fraction, label) => {
-      loading.setProgress(0.05 + fraction * 0.88, label);
-      await nextFrame();
-    }, regionId);
-
-    const region = this.world.city;
-    this.player.motor.setPhysics(this.world.physics);
-
-    // Registros do diário da região nova.
-    const known = new Set(this.journalEntries.map((entry) => entry.id));
-    for (const item of region.interactables) {
-      if (item.payload.type !== 'placa' || !item.payload.entryId || known.has(item.payload.entryId)) continue;
-      known.add(item.payload.entryId);
-      this.journalEntries.push({ id: item.payload.entryId, title: item.payload.title, paragraphs: item.payload.paragraphs });
-    }
-
-    this.collectibles = new Collectibles(region.collectibles, (id) => this.progress.hasCrystal(id));
-    this.scene.add(this.collectibles.group);
-    this.progress.totals = { crystals: region.collectibles.length, entries: this.journalEntries.length, areas: this.world.areas.length, portals: region.portals.length };
-
-    // A física antiga foi embora com a cidade antiga: os habitantes
-    // precisam do chão da região nova antes de dar o primeiro passo.
-    this.characterGround = this.makeCharacterGround();
-    this.npcs.setBody(this.characterGround);
-    this.npcs.setRegion(regionId);
-    this.refreshInteractables();
-    this.baseMapCanvas = null;
-    this.world.applyQuality(this.quality.current);
-    this.refreshWildlife();
-
-    const entry = this.universe.regions.entryPoint(regionId);
-    this.player.teleport(entry.x, entry.z, entry.heading);
-    this.rig.reset(entry.heading, true);
-    this.currentAreaId = null;
+          const entry = this.universe.regions.entryPoint(regionId);
+          this.player.teleport(entry.x, entry.z, entry.heading);
+          this.rig.reset(entry.heading, true);
+          this.currentAreaId = null;
+        },
+        // D. Validar: ninguém recebe o controle de volta sobre uma
+        // cidade com personagem enterrado ou duplicado sem que isso
+        // apareça.
+        validate: () => this.validateRegion(regionId),
+      },
+      {
+        onProgress: async (fraction, label) => {
+          loading.setProgress(0.05 + fraction * 0.88, label);
+          await nextFrame();
+        },
+      },
+    );
 
     await loading.finish();
     this.transitioning = false;
@@ -1858,10 +1961,13 @@ export class Engine {
       areaName: () => this.areaName,
       baseMap: () => this.getBaseMap(),
       playerPose: () => ({ x: this.player.position.x, z: this.player.position.z, heading: this.player.motor.heading }),
-      portals: () => this.world.city.portals.map((p) => ({ id: p.id, name: p.name, x: p.x, z: p.z, unlocked: this.progress.hasPortal(p.id) })),
+      // O mapa do EdenPhone mostra o que está pronto para viajar, não o
+      // que já foi tocado: um portal ativado sozinho não leva a lugar
+      // nenhum, e oferecê-lo seria uma promessa falsa.
+      portals: () => this.world.city.portals.map((p) => ({ id: p.id, name: p.name, x: p.x, z: p.z, unlocked: this.progress.travelReady(p.id) })),
       travel: (id) => {
         const portal = this.world.city.portals.find((p) => p.id === id);
-        if (portal && this.progress.hasPortal(id)) void this.travelTo(portal.x, portal.z, portal.heading, portal.y + 0.5, portal.name, PORTAL_CAMERA_TURN);
+        if (portal && this.progress.travelReady(id)) void this.travelTo(portal.x, portal.z, portal.heading, portal.y + 0.5, portal.name, PORTAL_CAMERA_TURN);
       },
       journal: () => this.journalEntries.map((entry) => ({ ...entry, read: this.progress.hasEntry(entry.id) })),
 

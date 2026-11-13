@@ -67,6 +67,14 @@ export class Placement {
     readonly x: number,
     readonly z: number,
     readonly yaw: number,
+    /**
+     * Peça silenciada: cai numa área reservada e não produz nada.
+     *
+     * A cadeia de chamadas continua funcionando — cada método devolve
+     * `this` como sempre —, então o acabamento não precisa de um `if`
+     * em volta de cada móvel para respeitar a escada.
+     */
+    readonly muted = false,
   ) {
     this.cos = Math.cos(yaw);
     this.sin = Math.sin(yaw);
@@ -79,6 +87,7 @@ export class Placement {
 
   /** Caixa: a peça mais usada de todas. */
   box(w: number, h: number, d: number, material: THREE.Material, dx = 0, dy = 0, dz = 0, spin = 0): this {
+    if (this.muted) return this;
     const at = this.local(dx, dz);
     this.build.mesh(new THREE.BoxGeometry(w, h, d), material, at.x, dy, at.z, this.yaw + spin);
     return this;
@@ -86,6 +95,7 @@ export class Placement {
 
   /** Cilindro: pés, canos, vasos, postes. */
   cyl(radiusTop: number, radiusBottom: number, h: number, segments: number, material: THREE.Material, dx = 0, dy = 0, dz = 0): this {
+    if (this.muted) return this;
     const at = this.local(dx, dz);
     this.build.mesh(new THREE.CylinderGeometry(radiusTop, radiusBottom, h, segments), material, at.x, dy, at.z, this.yaw);
     return this;
@@ -93,6 +103,7 @@ export class Placement {
 
   /** Esfera: puxadores, frutas, bolhas. */
   sph(radius: number, material: THREE.Material, dx = 0, dy = 0, dz = 0, segments = 10): this {
+    if (this.muted) return this;
     const at = this.local(dx, dz);
     this.build.mesh(new THREE.SphereGeometry(radius, segments, Math.max(6, segments - 2)), material, at.x, dy, at.z, this.yaw);
     return this;
@@ -100,6 +111,7 @@ export class Placement {
 
   /** Volume sólido: o móvel ocupa espaço e o jogador contorna. */
   solid(halfX: number, halfZ: number, height: number, suffix: string, dx = 0, dz = 0, yMin = 0): this {
+    if (this.muted) return this;
     const at = this.local(dx, dz);
     this.build.collide(at.x, at.z, halfX, halfZ, yMin, height, this.yaw, `movel:${suffix}`);
     return this;
@@ -107,6 +119,7 @@ export class Placement {
 
   /** Superfície pisável: degrau, estrado, palco. */
   walkable(halfX: number, halfZ: number, top: number, suffix: string, dx = 0, dz = 0, surface: SurfaceType = 'stone'): this {
+    if (this.muted) return this;
     const at = this.local(dx, dz);
     this.build.step(at.x, at.z, halfX, halfZ, top, this.yaw, suffix, surface);
     return this;
@@ -114,6 +127,7 @@ export class Placement {
 
   /** Ponto de luz da peça (abajur, vitrine, geladeira aberta). */
   lamp(color: number, intensity: number, distance: number, dx = 0, dy = 1.6, dz = 0): this {
+    if (this.muted) return this;
     const at = this.local(dx, dz);
     this.build.light(at.x, dy, at.z, color, intensity, distance);
     return this;
@@ -159,9 +173,40 @@ export class InteriorBuild {
     return this.baseY + y;
   }
 
-  /** Começa uma peça em (x, z) virada para `yaw`. */
+  /**
+   * Áreas em que o acabamento não pode pôr móvel nenhum.
+   *
+   * Hoje é só o vão da escada e o patamar da boca, mas a lista é
+   * genérica de propósito: qualquer coisa que precise ficar
+   * desobstruída entra aqui e vale para todos os interiores.
+   */
+  private readonly keepOut: Rect[] = [];
+
+  /** Reserva uma área: nada de mobília daqui para dentro. */
+  reserve(rect: Rect): void {
+    this.keepOut.push(rect);
+  }
+
+  /** `true` quando o ponto cai numa área reservada. */
+  reserved(x: number, z: number): boolean {
+    return this.keepOut.some((r) => x >= r.x && x <= r.x + r.w && z >= r.z && z <= r.z + r.d);
+  }
+
+  /**
+   * Começa uma peça em (x, z) virada para `yaw`.
+   *
+   * Dentro de uma área reservada a peça vira um nada — não desenha,
+   * não colide, não acende. É aqui que a regra de acessibilidade das
+   * escadas pega **todos** os acabamentos de uma vez, sem que nenhum
+   * deles precise saber que existe uma escada.
+   */
   at(x: number, z: number, yaw = 0): Placement {
-    return new Placement(this, x, z, yaw);
+    return new Placement(this, x, z, yaw, this.reserved(x, z));
+  }
+
+  /** Como `at`, mas ignora as reservas: para estrutura (portas, vãos). */
+  atAnyway(x: number, z: number, yaw = 0): Placement {
+    return new Placement(this, x, z, yaw, false);
   }
 
   /* ------------------------- peças elementares ------------------------- */
@@ -396,7 +441,8 @@ export class InteriorBuild {
   /** `InteriorDoor`: uma porta de vidro no vão, com moldura acesa. */
   door(x: number, z: number, yaw: number, options: { width?: number; label?: 'entrada' | 'interna' } = {}): void {
     const width = options.width ?? DOOR_WIDTH;
-    const place = this.at(x, z, yaw);
+    // Porta é estrutura, não mobília: uma reserva não pode apagá-la.
+    const place = this.atAnyway(x, z, yaw);
     const jamb = this.palette.trim;
     place.box(0.12, DOOR_HEIGHT, 0.3, jamb, -width / 2 - 0.06, DOOR_HEIGHT / 2, 0);
     place.box(0.12, DOOR_HEIGHT, 0.3, jamb, width / 2 + 0.06, DOOR_HEIGHT / 2, 0);

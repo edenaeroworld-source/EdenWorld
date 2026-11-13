@@ -261,14 +261,27 @@ describe('ProgressSystem', () => {
     expect(progress.hasCrystal('intruso')).toBe(false);
   });
 
-  it('descarta registros que não existem no mundo desta versão', () => {
+  it('descarta registros desta região que não existem no mundo desta versão', () => {
     const progress = new ProgressSystem({
       ...emptyProgress(),
       crystals: ['cristal-praca', 'cristal-de-outra-versao'],
       entries: ['placa-1', 'placa-2', 'placa-apagada'],
       areas: ['praca', 'lua'],
       portals: ['praca', 'portal-inventado'],
+      // O salvamento sabe de quem é cada id: todos são de Aurora City.
+      origins: {
+        'crystals:cristal-praca': 'aurora-city',
+        'crystals:cristal-de-outra-versao': 'aurora-city',
+        'entries:placa-1': 'aurora-city',
+        'entries:placa-2': 'aurora-city',
+        'entries:placa-apagada': 'aurora-city',
+        'areas:praca': 'aurora-city',
+        'areas:lua': 'aurora-city',
+        'portals:praca': 'aurora-city',
+        'portals:portal-inventado': 'aurora-city',
+      },
     });
+    progress.setRegion('aurora-city');
     progress.totals = { crystals: 1, entries: 2, areas: 1, portals: 1 };
     progress.retainKnown({ crystals: ['cristal-praca'], entries: new Set(['placa-1', 'placa-2']), areas: ['praca'], portals: ['praca', 'mirante'] });
     expect([progress.crystalCount, progress.entryCount, progress.areaCount, progress.portalCount]).toEqual([1, 2, 1, 1]);
@@ -277,6 +290,40 @@ describe('ProgressSystem', () => {
     expect(progress.hasPortal('mirante')).toBe(false);
     expect(progress.completion).toBe(100);
     expect(progress.toData().areas).toEqual(['praca']);
+  });
+
+  it('a faxina de uma região não encosta no progresso das outras', () => {
+    // Aurora inteira recolhida; Rosas Park pela metade.
+    const progress = new ProgressSystem({
+      ...emptyProgress(),
+      crystals: ['cristal-praca', 'cristal-mirante', 'rosas-lago'],
+      portals: ['praca'],
+      origins: {
+        'crystals:cristal-praca': 'aurora-city',
+        'crystals:cristal-mirante': 'aurora-city',
+        'crystals:rosas-lago': 'rosas-park',
+        'portals:praca': 'aurora-city',
+      },
+    });
+
+    // O jogador viaja para Rosas Park: a região montada só conhece os
+    // ids dela, e é exatamente essa lista que chega ao `retainKnown`.
+    progress.setRegion('rosas-park');
+    progress.retainKnown({ crystals: ['rosas-lago', 'rosas-roseiral'], entries: [], areas: [], portals: [] });
+
+    // Nada de Aurora foi apagado — era isto que o universo perdia.
+    expect(progress.hasCrystal('cristal-praca')).toBe(true);
+    expect(progress.hasCrystal('cristal-mirante')).toBe(true);
+    expect(progress.hasPortal('praca')).toBe(true);
+    // E o contador fala da cidade em que o jogador está.
+    expect(progress.crystalCount).toBe(1);
+    expect(progress.universeCrystalCount).toBe(3);
+
+    // De volta a Aurora, tudo continua lá.
+    progress.setRegion('aurora-city');
+    progress.retainKnown({ crystals: ['cristal-praca', 'cristal-mirante'], entries: [], areas: [], portals: ['praca'] });
+    expect(progress.crystalCount).toBe(2);
+    expect(progress.hasCrystal('rosas-lago')).toBe(true);
   });
 });
 

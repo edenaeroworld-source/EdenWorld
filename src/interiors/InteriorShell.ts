@@ -309,6 +309,37 @@ export function stairFlight(stair: Rect & { yaw: number }): StairFlight {
 }
 
 /**
+ * Fundo mínimo (m) do patamar livre na boca da escada.
+ *
+ * Quem acaba de subir precisa de onde pôr os dois pés e virar. Menos
+ * que isto e o jogador sai do último degrau direto contra um móvel —
+ * que foi literalmente o que aconteceu na Torre Zênite, onde uma
+ * vitrine ficou a 70 cm da boca e prendia quem subia.
+ */
+export const STAIR_LANDING_DEPTH = 2.0;
+
+/**
+ * A área que precisa ficar livre de mobília: o vão da escada mais o
+ * patamar na frente da boca.
+ *
+ * Esta é a regra universal de acessibilidade das escadas. Vale para
+ * todo interior de mais de um andar, atual ou futuro: o acabamento
+ * decora o que quiser, menos o caminho de quem está subindo. Paredes,
+ * degraus, corrimão e guarda-corpo **não** passam por aqui — eles são
+ * estrutura e continuam exatamente onde estão.
+ */
+export function stairKeepOut(stair: Rect & { yaw: number }, landing: number = STAIR_LANDING_DEPTH): Rect {
+  const flight = stairFlight(stair);
+  if (flight.alongZ) {
+    // A boca abre no eixo Z: o patamar cresce para fora dela.
+    const z = flight.forward > 0 ? stair.z : stair.z - landing;
+    return { x: stair.x, z, w: stair.w, d: stair.d + landing };
+  }
+  const x = flight.forward > 0 ? stair.x : stair.x - landing;
+  return { x, z: stair.z, w: stair.w + landing, d: stair.d };
+}
+
+/**
  * Altura do piso da escada no ponto (x, z) local, em metros acima do
  * andar de baixo — ou `null` fora do vão.
  *
