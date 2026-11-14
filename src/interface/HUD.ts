@@ -36,6 +36,7 @@ export class HUD {
   private readonly clockText: HTMLSpanElement;
   private readonly crystalText: HTMLSpanElement;
   private readonly corners: HTMLElement[];
+  private readonly phoneButton: HTMLButtonElement;
   private readonly prompt: HTMLButtonElement;
   private readonly promptKey: HTMLSpanElement;
   private readonly promptText: HTMLSpanElement;
@@ -71,6 +72,7 @@ export class HUD {
     this.crystalText = h('span', { text: '0/0' });
     const crystals = h('div', { class: 'pill', attrs: { title: 'Cristais de Luz' } }, h('span', { html: icon('crystal', 18) }), this.crystalText);
     const phone = button({ class: 'btn btn--icon hud__btn', icon: icon('phone', 22), ariaLabel: 'Abrir EdenPhone', onClick: () => callbacks.onPhone() });
+    this.phoneButton = phone;
     const menu = button({ class: 'btn btn--ghost btn--icon hud__btn', icon: icon('menu', 22), ariaLabel: 'Pausar e abrir o menu', onClick: () => callbacks.onMenu() });
     phone.tabIndex = -1;
     menu.tabIndex = -1;
@@ -135,6 +137,22 @@ export class HUD {
 
   setVisible(visible: boolean): void {
     this.element.classList.toggle('is-hidden', !visible);
+  }
+
+  /**
+   * Avisa que o EdenPhone lateral está aberto, e de que lado.
+   *
+   * A marca vai na raiz da interface porque quem precisa se afastar do
+   * aparelho não é só o HUD: os controles de toque moram na mesma
+   * raiz, e andar e pular têm de continuar acessíveis. O HUD não some
+   * — o jogo continua, e a vida do personagem continua importando.
+   */
+  setPhoneOpen(open: boolean, side: 'direita' | 'esquerda' = 'direita'): void {
+    const root = this.element.parentElement ?? this.element;
+    root.classList.toggle('ui--phone', open);
+    root.classList.toggle('ui--phone-left', open && side === 'esquerda');
+    this.phoneButton.classList.toggle('is-on', open);
+    this.phoneButton.setAttribute('aria-label', open ? 'Guardar o EdenPhone' : 'Abrir EdenPhone');
   }
 
   setMode(mode: HudMode, label = ''): void {

@@ -28,6 +28,21 @@ function isTextField(target: EventTarget | null): boolean {
   return type === 'text' || type === 'search' || type === 'email' || type === 'password' || type === 'number';
 }
 
+/**
+ * `true` quando o foco está dentro de uma interface que convive com a
+ * gameplay — hoje, o EdenPhone lateral.
+ *
+ * Essas interfaces ficam abertas com o jogo rodando, então as teclas
+ * precisam de dono: quem está ajustando um controle deslizante de
+ * AfterCurve com as setas não pode sair andando junto. O que continua
+ * passando são os atalhos de abrir e fechar, para o jogador nunca
+ * ficar preso dentro do aparelho.
+ */
+function inLiveSurface(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null;
+  return !!el && typeof el.closest === 'function' && el.closest('[data-live-ui]') !== null;
+}
+
 /** Teclado e mouse: teclas remapeáveis, captura do cursor e zoom pela roda. */
 export class KeyboardMouseInput {
   private readonly down = new Set<string>();
@@ -40,6 +55,14 @@ export class KeyboardMouseInput {
   captureKey: ((code: string) => void) | null = null;
   /** Capturar o cursor ao clicar no jogo (recomendado no computador). */
   usePointerLock = true;
+  /**
+   * `false` enquanto alguma interface conviva precisa do cursor livre.
+   *
+   * Com o EdenPhone lateral a gameplay continua ligada, mas o mouse
+   * tem de poder clicar nos aplicativos: capturar o cursor aqui
+   * esconderia o ponteiro e tornaria o celular inalcançável.
+   */
+  private pointerLockAllowed = true;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -83,6 +106,13 @@ export class KeyboardMouseInput {
     return value;
   }
 
+  /** Libera (ou devolve) o direito de capturar o cursor. */
+  setPointerLockAllowed(allowed: boolean): void {
+    if (this.pointerLockAllowed === allowed) return;
+    this.pointerLockAllowed = allowed;
+    if (!allowed) this.releasePointer();
+  }
+
   releasePointer(): void {
     this.dragging = false;
     if (this.pointerLocked) {
@@ -92,7 +122,7 @@ export class KeyboardMouseInput {
   }
 
   private requestPointer(): void {
-    if (!this.usePointerLock || this.pointerLocked || typeof this.canvas.requestPointerLock !== 'function') return;
+    if (!this.usePointerLock || !this.pointerLockAllowed || this.pointerLocked || typeof this.canvas.requestPointerLock !== 'function') return;
     try {
       const result = this.canvas.requestPointerLock() as unknown;
       if (result && typeof (result as Promise<void>).catch === 'function') {
@@ -146,8 +176,17 @@ export class KeyboardMouseInput {
     }
 
     if (isTextField(event.target)) return;
-    this.down.add(code);
     const action = this.actionFor(code);
+    if (inLiveSurface(event.target)) {
+      // Dentro do celular só valem os atalhos de sair. Tudo o mais é da
+      // interface: setas movem o controle deslizante, Tab troca o foco.
+      if ((action === 'phone' || action === 'pause') && !event.repeat) {
+        event.preventDefault();
+        this.host.onAction(action);
+      }
+      return;
+    }
+    this.down.add(code);
     const isMove = this.isMoveKey(code);
     if (action || isMove) event.preventDefault();
     if (action && !event.repeat) this.host.onAction(action);

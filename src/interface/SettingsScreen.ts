@@ -504,6 +504,19 @@ export class SettingsScreen implements Screen {
       ),
       field('Dicas de controles', toggle('Dicas de controles', gameplay.hints, (v) => ((gameplay.hints = v), commit())), 'Mostra os comandos básicos ao entrar no jogo.'),
       field(
+        'Lado do EdenPhone',
+        choiceGroup(
+          'Lado do EdenPhone',
+          [
+            { value: 'direita', label: 'Direita' },
+            { value: 'esquerda', label: 'Esquerda' },
+          ] as const,
+          gameplay.phoneSide,
+          (v) => ((gameplay.phoneSide = v), commit()),
+        ),
+        'De que lado da tela o celular aparece durante o jogo.',
+      ),
+      field(
         'Passagem do tempo',
         choiceGroup(
           'Passagem do tempo',

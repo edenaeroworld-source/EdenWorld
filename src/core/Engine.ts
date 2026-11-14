@@ -26,6 +26,7 @@ import { Collectibles } from '../interactions/Collectibles';
 import type { Interactable } from '../interactions/Interactable';
 import { InteractionSystem } from '../interactions/InteractionSystem';
 import { AvatarCreatorScreen } from '../interface/AvatarCreator';
+import { CharacterPreview } from '../interface/CharacterPreview';
 import { EdenPhoneUI, type JournalEntry, type PhoneApp, type PhoneHost, type WeatherChoice } from '../interface/EdenPhoneUI';
 import { HUD, type HudHint } from '../interface/HUD';
 import { renderBaseMap } from '../interface/MapRenderer';
@@ -203,6 +204,9 @@ export class Engine {
   private readonly settingsScreen: SettingsScreen;
   private readonly creator: AvatarCreatorScreen;
   private readonly phone: EdenPhoneUI;
+  private readonly preview: CharacterPreview;
+  /** Tempo acumulado desde o último quadro da prévia do celular. */
+  private previewClock = 0;
 
   private mode: Mode = 'menu';
   private elapsed = 0;
@@ -309,7 +313,7 @@ export class Engine {
     this.social = this.systems.register(new LocalSocial());
 
     this.hud = new HUD(uiRoot, {
-      onPhone: () => this.openPhone('home'),
+      onPhone: () => this.togglePhone(),
       onMenu: () => this.pause(),
       onInteract: () => this.handleAction('interact'),
       onExitMode: () => this.exitSpecialMode(),
@@ -364,6 +368,22 @@ export class Engine {
       onCancel: () => this.cancelCreator(),
       onRotate: (delta) => this.rig.addLook(delta, 0),
     });
+    // A prévia do celular. Lê o personagem de verdade e é registrada no
+    // mesmo ator de Afters do jogador — um corpo a mais para a mesma
+    // silhueta, nunca um segundo sistema de transformação.
+    this.preview = new CharacterPreview(
+      {
+        appearance: () => this.player.avatar.appearance,
+        proportions: () => this.player.avatar.proportions,
+        gestation: () => this.player.avatar.gestation,
+        expression: () => this.player.avatar.expression,
+        motion: () => ({ state: this.player.motor.state, speed: this.player.motor.speed }),
+      },
+      {
+        attach: (avatar) => this.aftersBody?.addAvatar(avatar),
+        detach: (avatar) => this.aftersBody?.removeAvatar(avatar),
+      },
+    );
     this.phone = new EdenPhoneUI(this.createPhoneHost());
 
     this.loop = new GameLoop((dt, elapsed) => this.frame(dt, elapsed));
@@ -451,6 +471,9 @@ export class Engine {
       }),
     );
     this.aftersBody.setAvatars([this.player.avatar]);
+    // A prévia pode já ter sido montada (reinício de região): o ator
+    // precisa reencontrá-la, senão a silhueta só valeria no mundo.
+    this.preview.reattach();
     this.aftersBody.setBody(this.save.afters.body, false);
     // A população usa a mesma tecnologia pelo mesmo sistema: cada habitante
     // ganha um ator com a configuração do próprio perfil.
@@ -611,6 +634,25 @@ export class Engine {
     const active = (this.mode === 'play' || this.mode === 'scenic' || this.mode === 'photo') && !this.ui.hasModal && !this.transitioning;
     this.input.setGameplayEnabled(active);
     this.input.setTouchControlsAllowed(this.mode === 'play');
+    // Com o celular aberto a gameplay continua, mas o cursor fica solto:
+    // capturado, o ponteiro sumiria e não haveria como tocar nos
+    // aplicativos.
+    this.input.setPointerLockAllowed(!this.ui.isOpen(this.phone.id));
+    this.syncPhonePresence();
+  }
+
+  /**
+   * Acerta o jogo ao redor do celular lateral.
+   *
+   * Nada aqui para o mundo — o que muda é o que atrapalharia usar o
+   * aparelho: a mira de interação some (um `E` não pode abrir uma
+   * porta enquanto se digita no EdenTalk) e a prévia 3D só gasta
+   * quadros enquanto está à vista.
+   */
+  private syncPhonePresence(): void {
+    const open = this.ui.isOpen(this.phone.id);
+    this.hud.setPhoneOpen(open, this.save.settings.gameplay.phoneSide);
+    if (!open) this.preview.stop();
   }
 
   private showMenu(): void {
@@ -978,18 +1020,40 @@ export class Engine {
       return;
     }
     if (this.mode !== 'play' || this.ui.hasModal || this.transitioning) return;
+    // Com o celular na mão, Esc é "saia daqui" antes de ser "pause":
+    // sobe um nível dentro do aplicativo e, no topo, guarda o aparelho.
+    // Abrir o menu por cima do celular aberto seria duas telas numa.
+    if (this.ui.isOpen(this.phone.id)) {
+      this.phone.onBack();
+      return;
+    }
     this.ui.open(this.pauseScreen);
   }
 
-  private openPhone(app: PhoneApp): void {
+  /** @param app `undefined` retoma o aplicativo em que o celular foi guardado. */
+  private openPhone(app?: PhoneApp): void {
     if (this.mode !== 'play' || this.transitioning) return;
     if (this.ui.isOpen(this.phone.id)) {
-      this.phone.show(app, true);
+      if (app) this.phone.show(app, true);
       return;
     }
     if (this.ui.hasModal) return;
     this.phone.prepare(app);
     this.ui.open(this.phone);
+  }
+
+  /**
+   * A tecla do celular abre e fecha.
+   *
+   * Com o aparelho lateral o jogo nunca para, então a mesma tecla
+   * continua chegando aqui enquanto ele está aberto — e fechar com ela
+   * é o caminho rápido de volta que o jogador espera. Abrir num
+   * aplicativo específico (um portal, o painel de eventos) continua
+   * sendo `openPhone`, que troca de tela em vez de fechar.
+   */
+  private togglePhone(): void {
+    if (this.ui.isOpen(this.phone.id)) this.ui.close(this.phone);
+    else this.openPhone();
   }
 
   /* ------------------------------------------------------------------ */
@@ -1012,7 +1076,7 @@ export class Engine {
         if (this.interactions.interact(this.elapsed)) this.input.vibrate(0.15, 0.3, 60);
         break;
       case 'phone':
-        this.openPhone('home');
+        this.togglePhone();
         break;
       case 'pause':
         this.pause();
@@ -1820,6 +1884,9 @@ export class Engine {
       this.input.keyboard.usePointerLock = settings.gameplay.pointerLock;
       this.world.environment.clock.pace = settings.gameplay.timePace;
       if (!settings.gameplay.hints) this.hud.setHints(null);
+      // Trocar de lado vale na hora, mesmo com o celular já aberto.
+      this.phone.setSide(settings.gameplay.phoneSide);
+      this.syncPhonePresence();
     }
     this.dirty = true;
   }
@@ -2093,6 +2160,8 @@ export class Engine {
       },
       openSettings: () => this.ui.open(this.settingsScreen),
       close: () => this.ui.close(this.phone),
+      phoneSide: () => this.save.settings.gameplay.phoneSide,
+      preview: () => this.preview,
     };
   }
 
@@ -2122,6 +2191,25 @@ export class Engine {
   private cityAftersEvent(): AftersCityEvent {
     if (this.currentAreaId === 'palco') return 'palco';
     return this.world.environment.clock.isNight ? 'noite' : 'normal';
+  }
+
+  /**
+   * Desenha a prévia do celular, com orçamento próprio.
+   *
+   * O mundo roda a 60; a prévia, a 30. Um personagem girando devagar
+   * numa janela de 15 cm não ganha nada com mais quadros, e o celular
+   * de quem joga no telefone agradece.
+   */
+  private updatePreview(dt: number): void {
+    if (!this.preview.active) {
+      this.previewClock = 0;
+      return;
+    }
+    this.previewClock += dt;
+    if (this.previewClock < this.preview.frameInterval) return;
+    const step = this.previewClock;
+    this.previewClock = 0;
+    this.preview.update(step);
   }
 
   private updateArea(showBanner: boolean): void {
@@ -2183,7 +2271,7 @@ export class Engine {
 
     const p = this.player.position;
     if (playing) {
-      this.interactions.enabled = !motor.isSitting && !modal;
+      this.interactions.enabled = !motor.isSitting && !modal && !this.ui.isOpen(this.phone.id);
       this.interactions.update(p.x, p.y, p.z, motor.heading, elapsed);
       const travelled = motor.distanceTravelled - this.lastDistance;
       this.lastDistance = motor.distanceTravelled;
@@ -2236,6 +2324,10 @@ export class Engine {
     this.afters.setVisible(this.player.visible && mode !== 'menu');
     this.world.update(dt, elapsed, this.rig.camera, this.shadowFocus, worldActive);
     this.systems.update(dt, elapsed);
+    // A prévia é desenhada depois dos sistemas: o corpo que ela mostra
+    // já recebeu, neste mesmo quadro, as intensidades que o ator de
+    // Afters acabou de escrever no personagem do mundo.
+    this.updatePreview(dt);
     // Quem está dentro do prédio continua vivo: atendentes respiram,
     // clientes andam pelos corredores.
     if (this.universe.interiors.isInside) this.interiorScene?.update(dt, elapsed);

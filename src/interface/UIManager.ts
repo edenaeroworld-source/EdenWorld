@@ -1,9 +1,28 @@
 import type { NavCommand } from '../input/InputTypes';
 
-/** Uma tela modal da interface (menu, painel, diálogo). */
+/** Uma tela da interface (menu, painel, diálogo). */
 export interface Screen {
   readonly id: string;
   readonly element: HTMLElement;
+  /**
+   * `false` quando a tela convive com a gameplay em vez de interrompê-la.
+   *
+   * Uma tela comum é modal: enquanto está aberta o jogo não recebe
+   * comandos, a tela de baixo fica inerte e o foco é capturado. O
+   * EdenPhone lateral precisa do contrário — o mundo continua andando
+   * atrás dele, o personagem continua respondendo ao teclado, e a tecla
+   * do celular tem de voltar a fechá-lo. Quem declara isto sai da conta
+   * de `hasModal` e não torna inerte quem está embaixo.
+   */
+  readonly blocking?: boolean;
+  /**
+   * Milissegundos de animação de saída antes de tirar a tela do DOM.
+   *
+   * A tela sai da pilha na hora — o jogo volta a responder no mesmo
+   * quadro —, mas o elemento fica mais um instante, sem receber
+   * cliques, para poder deslizar para fora em vez de piscar.
+   */
+  readonly exitMs?: number;
   /** Ação de "voltar" (Esc, botão B). Se ausente, a tela não pode ser dispensada. */
   onBack?(): void;
   /** Troca de aba (LB/RB). */
@@ -82,7 +101,20 @@ export class UIManager {
 
   /** `true` quando há alguma tela modal aberta (o jogo não recebe comandos). */
   get hasModal(): boolean {
+    return this.stack.some((screen) => screen.blocking !== false);
+  }
+
+  /** `true` quando há qualquer tela aberta, modal ou conviva. */
+  get hasScreen(): boolean {
     return this.stack.length > 0;
+  }
+
+  /** A tela do topo que captura comandos, ignorando as conviventes. */
+  get topBlocking(): Screen | null {
+    for (let i = this.stack.length - 1; i >= 0; i -= 1) {
+      if (this.stack[i].blocking !== false) return this.stack[i];
+    }
+    return null;
   }
 
   isOpen(id: string): boolean {
@@ -92,17 +124,21 @@ export class UIManager {
   open(screen: Screen, silent = false): void {
     if (this.stack.includes(screen)) return;
     const previous = this.top;
-    if (previous) {
+    // Uma tela conviva não apaga a de baixo: as duas ficam utilizáveis.
+    if (previous && screen.blocking !== false) {
       const active = document.activeElement as HTMLElement | null;
       if (active && previous.element.contains(active)) this.lastFocus.set(previous, active);
       previous.element.inert = true;
     }
     this.stack.push(screen);
+    screen.element.classList.remove('is-leaving');
     screen.element.inert = false;
     this.root.appendChild(screen.element);
     screen.onOpen?.();
     if (!silent) this.sound('open');
-    this.focusInitial(screen);
+    // Abrir o celular não pode tirar o foco de onde o jogador estava: no
+    // computador isso engoliria o próximo WASD.
+    if (screen.blocking !== false) this.focusInitial(screen);
     this.onChange?.();
   }
 
@@ -112,16 +148,29 @@ export class UIManager {
     const index = this.stack.indexOf(target);
     if (index < 0) return;
     this.stack.splice(index, 1);
-    target.element.remove();
+    const exitMs = target.exitMs ?? 0;
+    if (exitMs > 0) {
+      const element = target.element;
+      element.classList.add('is-leaving');
+      element.inert = true;
+      window.setTimeout(() => {
+        element.classList.remove('is-leaving');
+        // Pode ter sido reaberta nesse meio-tempo: só sai quem ainda
+        // está de saída.
+        if (!this.stack.includes(target)) element.remove();
+      }, exitMs);
+    } else {
+      target.element.remove();
+    }
     target.onClose?.();
     if (!silent) this.sound('close');
     const top = this.top;
-    if (top) {
+    if (top && target.blocking !== false) {
       top.element.inert = false;
       const remembered = this.lastFocus.get(top);
       if (remembered && top.element.contains(remembered) && isVisible(remembered)) remembered.focus({ preventScroll: true });
       else this.focusInitial(top);
-    } else {
+    } else if (!top || target.blocking === false) {
       (document.activeElement as HTMLElement | null)?.blur?.();
     }
     this.onChange?.();

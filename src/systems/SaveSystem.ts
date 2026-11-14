@@ -34,6 +34,9 @@ export interface AudioSettings {
 
 export type TimePaceSetting = 'normal' | 'rapido' | 'parado';
 
+/** Lado da tela em que o EdenPhone encosta. */
+export type PhoneSide = 'direita' | 'esquerda';
+
 export interface GameplaySettings {
   /** A câmera se realinha atrás do personagem ao andar. */
   autoCamera: boolean;
@@ -42,6 +45,13 @@ export interface GameplaySettings {
   /** Mostra as dicas de controles no HUD. */
   hints: boolean;
   timePace: TimePaceSetting;
+  /**
+   * Lado da tela em que o EdenPhone aparece.
+   *
+   * Canhoto, mão dominante, ou só gosto: o aparelho encosta onde o
+   * jogador mandar, e a escolha acompanha o salvamento.
+   */
+  phoneSide: PhoneSide;
 }
 
 /**
@@ -129,7 +139,7 @@ export function defaultAudioSettings(): AudioSettings {
 }
 
 export function defaultGameplaySettings(): GameplaySettings {
-  return { autoCamera: true, pointerLock: true, hints: true, timePace: 'normal' };
+  return { autoCamera: true, pointerLock: true, hints: true, timePace: 'normal', phoneSide: 'direita' };
 }
 
 export function emptyProgress(): ProgressData {
@@ -255,11 +265,13 @@ export function sanitizeGameplaySettings(raw: unknown): GameplaySettings {
   const d = defaultGameplaySettings();
   if (!isRecord(raw)) return d;
   const pace = raw.timePace;
+  const side = raw.phoneSide;
   return {
     autoCamera: bool(raw.autoCamera, d.autoCamera),
     pointerLock: bool(raw.pointerLock, d.pointerLock),
     hints: bool(raw.hints, d.hints),
     timePace: pace === 'normal' || pace === 'rapido' || pace === 'parado' ? pace : d.timePace,
+    phoneSide: side === 'direita' || side === 'esquerda' ? side : d.phoneSide,
   };
 }
 
