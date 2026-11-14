@@ -8,6 +8,8 @@ import { characterPersona } from '../characters/Personas';
 import type { GameSystem } from '../core/GameSystem';
 import type { Interactable } from '../interactions/Interactable';
 import { Avatar } from '../player/Avatar';
+import type { BodyDetailLevel } from '../player/body/BodyRig';
+import { proportionsFor } from '../player/body/BodyProportions';
 import { AvatarAnimator } from '../player/AvatarAnimator';
 import type { QualityProfile } from '../systems/QualitySystem';
 import { createRng, type Rng } from '../utils/math';
@@ -236,6 +238,16 @@ export class NpcSystem implements GameSystem {
   private readonly focus = new THREE.Vector3();
   private maxVisible: number;
   private visibleRange: number;
+  /**
+   * Distância em que o corpo cai para a malha média, e o dobro dela
+   * para a baixa.
+   *
+   * Trocar de malha custa uma reconstrução, então a troca é rara por
+   * natureza: um morador precisa **atravessar** a faixa para pagar o
+   * preço, e a histerese abaixo impede que alguém parado exatamente em
+   * cima da linha reconstrua o corpo todo quadro.
+   */
+  private detailDistance: number;
   private shadows: boolean;
   private assignTimer = 0;
   private chatTimer = 0;
@@ -264,6 +276,7 @@ export class NpcSystem implements GameSystem {
     this.rng = createRng(options.seed ?? 20261114);
     this.maxVisible = Math.min(MAX_SLOTS, options.quality.npcVisible);
     this.visibleRange = options.quality.npcRange;
+    this.detailDistance = options.quality.detailDistance;
     this.simHz = options.quality.npcSimHz;
     this.routinePerFrame = options.quality.npcRoutinePerFrame;
     this.shadows = options.quality.shadows;
@@ -642,15 +655,57 @@ export class NpcSystem implements GameSystem {
   }
 
   /** Garante que o lugar tenha um avatar pronto para desenhar. */
-  private ensureAvatar(slot: VisualSlot): Avatar {
+  private ensureAvatar(slot: VisualSlot, citizen?: CitizenSim): Avatar {
     if (slot.avatar) return slot.avatar;
-    const avatar = new Avatar();
+    const avatar = citizen
+      ? new Avatar(citizen.profile.appearance, proportionsFor(`cidadao:${citizen.profile.seed}`, citizen.profile.appearance.height))
+      : new Avatar();
     avatar.fill = 0.1;
     avatar.setShadows(this.shadows);
     avatar.root.visible = false;
     this.group.add(avatar.root);
     slot.avatar = avatar;
     return avatar;
+  }
+
+  /** Distância do habitante até o foco da câmera. */
+  private focusDistance(citizen: CitizenSim): number {
+    return citizen.distanceTo(this.focus.x, this.focus.z);
+  }
+
+  /**
+   * Qual malha serve a esta distância.
+   *
+   * Perto, a malha cheia. A partir de `detailDistance`, a média; do
+   * dobro em diante, a baixa — cerca de 40% dos triângulos da cheia,
+   * com a mesma silhueta e a mesma altura de topo, porque os anéis
+   * são os mesmos e só o número de lados muda.
+   */
+  private detailFor(distance: number): BodyDetailLevel {
+    if (distance > this.detailDistance * 2) return 'baixa';
+    if (distance > this.detailDistance) return 'media';
+    return 'alta';
+  }
+
+  /**
+   * Reavalia a malha de um habitante já em cena.
+   *
+   * A troca só acontece com **folga de 15%** para fora da faixa atual:
+   * sem isso, quem andasse de um lado para o outro da linha pagaria
+   * uma reconstrução de malha por quadro — o oposto do que um LOD
+   * existe para fazer.
+   */
+  private updateDetail(avatar: Avatar, distance: number): void {
+    const wanted = this.detailFor(distance);
+    if (wanted === avatar.detail) return;
+    const current = avatar.detail;
+    const near = this.detailDistance;
+    const keep =
+      (current === 'alta' && distance < near * 1.15) ||
+      (current === 'media' && distance > near * 0.85 && distance < near * 2.3) ||
+      (current === 'baixa' && distance > near * 1.7);
+    if (keep) return;
+    avatar.setDetail(wanted);
   }
 
   /* ------------------------------ Afters ----------------------------- */
@@ -918,6 +973,7 @@ export class NpcSystem implements GameSystem {
   applyQuality(profile: QualityProfile): void {
     this.maxVisible = Math.min(MAX_SLOTS, profile.npcVisible);
     this.visibleRange = profile.npcRange;
+    this.detailDistance = profile.detailDistance;
     this.simHz = profile.npcSimHz;
     this.routinePerFrame = profile.npcRoutinePerFrame;
     this.shadows = profile.shadows;
@@ -1025,8 +1081,12 @@ export class NpcSystem implements GameSystem {
     // 4. Uma reconstrução de avatar por quadro (evita engasgos).
     const next = this.pending.shift();
     if (next && next.slot.citizen === next.citizen) {
-      const avatar = this.ensureAvatar(next.slot);
+      const avatar = this.ensureAvatar(next.slot, next.citizen);
+      // Proporções antes da aparência: as duas reconstroem a malha, e
+      // nesta ordem a reconstrução acontece **uma vez** só.
+      avatar.setProportions(proportionsFor(`cidadao:${next.citizen.profile.seed}`, next.citizen.profile.appearance.height));
       avatar.setAppearance(next.citizen.profile.appearance);
+      avatar.setDetail(this.detailFor(this.focusDistance(next.citizen)));
       // Mesmo quadro da aparência: a silhueta entra junto, de uma vez, sem
       // reconstruir malha nenhuma e sem ninguém ver a transformação crescer.
       this.bindSlotAfters(next.slot, next.citizen);
@@ -1046,6 +1106,7 @@ export class NpcSystem implements GameSystem {
       }
       // A vida da pessoa decide; o avatar só executa.
       const distance = citizen.distanceTo(focus.x, focus.z);
+      this.updateDetail(slot.avatar, distance);
       citizen.life.update(dt, { playerX: focus.x, playerZ: focus.z, distance, period: this.period, visible: true });
       this.perform(slot.animator, slot.avatar, citizen.life, citizen.x, citizen.z, citizen.heading);
 
