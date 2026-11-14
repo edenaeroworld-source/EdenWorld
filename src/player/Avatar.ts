@@ -13,6 +13,7 @@ import {
   Bone,
   bodyMetrics,
   createSkeleton,
+  poseSkirt,
 } from './body/BodyRig';
 import { type BodyProportions, DEFAULT_PROPORTIONS, sameProportions, sanitizeProportions } from './body/BodyProportions';
 
@@ -463,6 +464,9 @@ export class Avatar {
     b[Bone.ThighR].rotation.set(pose[Ch.LegRX], 0, pose[Ch.LegRZ]);
     b[Bone.ShinL].rotation.x = pose[Ch.ShinL];
     b[Bone.ShinR].rotation.x = pose[Ch.ShinR];
+    // A saia lê a mesma pose que o corpo: não há estado próprio nem
+    // aviso de "sentou", então vale igual para jogador, NPC e Panteão.
+    poseSkirt(b, pose[Ch.LegLX], pose[Ch.LegRX], pose[Ch.LegLZ], pose[Ch.LegRZ]);
     if (this.halo.visible) this.halo.position.y = (0.44 + Math.sin(elapsed * 2.2) * 0.012) * this.currentProportions.headSize;
   }
 

@@ -23,7 +23,7 @@ import { Zone as MorphZone } from '../../afters/AftersMorph';
 import { TAU } from '../../utils/math';
 import type { AvatarAppearance } from '../AvatarAppearance';
 import type { BodyProportions } from './BodyProportions';
-import { Bone, type BodyDetail, type BodyMetrics, HEAD_CENTER, morphOrigins } from './BodyRig';
+import { Bone, type BodyDetail, type BodyMetrics, HEAD_CENTER, SKIRT_QUADRANTS, morphOrigins } from './BodyRig';
 import { type FollowSpec, type SkinBinding, type Station, SurfaceBuilder, subdivideProfile } from './BodySurface';
 
 type Hex = THREE.ColorRepresentation;
@@ -382,10 +382,41 @@ const STRIDE_TAN = Math.tan((40 * Math.PI) / 180);
 const SKIRT_FOLLOW = 0.5;
 const FOLLOW_RAMP = 0.5;
 
-/** Quanto do balanço a saia absorve sozinha na altura `y`. */
-function followWeight(y: number): number {
+/**
+ * Quanto de um anel pertence ao pano, e não ao quadril.
+ *
+ * Zero na cintura — ali a saia é costura, e costura não se mexe — e
+ * um na barra, que é pano solto. O mesmo degradê de sempre; o que
+ * mudou é o significado: antes ele dizia *quanto* a saia seguia a
+ * coxa, agora diz quanto dela está livre para seguir seja lá o que
+ * os ossos do pano fizerem.
+ */
+function clothShare(y: number): number {
   const drop = Math.max(0, Math.min(1, (HIP_JOINT_Y - y) / (HIP_JOINT_Y - SKIRT_HEM_Y)));
-  return SKIRT_FOLLOW * drop ** FOLLOW_RAMP;
+  return drop ** FOLLOW_RAMP;
+}
+
+/**
+ * A partição entre quadrantes no pior azimute.
+ *
+ * Em cima da coxa o pano é todo do osso daquele lado e acompanha o
+ * balanço inteiro; na diagonal ele é meio a meio com o osso da
+ * frente ou o de trás, que na passada não saem do lugar. A forma tem
+ * de ser dimensionada pelo pior caso, que é a diagonal — foi lá que
+ * a coxa de trás apareceu quando os quadrantes entraram.
+ */
+const QUADRANT_WORST = 0.5;
+
+/**
+ * Quanto do balanço a saia absorve sozinha na altura `y`.
+ *
+ * `SKIRT_FOLLOW` é o fator que `Avatar` aplica aos ossos do pano ao
+ * caminhar; multiplicado pela fração de pano do anel e pela pior
+ * partição, dá o quanto aquele anel de fato acompanha a perna — que
+ * é o que `strideRoom` precisa saber para reservar o resto na forma.
+ */
+function followWeight(y: number): number {
+  return SKIRT_FOLLOW * QUADRANT_WORST * clothShare(y);
 }
 
 /**
@@ -466,7 +497,9 @@ function buildSkirt(b: SurfaceBuilder, m: BodyMetrics, detail: BodyDetail, top: 
       bone: Bone.Hips,
       zone: MorphZone.Curve,
       origin: hip,
-      follow: { left: Bone.ThighL, right: Bone.ThighR, weight: followWeight(y) },
+      // O peso é só quanto do vértice é saia; **quanto** a saia anda
+      // é decisão de quem posa, não da malha (ver `Avatar.applyPose`).
+      follow: { quadrants: SKIRT_QUADRANTS, weight: clothShare(y) },
     };
   });
 

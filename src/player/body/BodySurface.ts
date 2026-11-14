@@ -75,12 +75,47 @@ export interface Station {
  * uma única malha costurada, não duas abas.
  */
 export interface FollowSpec {
-  /** Osso que puxa os vértices do lado `x > 0`. */
-  left: number;
-  /** Osso que puxa os vértices do lado `x < 0`. */
-  right: number;
-  /** Peso máximo, aplicado em cima da coxa. */
+  /**
+   * Os quatro ossos do pano, na ordem dos azimutes: lado esquerdo
+   * (`+x`), frente (`+z`), lado direito (`−x`), costas (`−z`).
+   */
+  quadrants: readonly [number, number, number, number];
+  /** Quanto do vértice pertence ao pano, e não ao quadril. */
   weight: number;
+}
+
+/** Peso de um vértice: até três ossos, já normalizado. */
+interface VertexSkin {
+  bones: readonly number[];
+  weights: readonly number[];
+}
+
+/**
+ * Reparte um vértice entre os dois quadrantes vizinhos.
+ *
+ * Os quatro ossos ficam a 90° um do outro e cada vértice pertence aos
+ * dois que o cercam, com peso que soma um. Nas direções exatas de
+ * cada osso a repartição é inteira; no meio do caminho é meio a
+ * meio. Como dois quadrantes vizinhos sempre concordam na fronteira,
+ * o pano não ganha vinco nenhum ao girar — e é essa continuidade que
+ * substitui, com vantagem, a antiga mistura em volta da costura.
+ *
+ * A vantagem é a seguinte: antes, as colunas da frente e de trás
+ * ficavam **sem** acompanhamento, porque era a única forma de os dois
+ * lados concordarem ali. Agora elas têm osso próprio, que anda com a
+ * média das duas pernas: zero quando se caminha (uma perna vai,
+ * outra vem) e tudo quando se senta (as duas dobram juntas). O que
+ * era um ponto cego virou o osso que resolve o colo.
+ */
+function quadrantSplit(angle: number): { a: number; b: number; t: number } {
+  const turns = ((angle / (Math.PI * 2)) % 1 + 1) % 1;
+  const slot = turns * 4;
+  const a = Math.floor(slot) % 4;
+  const frac = slot - Math.floor(slot);
+  // Suavização de Hermite: a derivada zera em cima de cada osso, o
+  // que tira o bico que uma mistura linear deixaria.
+  const t = frac * frac * (3 - 2 * frac);
+  return { a, b: (a + 1) % 4, t };
 }
 
 /** Opções de uma varredura. */
@@ -107,9 +142,6 @@ export interface LoftOptions {
 }
 
 const WHITE = new THREE.Color();
-
-/** Largura angular da costura onde os dois lados do tecido se encontram. */
-const SEAM_BLEND = 0.35;
 
 /**
  * Acumula superfícies e as funde numa malha indexada com normais suaves.
@@ -141,12 +173,22 @@ export class SurfaceBuilder {
     return this.index.length / 3;
   }
 
-  private pushVertex(x: number, y: number, z: number, station: Station, override?: SkinBinding): number {
+  private pushVertex(x: number, y: number, z: number, station: Station, override?: VertexSkin): number {
     const id = this.position.length / 3;
     this.position.push(x, y, z);
     WHITE.set(station.color);
     this.color.push(WHITE.r, WHITE.g, WHITE.b);
-    const { bone, bone2, blend } = override ?? station.skin;
+    if (override !== undefined) {
+      const [b0, b1, b2] = [override.bones[0], override.bones[1] ?? 0, override.bones[2] ?? 0];
+      const [w0, w1, w2] = [override.weights[0], override.weights[1] ?? 0, override.weights[2] ?? 0];
+      this.skinIndex.push(b0, b1, b2, 0);
+      this.skinWeight.push(w0, w1, w2, 0);
+      this.zone.push(station.zone ?? 0);
+      const base = station.origin ?? ORIGIN_ZERO;
+      this.origin.push(base[0], base[1], base[2]);
+      return id;
+    }
+    const { bone, bone2, blend } = station.skin;
     const w = bone2 === undefined ? 0 : Math.min(1, Math.max(0, blend ?? 0));
     this.skinIndex.push(bone, bone2 ?? bone, 0, 0);
     this.skinWeight.push(1 - w, w, 0, 0);
@@ -167,23 +209,18 @@ export class SurfaceBuilder {
       const cos = Math.cos(angle);
       const sin = Math.sin(angle);
       const depth = sin >= 0 ? station.rz : rzBack;
-      let bind: SkinBinding | undefined;
+      let bind: VertexSkin | undefined;
       if (station.follow !== undefined) {
         const f = station.follow;
-        // `cos` é a posição lateral normalizada do vértice: 1 em cima
-        // da coxa esquerda, −1 na direita, 0 nas duas colunas onde as
-        // metades se encontram.
-        //
-        // A rampa é **curta** de propósito. Com um decaimento largo
-        // (|cos| ou cos²) o peso desabava justamente no painel da
-        // frente — que é por onde o joelho sai quando a perna avança,
-        // o pior caso da corrida. Aqui o peso só cai nos ~20° em
-        // volta de cada costura: o suficiente para os dois lados
-        // concordarem onde se tocam, sem desarmar o resto da peça.
-        const t = Math.min(1, Math.abs(cos) / SEAM_BLEND);
-        const lateral = t * t * (3 - 2 * t);
-        const w = f.weight * lateral;
-        if (w > 0.001) bind = { bone: station.skin.bone, bone2: cos >= 0 ? f.left : f.right, blend: w };
+        const cloth = Math.min(1, Math.max(0, f.weight));
+        const { a, b, t } = quadrantSplit(angle);
+        // O quadril segura o que ainda não é saia: na cintura o
+        // vértice é todo dele, na barra não é nada dele. É esse
+        // degradê que mantém a costura parada enquanto a barra anda.
+        bind = {
+          bones: [station.skin.bone, f.quadrants[a], f.quadrants[b]],
+          weights: [1 - cloth, cloth * (1 - t), cloth * t],
+        };
       }
       ids.push(this.pushVertex(cx + cos * station.rx * scale, station.y, cz + sin * depth * scale, station, bind));
     }
@@ -481,5 +518,5 @@ function blendStations(a: Station, b: Station, t: number): Station {
 function blendFollow(a: FollowSpec | undefined, b: FollowSpec | undefined, t: number): FollowSpec | undefined {
   if (a === undefined && b === undefined) return undefined;
   const spec = a ?? b!;
-  return { left: spec.left, right: spec.right, weight: lerp(a?.weight ?? 0, b?.weight ?? 0, t) };
+  return { quadrants: spec.quadrants, weight: lerp(a?.weight ?? 0, b?.weight ?? 0, t) };
 }
