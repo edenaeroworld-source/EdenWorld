@@ -21,7 +21,8 @@ export function headingTo(ax: number, az: number, bx: number, bz: number): numbe
   return Math.atan2(bx - ax, bz - az);
 }
 
-function benchGeometries(): { frame: THREE.BufferGeometry; wood: THREE.BufferGeometry } {
+/** Exportada para que os testes desenhem o banco de verdade, não uma cópia. */
+export function benchGeometries(): { frame: THREE.BufferGeometry; wood: THREE.BufferGeometry } {
   const frameParts: THREE.BufferGeometry[] = [];
   for (const side of [-1, 1]) {
     const leg = box(0.09, 0.42, 0.56);

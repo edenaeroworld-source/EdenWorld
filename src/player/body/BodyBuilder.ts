@@ -23,7 +23,7 @@ import { Zone as MorphZone } from '../../afters/AftersMorph';
 import { TAU } from '../../utils/math';
 import type { AvatarAppearance } from '../AvatarAppearance';
 import type { BodyProportions } from './BodyProportions';
-import { Bone, type BodyDetail, type BodyMetrics, HEAD_CENTER, SKIRT_QUADRANTS, morphOrigins } from './BodyRig';
+import { Bone, type BodyDetail, type BodyMetrics, HEAD_CENTER, SKIRT_FOLLOW_WALK, SKIRT_QUADRANTS, morphOrigins } from './BodyRig';
 import { type FollowSpec, type SkinBinding, type Station, SurfaceBuilder, subdivideProfile } from './BodySurface';
 
 type Hex = THREE.ColorRepresentation;
@@ -373,13 +373,13 @@ const STRIDE_TAN = Math.tan((40 * Math.PI) / 180);
 /**
  * Peso com que a saia acompanha a coxa, e a curva com que ele cresce.
  *
- * Meio a meio na barra, zero na cintura. Mais que isso e a peça vira
- * calça — cada metade colada na sua perna; menos, e a forma precisa
- * engordar para compensar, porque é uma coisa ou outra (ver
- * `strideRoom`). Com 0,5 a varredura de paridade não acusa um único
- * vértice exposto e a silhueta continua a de um vestido.
+ * Quem move o pano é `poseSkirt`; aqui o valor serve para o inverso —
+ * saber quanto do balanço **não** é acompanhado, e portanto quanta
+ * folga a forma precisa ter (ver `strideRoom`). Os dois lados têm de
+ * ler a mesma constante: se a forma for dimensionada para um peso e
+ * o osso girar com outro, sobra coxa de fora exatamente na diferença.
  */
-const SKIRT_FOLLOW = 0.5;
+const SKIRT_FOLLOW = SKIRT_FOLLOW_WALK;
 const FOLLOW_RAMP = 0.5;
 
 /**

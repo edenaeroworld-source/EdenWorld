@@ -125,7 +125,18 @@ export const HIP_HEIGHT = THIGH + SHIN + ANKLE;
  * sobe quase a um: o que antes era folga agora é apoio.
  */
 export const SKIRT_FOLLOW_WALK = 0.5;
-export const SKIRT_FOLLOW_LAP = 0.92;
+/**
+ * Sentada, cada quadrante faz uma coisa diferente — é para isso que
+ * eles existem. A frente deita sobre o colo; as laterais quase não
+ * giram, porque a saia de quem senta não vai para a frente, ela
+ * desce ao lado, e ainda se recolhe para dentro, espremida entre o
+ * quadril e a tábua. Seguir tudo junto a 0,92 inflava a saia num
+ * balão — número nenhum acusou isso, só a imagem.
+ */
+export const SKIRT_FOLLOW_LAP = 0.6;
+export const SKIRT_SIDE_LAP = 0.25;
+export const SKIRT_TUCK = 0.25;
+
 /** Fração da abertura lateral da perna que a saia acompanha. */
 export const SKIRT_SPREAD = 0.5;
 
@@ -138,9 +149,16 @@ export const SKIRT_SPREAD = 0.5;
  * é que a média cresce. Assim a regra não precisa saber se existe um
  * banco embaixo: ela lê a postura, e vale para o jogador, para as
  * NPCs e para o Panteão sem combinar nada com ninguém.
+ *
+ * A média máxima medida por estado é 0,000 rad caminhando, correndo,
+ * nadando e descendo escada — as pernas se cancelam exatamente —,
+ * 0,220 pulando e subindo escada, e 1,500 sentada. A janela fica
+ * entre os dois grupos, e é larga de propósito: quanto mais estreita,
+ * mais rápido o pano se mexe no quadro em que ela é atravessada, e
+ * foi assim que apareceu um tranco de 13 cm ao levantar.
  */
-export const LAP_FROM = 0.6;
-export const LAP_TO = 1.2;
+export const LAP_FROM = 0.4;
+export const LAP_TO = 1.45;
 
 /**
  * Quanto a saia inteira sobe ao sentar, em metros.
@@ -150,7 +168,7 @@ export const LAP_TO = 1.2;
  * sobe um pouco quando a gente senta. Sem isso a barra atravessa a
  * tábua — eram 55 vértices dentro da madeira, agora são 32.
  */
-export const SKIRT_LIFT = 0.1;
+export const SKIRT_LIFT = 0.24;
 
 /**
  * O recolhimento a mais do pano de trás, em metros e radianos.
@@ -160,12 +178,16 @@ export const SKIRT_LIFT = 0.1;
  * resto e tomba para a frente — para trás encostaria no espaldar,
  * que fica a 30 cm do centro e inclinado 0,18 rad.
  */
-export const SKIRT_GATHER = 0.1;
+export const SKIRT_GATHER = 0.06;
 export const SKIRT_BACK_TILT = 0.35;
 
 function smoothstep(from: number, to: number, value: number): number {
   const t = Math.min(1, Math.max(0, (value - from) / (to - from)));
   return t * t * (3 - 2 * t);
+}
+
+function mix(from: number, to: number, t: number): number {
+  return from + (to - from) * t;
 }
 
 /** O quanto a pose é um colo: 0 em pé, 1 sentada. */
@@ -185,14 +207,18 @@ export function lapAmount(legLX: number, legRX: number): number {
 export function poseSkirt(bones: readonly THREE.Bone[], legLX: number, legRX: number, legLZ: number, legRZ: number): void {
   const average = (legLX + legRX) * 0.5;
   const lap = lapAmount(legLX, legRX);
-  const follow = SKIRT_FOLLOW_WALK + (SKIRT_FOLLOW_LAP - SKIRT_FOLLOW_WALK) * lap;
-
+  const front = mix(SKIRT_FOLLOW_WALK, SKIRT_FOLLOW_LAP, lap);
+  const side = mix(SKIRT_FOLLOW_WALK, SKIRT_SIDE_LAP, lap);
+  const tuck = SKIRT_TUCK * lap;
   const lift = SKIRT_LIFT * lap;
 
-  bones[Bone.SkirtL].rotation.set(follow * legLX, 0, SKIRT_SPREAD * legLZ);
-  bones[Bone.SkirtR].rotation.set(follow * legRX, 0, SKIRT_SPREAD * legRZ);
-  // A frente segue a média: zero na passada, colo inteiro ao sentar.
-  bones[Bone.SkirtF].rotation.set(follow * average, 0, 0);
+  // Cada lado segue a sua própria perna, e se recolhe para dentro ao
+  // sentar: a saia de quem senta não vai para a frente, ela desce ao
+  // lado, espremida entre o quadril e a tábua.
+  bones[Bone.SkirtL].rotation.set(side * legLX, 0, SKIRT_SPREAD * legLZ - tuck);
+  bones[Bone.SkirtR].rotation.set(side * legRX, 0, SKIRT_SPREAD * legRZ + tuck);
+  // A frente segue a média: zero na passada, o colo inteiro ao sentar.
+  bones[Bone.SkirtF].rotation.set(front * average, 0, 0);
   // As costas não giram com perna nenhuma: elas se recolhem. O tombo
   // é para a frente, trazendo a barra para cima do assento; para trás
   // ela entraria no espaldar.

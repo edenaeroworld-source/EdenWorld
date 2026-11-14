@@ -207,6 +207,14 @@ describe('a saia veste o corpo', () => {
     ['fall', 3.2],
     ['swim', 1.8],
     ['stairDown', 1.6],
+    // `sit` e `stairUp` não entram aqui de propósito. Esta varredura
+    // mede a folga do pano **radialmente**, a partir do eixo do
+    // quadril, e isso só quer dizer alguma coisa enquanto a saia
+    // pende. Com a coxa na horizontal o pano que cobre passa a estar
+    // *acima* da pele, não ao lado dela, e a conta radial acusa
+    // centenas de vértices \"expostos\" numa pose que a imagem mostra
+    // vestida. Quem cobre esses dois casos é `vestido-banco.test.ts`,
+    // que mede pela normal da pele e vale em qualquer pose.
   ] as const)('em movimento (%s) o que estava coberto continua coberto', (state, speed) => {
     const { avatar, mesh, range } = dressed();
 
