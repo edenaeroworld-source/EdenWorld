@@ -34,6 +34,7 @@ import { describe, expect, it } from 'vitest';
 import { Avatar } from '../../src/player/Avatar';
 import { AvatarAnimator, Ch, type Pose } from '../../src/player/AvatarAnimator';
 import { DEFAULT_APPEARANCE } from '../../src/player/AvatarAppearance';
+import { proportionsFor } from '../../src/player/body/BodyProportions';
 import * as THREE from 'three';
 import { benchGeometries } from '../../src/cities/aurora-city/Decorations';
 import { type Canvas, canvas, drawAvatar, drawProp, png, stack, strip } from '../helpers/raster';
@@ -129,6 +130,55 @@ describe.runIf(process.env.EDEN_RENDER)('vestido no quadril (visual)', () => {
     const sheet = stack([linha1, linha2, linha3, linha4]);
     const name = process.env.EDEN_VESTIDO_ANTES ? 'vestido-antes.png' : 'vestido-depois.png';
     writeFileSync(resolve(process.cwd(), 'docs', name), png(sheet.width, sheet.height, sheet.rgb));
+    expect(sheet.width).toBeGreaterThan(0);
+  });
+
+  it('desenha a sequência de sentar', () => {
+    const avatar = new Avatar({ ...DEFAULT_APPEARANCE, outfit: 'vestido' });
+
+    /** Um instante qualquer da transição entre dois estados. */
+    const during = (from: 'idle' | 'sit', to: 'idle' | 'sit', frames: number): Pose => {
+      const animator = new AvatarAnimator();
+      let pose = animator.update(1 / 60, { state: from, speed: 0, stridePhase: 0, verticalSpeed: 0, elapsed: 0 });
+      for (let f = 1; f <= 120; f += 1) {
+        pose = animator.update(1 / 60, { state: from, speed: 0, stridePhase: 0, verticalSpeed: 0, elapsed: f / 60 });
+      }
+      for (let f = 1; f <= frames; f += 1) {
+        pose = animator.update(1 / 60, { state: to, speed: 0, stridePhase: 0, verticalSpeed: 0, elapsed: (120 + f) / 60 });
+      }
+      return pose;
+    };
+
+    const emPe = settle('idle', 0);
+    const sentada = during('idle', 'sit', 150);
+
+    // 1: em pé, de frente, de três quartos e de perfil.
+    const linha1 = strip([seated(avatar, emPe, 0), seated(avatar, emPe, -0.45), seated(avatar, emPe, Math.PI / 2)]);
+    // 2: sentando — três instantes da descida.
+    const linha2 = strip([
+      seated(avatar, during('idle', 'sit', 6), -0.45),
+      seated(avatar, during('idle', 'sit', 14), -0.45),
+      seated(avatar, during('idle', 'sit', 26), -0.45),
+    ]);
+    // 3: sentada, de frente, de três quartos e de perfil.
+    const linha3 = strip([seated(avatar, sentada, 0), seated(avatar, sentada, -0.45), seated(avatar, sentada, Math.PI / 2)]);
+    // 4: levantando — três instantes da volta.
+    const linha4 = strip([
+      seated(avatar, during('sit', 'idle', 6), -0.45),
+      seated(avatar, during('sit', 'idle', 14), -0.45),
+      seated(avatar, during('sit', 'idle', 30), -0.45),
+    ]);
+    // 5: três cidadãos, de corpos diferentes, sentados no mesmo banco.
+    //    Não é o jogador: é o caminho de `NpcSystem` e `InteriorScene`.
+    const linha5 = strip(
+      ['cidadao:1', 'cidadao:980', 'cidadao:204'].map((quem) => {
+        const cidada = new Avatar({ ...DEFAULT_APPEARANCE, outfit: 'vestido' }, proportionsFor(quem));
+        return seated(cidada, sentada, -0.45);
+      }),
+    );
+
+    const sheet = stack([linha1, linha2, linha3, linha4, linha5]);
+    writeFileSync(resolve(process.cwd(), 'docs', 'vestido-sentada.png'), png(sheet.width, sheet.height, sheet.rgb));
     expect(sheet.width).toBeGreaterThan(0);
   });
 });

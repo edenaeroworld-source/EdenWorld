@@ -23,7 +23,7 @@ import { Zone as MorphZone } from '../../afters/AftersMorph';
 import { TAU } from '../../utils/math';
 import type { AvatarAppearance } from '../AvatarAppearance';
 import type { BodyProportions } from './BodyProportions';
-import { Bone, type BodyDetail, type BodyMetrics, HEAD_CENTER, SKIRT_FOLLOW_WALK, SKIRT_QUADRANTS, morphOrigins } from './BodyRig';
+import { Bone, type BodyDetail, type BodyMetrics, HEAD_CENTER, SKIRT_BREAK_Y, SKIRT_FOLLOW_WALK, SKIRT_HEM_QUADRANTS, SKIRT_QUADRANTS, morphOrigins } from './BodyRig';
 import { type FollowSpec, type SkinBinding, type Station, SurfaceBuilder, subdivideProfile } from './BodySurface';
 
 type Hex = THREE.ColorRepresentation;
@@ -499,7 +499,11 @@ function buildSkirt(b: SurfaceBuilder, m: BodyMetrics, detail: BodyDetail, top: 
       origin: hip,
       // O peso é só quanto do vértice é saia; **quanto** a saia anda
       // é decisão de quem posa, não da malha (ver `Avatar.applyPose`).
-      follow: { quadrants: SKIRT_QUADRANTS, weight: clothShare(y) },
+      // Abaixo da quebra o pano pertence à segunda dobradiça. A troca
+      // é por anel, e não precisa de mistura: a barra gira em torno
+      // da própria quebra, então o anel que está nela não se move e a
+      // costura entre as duas fileiras continua fechada.
+      follow: { quadrants: y < SKIRT_BREAK_Y ? SKIRT_HEM_QUADRANTS : SKIRT_QUADRANTS, weight: clothShare(y) },
     };
   });
 

@@ -50,11 +50,30 @@ export const Bone = {
   SkirtF: 12,
   SkirtR: 13,
   SkirtB: 14,
+  /**
+   * A segunda fileira: a barra, filha de cada quadrante.
+   *
+   * Um pano sobre um colo precisa de duas dobradiças, não de uma. A
+   * de cima acompanha a coxa deitada; esta quebra no joelho e deixa o
+   * resto cair. Com um segmento só, a saia sentada é um cone rígido —
+   * foi o que a captura do jogador mostrou.
+   */
+  SkirtHemL: 15,
+  SkirtHemF: 16,
+  SkirtHemR: 17,
+  SkirtHemB: 18,
 } as const;
 
-export const BONE_COUNT = 15;
+export const BONE_COUNT = 19;
 
 /** Os ossos da saia, na ordem dos azimutes que `FollowSpec` espera. */
+export const SKIRT_HEM_QUADRANTS: readonly [number, number, number, number] = [
+  Bone.SkirtHemL,
+  Bone.SkirtHemF,
+  Bone.SkirtHemR,
+  Bone.SkirtHemB,
+];
+
 export const SKIRT_QUADRANTS: readonly [number, number, number, number] = [
   Bone.SkirtL,
   Bone.SkirtF,
@@ -79,6 +98,10 @@ export const BONE_NAMES: readonly string[] = Object.freeze([
   'saia-f',
   'saia-d',
   'saia-t',
+  'saia-e-barra',
+  'saia-f-barra',
+  'saia-d-barra',
+  'saia-t-barra',
 ]);
 
 /* ------------------------- medidas de referência ------------------------- */
@@ -127,15 +150,15 @@ export const HIP_HEIGHT = THIGH + SHIN + ANKLE;
 export const SKIRT_FOLLOW_WALK = 0.5;
 /**
  * Sentada, cada quadrante faz uma coisa diferente — é para isso que
- * eles existem. A frente deita sobre o colo; as laterais quase não
- * giram, porque a saia de quem senta não vai para a frente, ela
- * desce ao lado, e ainda se recolhe para dentro, espremida entre o
- * quadril e a tábua. Seguir tudo junto a 0,92 inflava a saia num
- * balão — número nenhum acusou isso, só a imagem.
+ * eles existem — mas **pouco diferente um do outro**. A frente
+ * acompanha mais que as laterais, e só. Afastar demais um quadrante
+ * do vizinho amassa a malha na diagonal, onde os dois se misturam, e
+ * é de lá que saíam as pontas de papelão da captura do jogador.
+ * Girar todos juntos a 0,92, no outro extremo, inflava um balão.
  */
-export const SKIRT_FOLLOW_LAP = 0.6;
-export const SKIRT_SIDE_LAP = 0.25;
-export const SKIRT_TUCK = 0.25;
+export const SKIRT_FOLLOW_LAP = 0.75;
+export const SKIRT_SIDE_LAP = 0.55;
+
 
 /** Fração da abertura lateral da perna que a saia acompanha. */
 export const SKIRT_SPREAD = 0.5;
@@ -168,7 +191,54 @@ export const LAP_TO = 1.45;
  * sobe um pouco quando a gente senta. Sem isso a barra atravessa a
  * tábua — eram 55 vértices dentro da madeira, agora são 32.
  */
-export const SKIRT_LIFT = 0.24;
+export const SKIRT_LIFT = 0.18;
+
+/**
+ * Onde está a tábua do assento, em relação aos pés de quem sentou.
+ *
+ * `PlayerMotor.sit` põe a origem do personagem em `seat.y - SEAT_DROP`
+ * — a mesma queda para todo assento do jogo, do banco de Aurora à
+ * espreguiçadeira e às cadeiras de interior. Como a queda é constante,
+ * a superfície em que a pessoa senta cai **sempre nesta altura** aqui
+ * dentro, e a saia pode contar com ela sem precisar que ninguém lhe
+ * avise que há um banco por perto. É o que mantém isto valendo para os
+ * cidadãos, que nunca passam pelo `PlayerMotor`.
+ */
+export const SKIRT_SEAT_Y = 0.24;
+
+/** Uma folga para o pano pousar sobre a madeira, não dentro dela. */
+export const SKIRT_SEAT_CLEAR = 0.03;
+
+/**
+ * O quanto a barra pende abaixo do quadril com o colo já formado.
+ *
+ * Medido, não estimado: com a saia deitada, a distância entre o osso
+ * do quadril e o ponto mais baixo do tecido ficou entre 17,7 e 18,5 cm
+ * em quatro corpos de proporções bem diferentes. O que varia de um
+ * corpo para outro não é a saia — é a altura do quadril.
+ */
+export const SKIRT_LAP_DROP = 0.18;
+
+/**
+ * Onde o pano quebra, em metros abaixo da junta do quadril.
+ *
+ * A saia vai de +0,09 (cintura) a −0,36 (barra). A quebra fica a meio
+ * caminho da parte solta: sentada, é mais ou menos onde o joelho
+ * aparece sob o tecido, e é ali que uma saia de verdade vira e
+ * despenca. Acima dela o pano acompanha a coxa; abaixo, cai.
+ */
+export const SKIRT_BREAK_Y = -0.18;
+
+/**
+ * Quanto da volta da coxa a barra desfaz, sentada.
+ *
+ * Em 1 a metade de baixo fica exatamente na vertical, pendurada da
+ * quebra: é a gravidade pura, o tecido esquecendo que a coxa virou.
+ * Fica abaixo de 1 porque a barra também é puxada para a frente pelo
+ * joelho — ela cai, mas não na prumada perfeita.
+ */
+export const SKIRT_HEM_FALL = 0.65;
+export const SKIRT_HEM_BACK_FALL = 0.35;
 
 /**
  * O recolhimento a mais do pano de trás, em metros e radianos.
@@ -204,25 +274,48 @@ export function lapAmount(legLX: number, legRX: number): number {
  * em pé, balançar na corrida e deitar no colo — sem tocar na
  * geometria, que continua a mesma em todas as três.
  */
-export function poseSkirt(bones: readonly THREE.Bone[], legLX: number, legRX: number, legLZ: number, legRZ: number): void {
+export function poseSkirt(
+  bones: readonly THREE.Bone[],
+  legLX: number,
+  legRX: number,
+  legLZ: number,
+  legRZ: number,
+  hipHeight: number,
+): void {
   const average = (legLX + legRX) * 0.5;
   const lap = lapAmount(legLX, legRX);
   const front = mix(SKIRT_FOLLOW_WALK, SKIRT_FOLLOW_LAP, lap);
   const side = mix(SKIRT_FOLLOW_WALK, SKIRT_SIDE_LAP, lap);
-  const tuck = SKIRT_TUCK * lap;
-  const lift = SKIRT_LIFT * lap;
+
+  // O pano pousa no assento em vez de atravessá-lo. Quem tem perna
+  // curta tem o quadril mais baixo — até 6 cm abaixo do nosso corpo de
+  // referência — e, como a barra pende sempre os mesmos 18 cm, era o
+  // corpo pequeno que afundava na madeira, não a saia que era grande.
+  // Levantar pela diferença faz a cobertura acompanhar o corpo que
+  // está lá dentro, que é o que estava faltando.
+  const pousa = Math.max(0, SKIRT_SEAT_Y + SKIRT_SEAT_CLEAR - (hipHeight - SKIRT_LAP_DROP));
+  const lift = (SKIRT_LIFT + pousa) * lap;
 
   // Cada lado segue a sua própria perna, e se recolhe para dentro ao
   // sentar: a saia de quem senta não vai para a frente, ela desce ao
   // lado, espremida entre o quadril e a tábua.
-  bones[Bone.SkirtL].rotation.set(side * legLX, 0, SKIRT_SPREAD * legLZ - tuck);
-  bones[Bone.SkirtR].rotation.set(side * legRX, 0, SKIRT_SPREAD * legRZ + tuck);
+  bones[Bone.SkirtL].rotation.set(side * legLX, 0, SKIRT_SPREAD * legLZ);
+  bones[Bone.SkirtR].rotation.set(side * legRX, 0, SKIRT_SPREAD * legRZ);
   // A frente segue a média: zero na passada, o colo inteiro ao sentar.
   bones[Bone.SkirtF].rotation.set(front * average, 0, 0);
   // As costas não giram com perna nenhuma: elas se recolhem. O tombo
   // é para a frente, trazendo a barra para cima do assento; para trás
   // ela entraria no espaldar.
   bones[Bone.SkirtB].rotation.set(-SKIRT_BACK_TILT * lap, 0, 0);
+
+  // A barra desfaz a volta que o quadrante deu: o de cima acompanha a
+  // coxa, o de baixo cai. Em pé `lap` é zero e esta fileira inteira
+  // fica na identidade — andar e correr continuam idênticos ao que
+  // eram antes de ela existir.
+  bones[Bone.SkirtHemL].rotation.x = -SKIRT_HEM_FALL * lap * side * legLX;
+  bones[Bone.SkirtHemR].rotation.x = -SKIRT_HEM_FALL * lap * side * legRX;
+  bones[Bone.SkirtHemF].rotation.x = -SKIRT_HEM_FALL * lap * front * average;
+  bones[Bone.SkirtHemB].rotation.x = SKIRT_HEM_BACK_FALL * lap * SKIRT_BACK_TILT;
 
   bones[Bone.SkirtL].position.y = lift;
   bones[Bone.SkirtR].position.y = lift;
@@ -401,9 +494,13 @@ export function createSkeleton(m: BodyMetrics): BodySkeleton {
   // Os ossos da saia giram em torno da origem do quadril: é de lá que
   // o pano pende, não da junta da perna.
   for (const index of SKIRT_QUADRANTS) place(index, 0, 0, 0);
+  // A dobradiça da barra fica na altura em que o pano quebra, não na
+  // cintura: é em torno dela que a metade de baixo cai.
+  for (const index of SKIRT_HEM_QUADRANTS) place(index, 0, SKIRT_BREAK_Y, 0);
 
   bones[Bone.Hips].add(bones[Bone.Torso], bones[Bone.ThighL], bones[Bone.ThighR]);
   for (const index of SKIRT_QUADRANTS) bones[Bone.Hips].add(bones[index]);
+  for (let q = 0; q < 4; q += 1) bones[SKIRT_QUADRANTS[q]].add(bones[SKIRT_HEM_QUADRANTS[q]]);
   bones[Bone.Torso].add(bones[Bone.Head], bones[Bone.ArmL], bones[Bone.ArmR]);
   bones[Bone.ArmL].add(bones[Bone.ForeL]);
   bones[Bone.ArmR].add(bones[Bone.ForeR]);

@@ -466,7 +466,7 @@ export class Avatar {
     b[Bone.ShinR].rotation.x = pose[Ch.ShinR];
     // A saia lê a mesma pose que o corpo: não há estado próprio nem
     // aviso de "sentou", então vale igual para jogador, NPC e Panteão.
-    poseSkirt(b, pose[Ch.LegLX], pose[Ch.LegRX], pose[Ch.LegLZ], pose[Ch.LegRZ]);
+    poseSkirt(b, pose[Ch.LegLX], pose[Ch.LegRX], pose[Ch.LegLZ], pose[Ch.LegRZ], this.pivot.position.y);
     if (this.halo.visible) this.halo.position.y = (0.44 + Math.sin(elapsed * 2.2) * 0.012) * this.currentProportions.headSize;
   }
 

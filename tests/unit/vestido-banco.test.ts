@@ -28,6 +28,9 @@ import * as THREE from 'three';
 import { Avatar } from '../../src/player/Avatar';
 import { AvatarAnimator, type AnimatorInput, type Pose } from '../../src/player/AvatarAnimator';
 import { DEFAULT_APPEARANCE } from '../../src/player/AvatarAppearance';
+import { proportionsFor } from '../../src/player/body/BodyProportions';
+import { PlayerMotor } from '../../src/player/PlayerMotor';
+import { PhysicsWorld } from '../../src/physics/PhysicsWorld';
 import { benchGeometries } from '../../src/cities/aurora-city/Decorations';
 import { skinnedOf } from '../helpers/cloth';
 
@@ -130,10 +133,27 @@ function readSkin(mesh: THREE.SkinnedMesh, cloth: readonly [number, number]): Sk
   return out;
 }
 
-function dressed(): { avatar: Avatar; mesh: THREE.SkinnedMesh; cloth: readonly [number, number] } {
-  const avatar = new Avatar({ ...DEFAULT_APPEARANCE, outfit: 'vestido' });
+function dressed(who?: string): { avatar: Avatar; mesh: THREE.SkinnedMesh; cloth: readonly [number, number] } {
+  // Sem `who` é o jogador; com `who`, o corpo sorteado para um cidadão
+  // daquele nome — o mesmo caminho de `NpcSystem` e de `InteriorScene`.
+  const avatar =
+    who === undefined
+      ? new Avatar({ ...DEFAULT_APPEARANCE, outfit: 'vestido' })
+      : new Avatar({ ...DEFAULT_APPEARANCE, outfit: 'vestido' }, proportionsFor(who));
   const mesh = skinnedOf(avatar.root);
   return { avatar, mesh, cloth: mesh.geometry.userData.parts.saia as [number, number] };
+}
+
+/** Um instante qualquer da passagem entre dois estados. */
+function midway(avatar: Avatar, from: AnimatorInput['state'], to: AnimatorInput['state'], frames: number): Pose {
+  const animator = new AvatarAnimator();
+  const base = { speed: 0, stridePhase: 0, verticalSpeed: 0 };
+  let pose = animator.update(1 / 60, { ...base, state: from, elapsed: 0 });
+  for (let f = 1; f <= 150; f += 1) pose = animator.update(1 / 60, { ...base, state: from, elapsed: f / 60 });
+  for (let f = 1; f <= frames; f += 1) pose = animator.update(1 / 60, { ...base, state: to, elapsed: (150 + f) / 60 });
+  avatar.applyPose(pose, (150 + frames) / 60);
+  avatar.root.updateMatrixWorld(true);
+  return pose;
 }
 
 /** Roda o animador até a pose assentar. */
@@ -252,5 +272,92 @@ describe('vestido sentada no banco', () => {
     // não pode saltar. Com a janela do colo estreita dava 13,0 cm —
     // um tranco visível; alargá-la trouxe para 10,6.
     expect(maior).toBeLessThan(0.115);
+  });
+
+  /**
+   * O defeito da captura aparecia *durante* o movimento, não só na
+   * pose final: a saia endurecia na descida e só então assentava. Aqui
+   * cada quadro da ida e da volta é medido, não apenas o repouso.
+   */
+  it('em nenhum quadro de sentar ou levantar a saia entra no banco', () => {
+    const { avatar, mesh, cloth } = dressed();
+    const bench = benchMesh();
+    let pior = 0;
+    let quadroPior = -1;
+    for (const [de, para] of [['idle', 'sit'], ['sit', 'idle']] as const) {
+      for (let f = 0; f <= 40; f += 2) {
+        midway(avatar, de, para, f);
+        const dentro = clothPoints(mesh, cloth).filter((v) => insideWood(bench, v)).length;
+        if (dentro > pior) {
+          pior = dentro;
+          quadroPior = f;
+        }
+      }
+    }
+    expect(pior, `pior quadro: ${quadroPior} (${pior} vértices na madeira)`).toBeLessThan(85);
+  });
+
+  /**
+   * Sentar não pode ter solavanco em quadro nenhum. O corpo sozinho
+   * salta 9,0 cm no pior quadro ao levantar; a saia não pode saltar
+   * muito mais que isso, ou ela se descola do corpo que a veste.
+   */
+  it('a saia desce junto com o corpo, sem pulo', () => {
+    const { avatar, mesh, cloth } = dressed();
+    let anterior: THREE.Vector3[] | null = null;
+    let pior = 0;
+    for (let f = 0; f <= 40; f += 1) {
+      midway(avatar, 'idle', 'sit', f);
+      const agora = clothPoints(mesh, cloth);
+      if (anterior) {
+        for (let i = 0; i < agora.length; i += 1) pior = Math.max(pior, agora[i].distanceTo(anterior[i]));
+      }
+      anterior = agora;
+    }
+    expect(pior, `maior salto num quadro: ${(pior * 100).toFixed(1)} cm`).toBeLessThan(0.115);
+  });
+
+  /**
+   * A saia é do avatar, não do jogador. Um cidadão de vestido recebe a
+   * pose pelo mesmo `Avatar.applyPose` que `NpcSystem` e
+   * `InteriorScene` chamam, e com o corpo sorteado para ele — mais
+   * alto, mais largo, de quadril diferente. O caimento tem de valer
+   * para todos eles.
+   */
+  it('vale para os corpos dos cidadãos, não só para o do jogador', () => {
+    const bench = benchMesh();
+    for (const quem of ['cidadao:1', 'cidadao:17', 'cidadao:204', 'cidadao:980']) {
+      const { avatar, mesh, cloth } = dressed(quem);
+      settle(avatar, { state: 'sit', speed: 0, stridePhase: 0, verticalSpeed: 0 });
+      const dentro = clothPoints(mesh, cloth).filter((v) => insideWood(bench, v)).length;
+      expect(dentro, `${quem}: ${dentro} vértices na madeira`).toBeLessThan(85);
+
+      const pele = readSkin(mesh, cloth);
+      const vazando = clothPoints(mesh, cloth).filter(
+        (v) => v.z > -0.27 + BENCH_Z && v.z < 0.27 + BENCH_Z && v.y < 0.365 + BENCH_Y,
+      );
+      expect(vazando.map((v) => `${quem} y=${v.y.toFixed(2)}`)).toEqual([]);
+      expect(pele.covered.size, `${quem} cobertura`).toBeGreaterThan(0);
+    }
+  });
+
+  /**
+   * Os assentos do jogo estão em alturas diferentes — o banco de
+   * Aurora anuncia `y + 0,47`, a espreguiçadeira `y + 0,38`, as
+   * cadeiras de interior `piso + 0,6`. Isso não pode importar para a
+   * saia, e não importa: `PlayerMotor.sit` põe a origem do corpo em
+   * `seat.y - SEAT_DROP` sempre, então a superfície do assento cai no
+   * mesmo lugar em relação ao quadril, qualquer que seja o móvel.
+   * Este teste prende essa invariante: se alguém der a um assento a
+   * sua própria queda, a saia deixa de servir para ele e o teste cai.
+   */
+  it('a altura do assento não muda nada, porque a queda é sempre a mesma', () => {
+    const alturas = [0.47, 0.38, 0.6, 1.2];
+    const local = alturas.map((y) => {
+      const motor = new PlayerMotor(new PhysicsWorld({ heightAt: () => 0 } as unknown as ConstructorParameters<typeof PhysicsWorld>[0]));
+      motor.sit({ x: 0, y, z: 0, heading: 0 });
+      return y - motor.position.y;
+    });
+    for (const altura of local) expect(altura).toBeCloseTo(local[0], 10);
   });
 });
