@@ -24,6 +24,7 @@
 import { PANTHEON, type EdenCharacter } from './Pantheon';
 import { Avatar } from '../player/Avatar';
 import type { AvatarAppearance } from '../player/AvatarAppearance';
+import { type BodyProportions, proportionsFingerprint, proportionsFor } from '../player/body/BodyProportions';
 
 /** Índice por id, montado uma vez. */
 const BY_ID = new Map<string, EdenCharacter>(PANTHEON.map((character) => [character.id, character]));
@@ -44,6 +45,20 @@ export function isOfficialCharacter(id: string): boolean {
 /** A aparência oficial — a mesma referência em qualquer região. */
 export function officialAppearance(id: string): AvatarAppearance | null {
   return BY_ID.get(id)?.appearance ?? null;
+}
+
+/**
+ * As proporções oficiais de um personagem.
+ *
+ * Saem do id, não de um sorteio: o mesmo id devolve sempre o mesmo
+ * corpo, nesta sessão e na próxima, nesta região e na outra. É o que
+ * permite dar a cada morador um porte próprio sem guardar nada no
+ * save e sem que Suki-Chan mude de ombros ao atravessar um portal.
+ */
+export function officialProportions(id: string): BodyProportions | null {
+  const character = BY_ID.get(id);
+  if (!character) return null;
+  return proportionsFor(id, character.appearance.height);
 }
 
 /**
@@ -73,6 +88,10 @@ export function officialFingerprint(id: string): string | null {
     a.height.toFixed(4),
     (character.gestation ?? 0).toFixed(4),
     afters ? `${afters.bust.toFixed(3)}/${afters.curve.toFixed(3)}/${afters.bustActive}/${afters.curveActive}` : 'sem-afters',
+    // As proporções entram na impressão digital: a partir do Marco N o
+    // corpo também é identidade, e uma divergência de ombros entre
+    // regiões é tão errada quanto uma divergência de cor de cabelo.
+    proportionsFingerprint(proportionsFor(character.id, a.height)),
   ].join('|');
 }
 
@@ -86,8 +105,8 @@ export interface OfficialAvatarOptions {
  * Constrói o avatar oficial de um personagem do panteão.
  *
  * Toda a identidade visual é aplicada aqui, de uma vez: aparência
- * (que já carrega a altura, e portanto a escala), gestação de cânone e
- * sombras. Quem chama não precisa saber a ordem — e, principalmente,
+ * (que já carrega a altura, e portanto a escala), proporções de corpo
+ * derivadas do id, gestação de cânone e sombras. Quem chama não precisa saber a ordem — e, principalmente,
  * não pode esquecer um passo, que era como nasciam as diferenças
  * entre regiões.
  *
@@ -97,7 +116,7 @@ export interface OfficialAvatarOptions {
 export function createOfficialAvatar(id: string, options: OfficialAvatarOptions = {}): Avatar | null {
   const character = BY_ID.get(id);
   if (!character) return null;
-  const avatar = new Avatar(character.appearance);
+  const avatar = new Avatar(character.appearance, proportionsFor(character.id, character.appearance.height));
   avatar.fill = options.fill ?? 0.16;
   // Gestação é identidade, não estado de jogo: entra antes de qualquer
   // Afters e vale sempre que a personagem estiver em cena. Amara é

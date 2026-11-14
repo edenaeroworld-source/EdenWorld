@@ -691,8 +691,14 @@ describe('Afters 2.0 · malha do avatar', () => {
       // Só as juntas usam o material do avatar; a auréola tem o seu.
       if (mesh.isMesh && (mesh.material as THREE.Material).name === 'avatar') meshes.push(mesh);
     });
-    expect(meshes.length).toBeGreaterThan(5);
+    // O corpo é uma malha só desde o Marco N (antes eram onze juntas
+    // rígidas), e o rosto é a segunda. Contar malhas aqui mediria a
+    // arquitetura; o que interessa é que **nenhum vértice** escape da
+    // conferência, então o controle é sobre vértices.
+    expect(meshes.length).toBeGreaterThan(0);
     let zoned = 0;
+    let total = 0;
+    const seen = new Set<number>();
     for (const mesh of meshes) {
       const attribute = mesh.geometry.getAttribute('aZone');
       expect(attribute).toBeDefined();
@@ -700,11 +706,18 @@ describe('Afters 2.0 · malha do avatar', () => {
       for (let i = 0; i < attribute.count; i += 1) {
         const zone = attribute.getX(i);
         expect([Zone.None, Zone.Bust, Zone.Curve, Zone.Thigh]).toContain(Math.round(zone));
+        seen.add(Math.round(zone));
+        total += 1;
         if (zone > 0) zoned += 1;
       }
     }
+    // Um corpo inteiro foi mesmo percorrido, e não um pedaço dele.
+    expect(total).toBeGreaterThan(3000);
     // Existem vértices deformáveis — e também vértices que nunca deformam.
     expect(zoned).toBeGreaterThan(0);
+    expect(zoned).toBeLessThan(total);
+    // As quatro zonas existem no corpo: nenhuma ficou órfã na reescrita.
+    expect([...seen].sort()).toEqual([Zone.None, Zone.Bust, Zone.Curve, Zone.Thigh].sort());
     avatar.dispose();
   });
 
