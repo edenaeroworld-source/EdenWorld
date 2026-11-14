@@ -119,15 +119,88 @@ Mais a malha em si: peça única e conexa, sem vértice duplicado, sem
 aresta não-manifold, com exatamente dois anéis de borda livre, e
 normais para fora.
 
-### O limite conhecido
+### O colo: quatro ossos no quadril
 
-A cobertura é completa até **65° de flexão de quadril**, com folga
-sobre o que a locomoção pede (correr chega a 44,5°; pular, 35,5°).
+O limite acima era **65° de flexão**, e sentar pede 85,9°. Uma saia
+presa a um osso só não dá a volta num colo horizontal — isso não se
+resolve com mais peso, e três varreduras de `SKIRT_FOLLOW` (0,7, 0,85
+e 1,0) confirmaram: nenhuma cobria sentar, e 0,85 ainda estragava a
+corrida.
 
-Acima disso — sentar (85,9°) e subir escada (78,3°) — o joelho passa
-da barra e aparece, como acontece com um vestido de verdade quando
-alguém senta. Nesses dois estados a saia continua inteira e cai sobre
-o colo, mas a cobertura não é garantida por teste: uma saia presa ao
-osso do quadril não dá a volta num colo horizontal. Resolver isso
-pede uma cadeia de ossos própria para a saia ou simulação de tecido,
-e não foi feito aqui.
+O que resolve é a saia ter ossos próprios. São quatro, presos ao
+quadril, um por quadrante — esquerda, frente, direita, trás. Cada
+vértice do pano se reparte entre o quadril e os **dois** quadrantes
+vizinhos, com a fração de pano crescendo da cintura (costurada, segue
+o quadril) até a barra (solta, segue os quadrantes).
+
+Quem move os ossos é a pose, não um sinal de «sentou»:
+
+    média = (coxa esquerda + coxa direita) / 2
+
+Caminhando, uma perna vai e a outra vem, e a média fica em **0,000**
+por mais larga que seja a passada — medido também em correr, nadar e
+descer escada. Pular e subir escada chegam a 0,220. Sentar leva as
+duas coxas juntas para 1,500. A média separa os dois mundos sozinha,
+e por isso a regra vale igual para a jogadora, para as NPCs e para o
+Panteão: todos passam pelo mesmo `Avatar.applyPose`, e ninguém
+precisou ser avisado.
+
+Sentada, cada quadrante faz uma coisa diferente:
+
+| painel | o que faz | por quê |
+| --- | --- | --- |
+| frente | deita sobre o colo (0,6 da coxa) | é o pano que cobre a perna deitada |
+| laterais | quase não giram (0,25), e se recolhem 0,25 rad para dentro | a saia de quem senta desce ao lado, não vai para a frente |
+| trás | não gira: sobe 0,30 m e tomba 0,35 rad para a **frente** | para trás encostaria no espaldar, a 30 cm do centro |
+
+E a saia inteira sobe 24 cm na barra, porque o assento empurra o pano
+— é o que acontece com qualquer saia quando alguém senta.
+
+### Por que a imagem decidiu, e não o número
+
+A primeira versão punha os quatro quadrantes seguindo a coxa inteira.
+As medidas ficaram ótimas: 32 vértices dentro da tábua, 53 de pele à
+vista. E a saia virava um **balão** — um domo liso de frente, uma
+lâmina rígida de perfil. Nenhuma sonda acusou.
+
+O que mostrou foi desenhar o banco de verdade junto com o avatar, no
+mesmo z-buffer (`drawProp`, em `tests/helpers/raster.ts`). A quarta
+linha de `docs/vestido-depois.png` é essa prova: sentada de frente, de
+perfil e de três quartos por trás, com a madeira no lugar onde o
+motor a põe.
+
+### O que fica medido agora
+
+`tests/unit/vestido-banco.test.ts`, quatro testes:
+
+- **nenhum vértice aparece por baixo do assento nem atrás do
+  espaldar** — zero, contra 141 vazamentos sem o colo;
+- o pano que entra na madeira fica **selado entre o corpo e a tábua**,
+  onde nenhuma câmera chega: 51 vértices, contra 120 sem o colo;
+- **sentada, o que o banco não esconde continua coberto**: 51 vértices
+  de pele à vista, contra 181 sem o colo (e 73 sem a subida do
+  assento). Descontam-se os que passam a olhar para a madeira ou para
+  a coxa oposta, que o próprio corpo tapa;
+- **levantar não dá tranco**: 10,6 cm no pior quadro, contra 9,0 cm do
+  próprio corpo na mesma transição.
+
+O banco não é copiado para dentro do teste: ele vem de
+`benchGeometries()`, e a pergunta «está dentro da madeira?» é
+respondida por paridade de raio. Se o banco mudar, o teste muda junto.
+
+A cobertura é medida **pela normal da pele**, não radialmente a partir
+do eixo do quadril. Com a coxa deitada, o pano que a cobre está
+*acima* dela: um raio horizontal sai por baixo da saia sem tocá-la e
+acusa pele nua onde a imagem mostra tecido. Foi por isso que `sit` e
+`stairUp` continuam fora da varredura radial de `vestido-malha` — não
+por serem casos perdidos, mas porque aquela régua não serve para eles.
+
+### O limite que fica
+
+Subir escada continua sem garantia de teste. Tentou-se um termo por
+perna — o pano montando na coxa erguida — e, com o grupo de controle
+correto, a medida disse que **piorava**: 366 vértices descobertos
+contra 339. Foi removido. O primeiro grupo de controle estava
+invertido (`RISE_FROM` acima de `RISE_TO` fixa o efeito em 1 em vez de
+desligá-lo) e dizia o contrário; vale desconfiar de um controle que
+melhora tudo de uma vez.
