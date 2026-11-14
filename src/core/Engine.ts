@@ -46,6 +46,7 @@ import { CHARACTER_VOICES, VoiceSystem } from '../systems/VoiceSystem';
 import { clamp01, formatDistance, formatDuration, wrapAngle } from '../utils/math';
 import { World } from '../world/World';
 import { type RegionValidation, checkRegionIntegrity, runRegionTransition } from '../world/RegionTransition';
+import { checkLightingIsolation } from '../world/SceneLighting';
 import { Zone } from '../world/ZoneMap';
 import { getRegion } from '../regions/Region';
 import { UniverseSystem } from '../universe/UniverseSystem';
@@ -831,10 +832,22 @@ export class Engine {
       groundAt: (x, z) => (ground ? ground.settle(x, z) : this.world.heightField.getHeight(x, z)),
       boundaryRadius: this.world.boundaryRadius,
     });
-    if (!report.ok && this.flags.enabled) {
-      for (const problem of report.problems) console.warn(`[eden] ${problem}`);
+
+    // A luz entra na mesma conferência que as posições.
+    //
+    // Duas vezes a região de destino chegou clara demais porque algo
+    // da anterior tinha ficado para trás — primeiro a hora do
+    // relógio, depois o sol e a luz de ambiente, que continuavam
+    // pendurados na cena. Nos dois casos quem percebeu foi o
+    // jogador, olhando. Agora quem percebe é a etapa de validação,
+    // na chegada, e o problema sai no console com nome e número.
+    const lighting = checkLightingIsolation(this.scene);
+    const problems = [...report.problems, ...lighting.problems];
+
+    if (problems.length > 0 && this.flags.enabled) {
+      for (const problem of problems) console.warn(`[eden] ${problem}`);
     }
-    return report;
+    return { ok: problems.length === 0, problems };
   }
 
   /**
