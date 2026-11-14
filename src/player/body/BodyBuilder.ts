@@ -24,7 +24,7 @@ import { TAU } from '../../utils/math';
 import type { AvatarAppearance } from '../AvatarAppearance';
 import type { BodyProportions } from './BodyProportions';
 import { Bone, type BodyDetail, type BodyMetrics, HEAD_CENTER, morphOrigins } from './BodyRig';
-import { type SkinBinding, type Station, SurfaceBuilder, subdivideProfile } from './BodySurface';
+import { type FollowSpec, type SkinBinding, type Station, SurfaceBuilder, subdivideProfile } from './BodySurface';
 
 type Hex = THREE.ColorRepresentation;
 
@@ -52,6 +52,7 @@ interface Ctl {
   blend?: number;
   zone?: number;
   origin?: readonly [number, number, number];
+  follow?: FollowSpec;
 }
 
 function toStations(control: readonly Ctl[]): Station[] {
@@ -66,6 +67,7 @@ function toStations(control: readonly Ctl[]): Station[] {
     skin: c.bone2 === undefined ? { bone: c.bone } : { bone: c.bone, bone2: c.bone2, blend: c.blend ?? 0.5 },
     zone: c.zone,
     origin: c.origin,
+    follow: c.follow,
   }));
 }
 
@@ -103,9 +105,14 @@ export function buildBodyGeometry(a: AvatarAppearance, p: BodyProportions, m: Bo
     buildLeg(b, side, { m, detail, skin, bottom, shoe, longPants, bareLegs, outfit, origins });
   }
   buildHead(b, a, p, m, detail);
+  // Onde a saia começa no buffer: é assim que um teste separa o tecido
+  // do corpo sem adivinhar por cor ou por raio.
+  const skirtStart = b.vertexCount;
   if (dress) buildSkirt(b, m, detail, top, origins);
 
-  return b.build();
+  const geometry = b.build();
+  geometry.userData.parts = dress ? { saia: [skirtStart, b.vertexCount] } : {};
+  return geometry;
 }
 
 /* ------------------------------- tronco ---------------------------------- */
@@ -144,10 +151,21 @@ function buildTorso(b: SurfaceBuilder, ctx: TorsoCtx): void {
     // A pelve termina na altura da virilha, não abaixo dela: descer
     // mais criava uma cunha entre as coxas — a "fralda" que denuncia
     // um tronco modelado sem olhar para onde as pernas começam.
-    { y: -0.088, rx: m.hipWidth * 0.78, rz: 0.086, rzBack: 0.094, color: lower, bone: Bone.Hips, zone: MorphZone.Curve, origin: hip },
-    { y: -0.055, rx: m.hipWidth * 0.93, rz: 0.098, rzBack: 0.112, color: lower, bone: Bone.Hips, zone: MorphZone.Curve, origin: hip },
-    { y: -0.015, rx: m.hipWidth, rz: 0.104, rzBack: 0.118, color: lower, bone: Bone.Hips, zone: MorphZone.Curve, origin: hip },
-    { y: 0.03, rx: m.hipWidth * 0.95, rz: 0.1, rzBack: 0.106, color: lower, bone: Bone.Hips, zone: MorphZone.Curve, origin: hip },
+    //
+    // Os quatro anéis da pelve vêm de `PELVIS_PROFILE`, a mesma tabela
+    // que a saia consulta para saber o que precisa vestir. Fosse uma
+    // cópia, bastaria mexer num dos dois lugares para a roupa deixar
+    // de caber no corpo — foi exatamente assim que o vestido rachou.
+    ...PELVIS_PROFILE.map((seg) => ({
+      y: seg.y,
+      rx: m.hipWidth * seg.w,
+      rz: seg.rz,
+      rzBack: seg.rzBack,
+      color: lower,
+      bone: Bone.Hips,
+      zone: MorphZone.Curve,
+      origin: hip,
+    })),
     // A cintura: onde o perfil afina e onde o osso troca.
     { y: 0.1, rx: m.waistWidth, rz: 0.086, rzBack: 0.09, color: belly, bone: Bone.Torso, zone: MorphZone.Bust, origin: torso },
     { y: 0.165, rx: m.waistWidth * 1.06, rz: 0.09, rzBack: 0.092, color: top, bone: Bone.Torso, zone: MorphZone.Bust, origin: torso },
@@ -223,16 +241,235 @@ function flatRing(radius: number, depth: number, tube: number, segments: number,
 const WAIST_DEPTH = 0.77;
 const HIP_DEPTH = 0.66;
 
-/** A saia do vestido: um cone suave pendurado no quadril. */
+/* ------------------------------- a saia ---------------------------------- */
+
+/**
+ * O perfil da pelve, em frações de `hipWidth`.
+ *
+ * Fonte única: o tronco desenha estes anéis e a saia os consulta para
+ * saber o que tem de vestir.
+ */
+const PELVIS_PROFILE: readonly { y: number; w: number; rz: number; rzBack: number }[] = [
+  { y: -0.088, w: 0.78, rz: 0.086, rzBack: 0.094 },
+  { y: -0.055, w: 0.93, rz: 0.098, rzBack: 0.112 },
+  { y: -0.015, w: 1.0, rz: 0.104, rzBack: 0.118 },
+  { y: 0.03, w: 0.95, rz: 0.1, rzBack: 0.106 },
+];
+
+/** Altura da junta do quadril (`BodyRig.place(Bone.ThighL, …)`). */
+const HIP_JOINT_Y = -0.02;
+/** Onde a barra da saia termina — acima do joelho. */
+const SKIRT_HEM_Y = -0.36;
+
+/**
+ * O perfil da coxa, em frações de `legTop`, nas alturas de `buildLeg`.
+ *
+ * As entradas descem: a primeira é o topo da coxa, enterrado na
+ * pelve. Os deslocamentos são relativos à junta do quadril, como em
+ * `buildLeg`, para que mexer num perfil mexa nos dois.
+ */
+const THIGH_PROFILE: readonly { d: number; w: number }[] = [
+  { d: 0.05, w: 0.98 },
+  { d: -0.02, w: 1.02 },
+  { d: -0.1, w: 0.96 },
+];
+
+function sampleFalling(table: readonly { at: number; v: number }[], y: number): number {
+  if (y >= table[0].at) return table[0].v;
+  const last = table[table.length - 1];
+  if (y <= last.at) return last.v;
+  for (let i = 0; i < table.length - 1; i += 1) {
+    const a = table[i];
+    const c = table[i + 1];
+    if (y <= a.at && y >= c.at) return a.v + ((c.v - a.v) * (y - a.at)) / (c.at - a.at);
+  }
+  return last.v;
+}
+
+/** Raio lateral da coxa na altura `y` (espaço de bind). */
+function thighRadiusAt(m: BodyMetrics, y: number): number {
+  const kneeY = HIP_JOINT_Y - m.thigh;
+  const table = [
+    ...THIGH_PROFILE.map((seg) => ({ at: HIP_JOINT_Y + seg.d, v: m.legTop * seg.w })),
+    { at: (HIP_JOINT_Y + kneeY) * 0.5, v: m.legTop * 0.86 },
+    { at: kneeY + 0.1, v: m.legTop * 0.78 },
+    { at: kneeY + 0.055, v: m.legTop * 0.735 },
+  ];
+  return sampleFalling(table, y);
+}
+
+/** Raio lateral da pelve na altura `y`; zero abaixo da virilha. */
+function pelvisRadiusAt(m: BodyMetrics, y: number): number {
+  if (y < PELVIS_PROFILE[0].y) return 0;
+  const table = [
+    { at: 0.1, v: m.waistWidth },
+    ...[...PELVIS_PROFILE].reverse().map((seg) => ({ at: seg.y, v: m.hipWidth * seg.w })),
+  ];
+  return sampleFalling(table, y);
+}
+
+/** Profundidade da pelve (frente ou costas) na altura `y`. */
+function pelvisDepthAt(m: BodyMetrics, y: number): number {
+  if (y < PELVIS_PROFILE[0].y) return 0;
+  void m;
+  return sampleFalling(
+    [{ at: 0.1, v: 0.09 }, ...[...PELVIS_PROFILE].reverse().map((seg) => ({ at: seg.y, v: seg.rzBack }))],
+    y,
+  );
+}
+
+/**
+ * Por quanto é preciso esticar uma elipse para engolir um círculo.
+ *
+ * **É aqui que estava o segundo defeito.** Garantir que a elipse é
+ * mais larga que a coxa e mais funda que a passada não garante que
+ * ela contenha a coxa: na diagonal a elipse é mais estreita que nos
+ * eixos, e a coxa em movimento está justamente na diagonal — larga em
+ * x porque fica a `legX` do eixo, adiantada em z porque a perna
+ * avançou. Era por essa quina que saíam os 2,7 cm de pele que
+ * sobraram depois do primeiro acerto.
+ *
+ * Não existe fórmula fechada bonita para isto; amostrar o círculo
+ * resolve, e são dez anéis vezes vinte e quatro pontos, uma vez, na
+ * construção da malha.
+ */
+function swellFor(rx: number, rz: number, cx: number, cz: number, radius: number): number {
+  let k = 1;
+  for (let i = 0; i < 24; i += 1) {
+    const a = (i / 24) * Math.PI * 2;
+    const x = (cx + Math.cos(a) * radius) / rx;
+    const z = (cz + Math.sin(a) * radius) / rz;
+    k = Math.max(k, Math.hypot(x, z));
+  }
+  return k;
+}
+
+/**
+ * Folga do tecido: justa na cintura, solta na barra.
+ *
+ * Um vestido encosta no corpo onde é costurado e se afasta à medida
+ * que cai. Sem essa variação, ou a cintura fica inflada ou a barra
+ * fica colada na perna.
+ */
+function skirtClearance(y: number): number {
+  const drop = Math.max(0, Math.min(1, (HIP_JOINT_Y - y) / (HIP_JOINT_Y - SKIRT_HEM_Y)));
+  return 0.009 + 0.023 * drop;
+}
+
+/**
+ * Tangente do balanço de passada que a saia precisa comportar.
+ *
+ * A coxa gira em torno da junta do quadril. Um ponto que termina `h`
+ * metros abaixo da junta veio de uma profundidade `h / cos θ` e está
+ * afastado `h · tan θ` do eixo — **tangente, não seno**: é a conta
+ * que me enganou na primeira tentativa, e a diferença chega a 40% no
+ * ângulo da corrida.
+ *
+ * O animador chega a 29,8° caminhando e 44,6° correndo; 40° é o
+ * ponto em que a peça cobre a passada inteira sem virar uma tenda.
+ */
+const STRIDE_TAN = Math.tan((40 * Math.PI) / 180);
+
+/**
+ * Peso com que a saia acompanha a coxa, e a curva com que ele cresce.
+ *
+ * Meio a meio na barra, zero na cintura. Mais que isso e a peça vira
+ * calça — cada metade colada na sua perna; menos, e a forma precisa
+ * engordar para compensar, porque é uma coisa ou outra (ver
+ * `strideRoom`). Com 0,5 a varredura de paridade não acusa um único
+ * vértice exposto e a silhueta continua a de um vestido.
+ */
+const SKIRT_FOLLOW = 0.5;
+const FOLLOW_RAMP = 0.5;
+
+/** Quanto do balanço a saia absorve sozinha na altura `y`. */
+function followWeight(y: number): number {
+  const drop = Math.max(0, Math.min(1, (HIP_JOINT_Y - y) / (HIP_JOINT_Y - SKIRT_HEM_Y)));
+  return SKIRT_FOLLOW * drop ** FOLLOW_RAMP;
+}
+
+/**
+ * Espaço que a passada exige do tecido na altura `y`.
+ *
+ * Folga e acompanhamento são a mesma grandeza vista duas vezes: o que
+ * a saia **não** acompanha é exatamente o que ela precisa ter de
+ * sobra na forma. Por isso o termo é `(1 − peso)` — perto da barra,
+ * onde o tecido vai junto com a perna, ele quase desaparece, e é essa
+ * compensação que impede a saia de inflar como um vestido de baile só
+ * para cobrir um joelho que ela já está acompanhando.
+ */
+function strideRoom(y: number): number {
+  return Math.max(0, HIP_JOINT_Y - y) * STRIDE_TAN * (1 - followWeight(y));
+}
+
+/**
+ * A saia do vestido: um cone suave pendurado no quadril.
+ *
+ * Cada anel é o maior entre a forma desejada (a linha A, que é o que
+ * faz a peça parecer uma saia) e o corpo que ele tem de vestir mais a
+ * folga. A forma nunca ganha do corpo — é essa precedência que impede
+ * o tecido de rachar quando as proporções mudam.
+ *
+ * O topo fica **dentro** do tronco de propósito: a borda some sob o
+ * corpete em vez de aparecer como um degrau na cintura. Todos os
+ * anéis pertencem ao osso do quadril, e só a ele: é o que mantém os
+ * dois lados da saia rigidamente ligados, sem a tesoura que apareceria
+ * se cada metade seguisse a sua coxa.
+ */
 function buildSkirt(b: SurfaceBuilder, m: BodyMetrics, detail: BodyDetail, top: Hex, origins: ReturnType<typeof morphOrigins>): void {
   const hip = origins.hips;
-  const control: Ctl[] = [
-    { y: -0.36, rx: m.hipWidth * 1.86, rz: m.hipWidth * 1.72, color: shade(top, -0.1), bone: Bone.Hips, zone: MorphZone.Curve, origin: hip },
-    { y: -0.26, rx: m.hipWidth * 1.52, rz: m.hipWidth * 1.42, color: top, bone: Bone.Hips, zone: MorphZone.Curve, origin: hip },
-    { y: -0.14, rx: m.hipWidth * 1.2, rz: m.hipWidth * 1.14, color: top, bone: Bone.Hips, zone: MorphZone.Curve, origin: hip },
-    { y: -0.02, rx: m.hipWidth * 1.02, rz: m.hipWidth * 0.98, color: top, bone: Bone.Hips, zone: MorphZone.Curve, origin: hip },
-    { y: 0.06, rx: m.waistWidth * 1.02, rz: m.waistWidth * 0.98, color: top, bone: Bone.Hips, zone: MorphZone.Curve, origin: hip },
-  ];
+  // Forma desejada: largura da barra e como ela afunila subindo.
+  const hemRx = m.hipWidth * 1.9;
+  const want = (y: number): number => {
+    const t = Math.max(0, Math.min(1, (y - SKIRT_HEM_Y) / (0.09 - SKIRT_HEM_Y)));
+    // Curva suave: a saia abre devagar na cintura e acelera na barra.
+    return m.waistWidth * 1.04 + (hemRx - m.waistWidth * 1.04) * (1 - t) ** 1.45;
+  };
+
+  // Da barra para cima: a varredura exige `y` crescente, e um perfil
+  // escrito ao contrário sai com as normais para dentro — a saia
+  // acende cinza, como se estivesse sempre na sombra.
+  const heights = [SKIRT_HEM_Y, -0.28, -0.21, -0.15, -0.1, -0.06, -0.02, 0.02, 0.055, 0.09];
+  const control: Ctl[] = heights.map((y, i) => {
+    const clear = skirtClearance(y);
+
+    // A forma desejada é o ponto de partida; o corpo é o piso.
+    let rx = want(y);
+    let rz = want(y) * 0.94;
+
+    // Conter a pelve, que é uma elipse concêntrica — basta comparar
+    // eixo a eixo.
+    rx = Math.max(rx, pelvisRadiusAt(m, y) + clear);
+    rz = Math.max(rz, pelvisDepthAt(m, y) + clear);
+
+    // Conter as coxas, que são dois discos deslocados: `legX` para o
+    // lado, e para a frente ou para trás o que a passada empurra e o
+    // tecido não acompanha. A conta é feita nas quatro combinações
+    // porque a saia é a mesma para os dois lados e para os dois
+    // sentidos da passada.
+    const thigh = thighRadiusAt(m, y) + clear;
+    const reach = strideRoom(y);
+    if (thigh > 0) {
+      for (const dz of [reach, -reach]) {
+        const k = swellFor(rx, rz, m.legX, dz, thigh);
+        rx *= k;
+        rz *= k;
+      }
+    }
+
+    return {
+      y,
+      // O anel de cima mergulha no corpete: some a borda da costura.
+      rx: i === heights.length - 1 ? Math.min(rx, m.waistWidth * 0.97) : rx,
+      rz: i === heights.length - 1 ? Math.min(rz, m.waistWidth * 0.72) : rz,
+      color: y <= SKIRT_HEM_Y ? shade(top, -0.1) : top,
+      bone: Bone.Hips,
+      zone: MorphZone.Curve,
+      origin: hip,
+      follow: { left: Bone.ThighL, right: Bone.ThighR, weight: followWeight(y) },
+    };
+  });
+
   b.loft(subdivideProfile(toStations(control), detail.steps), { segments: detail.segments });
 }
 
