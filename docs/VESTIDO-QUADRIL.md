@@ -204,3 +204,79 @@ contra 339. Foi removido. O primeiro grupo de controle estava
 invertido (`RISE_FROM` acima de `RISE_TO` fixa o efeito em 1 em vez de
 desligá-lo) e dizia o contrário; vale desconfiar de um controle que
 melhora tudo de uma vez.
+
+## A saia de quem senta, segunda parte
+
+A primeira versão disto passava em dezoito testes e, na tela, era um
+balde. A captura do jogador mostrava uma saia que ignorava a pose,
+endurecia embaixo, não cobria o quadril onde o corpo estava, se fundia
+com a tábua e não ligava tronco, saia e pernas. Os testes mediam
+penetração e cobertura — e um balde erguido satisfaz as duas coisas
+com folga. Nenhum número acusou nada.
+
+Fica o método: **a imagem é o critério, o número é a trava**. E a
+imagem precisa ser grande. As folhas da primeira rodada eram pequenas
+demais para mostrar que a silhueta era um abajur; só em 420×520, e com
+um perfil de verdade, o defeito apareceu.
+
+### Por que um cone não deita no colo
+
+A saia tinha um segmento só, preso no quadril. Girá-lo não resolve, e
+a razão é geométrica: **rotação preserva o raio**. Por mais que se
+gire o cone para a frente, o tecido continua à mesma distância do
+quadril — ele passa *à frente* da coxa em vez de pousar sobre ela. E
+quando se tenta compensar girando cada quadrante para um lado
+diferente, a malha vinca na diagonal, onde os dois se misturam: são as
+pontas de papelão da captura.
+
+Daí as duas regras que sobraram. **Os quadrantes vizinhos têm de ficar
+próximos** (0,75 à frente contra 0,55 nos lados); afastá-los é o que
+cria as pontas. E **o recolhimento lateral foi embora**: `SKIRT_TUCK`
+não existe mais, era a origem das piores delas.
+
+### A articulação
+
+A saia ganhou um joelho. Cada quadrante tem agora um osso de barra,
+filho dele, na altura de `SKIRT_BREAK_Y`. O de cima acompanha o corpo;
+a barra desfaz parte desse giro e volta a cair na vertical — que é o
+que um tecido faz quando a coxa some debaixo dele. Como o osso da
+barra fica *exatamente* na quebra, o anel dali não se move e a costura
+entre as duas fileiras continua fechada.
+
+Em pé e andando, `lap` vale zero e a fileira nova não faz literalmente
+nada. Nada do que já funcionava mudou.
+
+### O assento é um lugar conhecido
+
+Faltava ainda o que o jogador chamou de «não acompanha o corpo», e que
+só apareceu ao testar com os cidadãos: com quatro corpos diferentes, a
+barra caía entre 0,219 e 0,279 — seis centímetros de diferença — e os
+de perna curta afundavam na madeira.
+
+A medida explicou tudo. A saia pende **sempre os mesmos 18 cm** abaixo
+do quadril, em qualquer corpo (17,7 a 18,5 cm nos quatro). O que varia
+não é a saia: é a altura do quadril, e com ela a distância até a
+tábua. Não era uma saia grande demais; era um corpo pequeno sentado
+como se fosse grande.
+
+A correção é a saia **pousar no assento** em vez de atravessá-lo. Ela
+pode fazer isso sem que ninguém lhe avise que há um banco por perto,
+porque `PlayerMotor.sit` põe a origem do personagem em
+`seat.y - SEAT_DROP` com a mesma queda para todo assento do jogo — o
+banco de Aurora em `y + 0,47`, a espreguiçadeira em `y + 0,38`, as
+cadeiras de interior em `piso + 0,6`. Alturas diferentes no mundo, o
+mesmo lugar em relação ao quadril. `SKIRT_SEAT_Y` é esse lugar, e há
+um teste que prende a invariante: se alguém der a um assento a sua
+própria queda, ele cai.
+
+É também o que faz isto valer para os cidadãos, que nunca passam pelo
+`PlayerMotor`. Depois da correção a barra dos cinco corpos cai entre
+0,266 e 0,279 — faixa de 1,3 cm, nenhum vazamento.
+
+### O que se olha agora
+
+`docs/vestido-sentada.png` tem cinco faixas: em pé, sentando (três
+instantes da descida), sentada, levantando (três da volta) e três
+cidadãos de corpos diferentes no mesmo banco. A transição é medida
+quadro a quadro, não só no repouso — era durante o movimento que a
+saia endurecia.

@@ -194,6 +194,32 @@ export const LAP_TO = 1.45;
 export const SKIRT_LIFT = 0.18;
 
 /**
+ * Onde está a tábua do assento, em relação aos pés de quem sentou.
+ *
+ * `PlayerMotor.sit` põe a origem do personagem em `seat.y - SEAT_DROP`
+ * — a mesma queda para todo assento do jogo, do banco de Aurora à
+ * espreguiçadeira e às cadeiras de interior. Como a queda é constante,
+ * a superfície em que a pessoa senta cai **sempre nesta altura** aqui
+ * dentro, e a saia pode contar com ela sem precisar que ninguém lhe
+ * avise que há um banco por perto. É o que mantém isto valendo para os
+ * cidadãos, que nunca passam pelo `PlayerMotor`.
+ */
+export const SKIRT_SEAT_Y = 0.24;
+
+/** Uma folga para o pano pousar sobre a madeira, não dentro dela. */
+export const SKIRT_SEAT_CLEAR = 0.03;
+
+/**
+ * O quanto a barra pende abaixo do quadril com o colo já formado.
+ *
+ * Medido, não estimado: com a saia deitada, a distância entre o osso
+ * do quadril e o ponto mais baixo do tecido ficou entre 17,7 e 18,5 cm
+ * em quatro corpos de proporções bem diferentes. O que varia de um
+ * corpo para outro não é a saia — é a altura do quadril.
+ */
+export const SKIRT_LAP_DROP = 0.18;
+
+/**
  * Onde o pano quebra, em metros abaixo da junta do quadril.
  *
  * A saia vai de +0,09 (cintura) a −0,36 (barra). A quebra fica a meio
@@ -248,12 +274,27 @@ export function lapAmount(legLX: number, legRX: number): number {
  * em pé, balançar na corrida e deitar no colo — sem tocar na
  * geometria, que continua a mesma em todas as três.
  */
-export function poseSkirt(bones: readonly THREE.Bone[], legLX: number, legRX: number, legLZ: number, legRZ: number): void {
+export function poseSkirt(
+  bones: readonly THREE.Bone[],
+  legLX: number,
+  legRX: number,
+  legLZ: number,
+  legRZ: number,
+  hipHeight: number,
+): void {
   const average = (legLX + legRX) * 0.5;
   const lap = lapAmount(legLX, legRX);
   const front = mix(SKIRT_FOLLOW_WALK, SKIRT_FOLLOW_LAP, lap);
   const side = mix(SKIRT_FOLLOW_WALK, SKIRT_SIDE_LAP, lap);
-  const lift = SKIRT_LIFT * lap;
+
+  // O pano pousa no assento em vez de atravessá-lo. Quem tem perna
+  // curta tem o quadril mais baixo — até 6 cm abaixo do nosso corpo de
+  // referência — e, como a barra pende sempre os mesmos 18 cm, era o
+  // corpo pequeno que afundava na madeira, não a saia que era grande.
+  // Levantar pela diferença faz a cobertura acompanhar o corpo que
+  // está lá dentro, que é o que estava faltando.
+  const pousa = Math.max(0, SKIRT_SEAT_Y + SKIRT_SEAT_CLEAR - (hipHeight - SKIRT_LAP_DROP));
+  const lift = (SKIRT_LIFT + pousa) * lap;
 
   // Cada lado segue a sua própria perna, e se recolhe para dentro ao
   // sentar: a saia de quem senta não vai para a frente, ela desce ao

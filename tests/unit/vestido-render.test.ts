@@ -34,6 +34,7 @@ import { describe, expect, it } from 'vitest';
 import { Avatar } from '../../src/player/Avatar';
 import { AvatarAnimator, Ch, type Pose } from '../../src/player/AvatarAnimator';
 import { DEFAULT_APPEARANCE } from '../../src/player/AvatarAppearance';
+import { proportionsFor } from '../../src/player/body/BodyProportions';
 import * as THREE from 'three';
 import { benchGeometries } from '../../src/cities/aurora-city/Decorations';
 import { type Canvas, canvas, drawAvatar, drawProp, png, stack, strip } from '../helpers/raster';
@@ -167,8 +168,16 @@ describe.runIf(process.env.EDEN_RENDER)('vestido no quadril (visual)', () => {
       seated(avatar, during('sit', 'idle', 14), -0.45),
       seated(avatar, during('sit', 'idle', 30), -0.45),
     ]);
+    // 5: três cidadãos, de corpos diferentes, sentados no mesmo banco.
+    //    Não é o jogador: é o caminho de `NpcSystem` e `InteriorScene`.
+    const linha5 = strip(
+      ['cidadao:1', 'cidadao:980', 'cidadao:204'].map((quem) => {
+        const cidada = new Avatar({ ...DEFAULT_APPEARANCE, outfit: 'vestido' }, proportionsFor(quem));
+        return seated(cidada, sentada, -0.45);
+      }),
+    );
 
-    const sheet = stack([linha1, linha2, linha3, linha4]);
+    const sheet = stack([linha1, linha2, linha3, linha4, linha5]);
     writeFileSync(resolve(process.cwd(), 'docs', 'vestido-sentada.png'), png(sheet.width, sheet.height, sheet.rgb));
     expect(sheet.width).toBeGreaterThan(0);
   });
