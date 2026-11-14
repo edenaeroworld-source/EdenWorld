@@ -5,6 +5,8 @@ import { type EdenAppsHost, buildAfters, buildFeed, buildGram, buildMusic, build
 import { type UniverseAppHost, buildActivities, buildAtlas, buildHomes, buildPets, buildStores, buildWallet } from './UniverseApps';
 import { type IconName, icon } from './icons';
 import { type MapMarker, drawMap } from './MapRenderer';
+import type { PhoneSide } from '../systems/SaveSystem';
+import type { CharacterPreview } from './CharacterPreview';
 import type { Screen } from './UIManager';
 
 export type PhoneApp =
@@ -80,6 +82,10 @@ export interface PhoneHost extends EdenAppsHost, UniverseAppHost {
   openAvatar(): void;
   openSettings(): void;
   close(): void;
+  /** Lado da tela em que o aparelho encosta. */
+  phoneSide(): PhoneSide;
+  /** Prévia 3D do personagem, quando a plataforma a suporta. */
+  preview?(): CharacterPreview | null;
 }
 
 interface AppDef {
@@ -96,6 +102,17 @@ interface AppDef {
 /** EdenPhone: o celular do jogador, com mapa, diário, câmera e ajustes. */
 export class EdenPhoneUI implements Screen {
   readonly id = 'edenphone';
+  /**
+   * O celular convive com a gameplay em vez de interrompê-la.
+   *
+   * É o que o torna lateral de verdade: o mundo continua andando, o
+   * personagem continua andando com ele, e a tecla do celular volta a
+   * ser entregue ao jogo — sem isto não haveria como fechá-lo com a
+   * mesma tecla que o abriu.
+   */
+  readonly blocking = false;
+  /** Tempo da animação de saída pela lateral (ver `.screen--phone`). */
+  readonly exitMs = 260;
   readonly element: HTMLDivElement;
   private readonly content: HTMLDivElement;
   private readonly statusClock: HTMLSpanElement;
@@ -112,12 +129,26 @@ export class EdenPhoneUI implements Screen {
   private mapMarkers: MapMarker[] = [];
   private lastMapDraw = 0;
   private lastClock = '';
+  private readonly device: HTMLDivElement;
+  private readonly previewSlot: HTMLDivElement;
+  private side: PhoneSide = 'direita';
+  /** `true` quando a próxima abertura retoma o estado guardado. */
+  private resuming = false;
 
   constructor(private readonly host: PhoneHost) {
     this.statusClock = h('span', { text: '09:30' });
     this.content = h('div', { class: 'phone__content' });
     this.homeButton = button({ class: 'btn btn--ghost btn--small', icon: icon('home', 18), label: 'Início', onClick: () => this.show('home', true) });
     const close = button({ class: 'btn btn--small', icon: icon('close', 18), label: 'Guardar', onClick: () => host.close() });
+    // Um segundo fechar, preso à moldura: com o celular encostado na
+    // lateral ele é o alvo mais perto do polegar, e não exige rolar a
+    // tela até a barra de baixo.
+    const dismiss = button({
+      class: 'phone__dismiss',
+      icon: icon('close', 16),
+      ariaLabel: 'Guardar o EdenPhone',
+      onClick: () => host.close(),
+    });
     const screen = h(
       'div',
       { class: 'phone__screen' },
@@ -125,22 +156,101 @@ export class EdenPhoneUI implements Screen {
       this.content,
       h('div', { class: 'phone__home-bar' }, this.homeButton, close),
     );
-    this.element = h('div', { class: 'screen screen--dim', attrs: { role: 'dialog', 'aria-modal': 'true', 'aria-label': 'EdenPhone' } }, h('div', { class: 'phone' }, screen));
+    // A janela da prévia mora no aparelho, não no aplicativo: trocar de
+    // aplicativo não destrói o personagem nem recria o contexto WebGL.
+    this.previewSlot = h('div', { class: 'phone-preview', attrs: { 'aria-hidden': 'true' } });
+    this.device = h('div', { class: 'phone phone--side' }, dismiss, this.previewSlot, screen);
+    this.element = h(
+      'div',
+      {
+        class: 'screen screen--phone',
+        // Sem `aria-modal`: o resto da interface continua valendo,
+        // porque o jogo continua acontecendo atrás do aparelho.
+        // `data-live-ui`: o teclado sabe que o foco aqui dentro é da
+        // interface, não do personagem.
+        attrs: { role: 'dialog', 'aria-label': 'EdenPhone', 'data-live-ui': '' },
+      },
+      this.device,
+    );
+    this.setSide('direita');
+  }
+
+  /** Encosta o aparelho na direita ou na esquerda. */
+  setSide(side: PhoneSide): void {
+    this.side = side;
+    this.element.classList.toggle('screen--phone-left', side === 'esquerda');
+    this.device.classList.toggle('phone--left', side === 'esquerda');
+  }
+
+  get currentSide(): PhoneSide {
+    return this.side;
+  }
+
+  /** O aplicativo aberto agora. */
+  get currentApp(): PhoneApp {
+    return this.app;
   }
 
   /** Define o aplicativo exibido na próxima abertura. */
-  prepare(app: PhoneApp = 'home'): void {
+  /**
+   * Escolhe em que tela o celular vai abrir.
+   *
+   * Sem argumento ele **retoma** onde parou: o aplicativo aberto, a
+   * conversa aberta no EdenTalk, o texto aberto no EdenReads. Guardar
+   * o aparelho no meio de uma leitura e tirá-lo de novo tem de cair na
+   * mesma página — é isso que o faz parecer um aparelho, e não uma
+   * tela de menu. Com argumento (um portal, o painel de eventos) ele
+   * abre direto no aplicativo pedido.
+   */
+  prepare(app?: PhoneApp): void {
+    if (app === undefined) {
+      this.pendingApp = this.app;
+      this.resuming = true;
+      return;
+    }
     this.pendingApp = app;
+    this.resuming = false;
+    // Trocar de aplicativo por fora abandona a subtela do anterior.
+    if (app !== 'talk') this.talkThread = null;
+    if (app !== 'reads') this.readDoc = null;
   }
 
   onOpen(): void {
-    this.entryApp = this.pendingApp;
+    // Retomando, o "voltar" não deve fechar na primeira tecla: o
+    // aplicativo retomado não é mais o de entrada.
+    this.entryApp = this.resuming ? 'home' : this.pendingApp;
+    this.setSide(this.host.phoneSide());
+    this.mountPreview();
     this.show(this.pendingApp);
     this.pendingApp = 'home';
+    this.resuming = false;
   }
 
   onClose(): void {
     this.mapCanvas = null;
+    // Fechar devolve os quadros ao mundo, mas o avatar da prévia fica
+    // montado: reabrir é instantâneo e a silhueta não pisca.
+    this.host.preview?.()?.stop();
+  }
+
+  /**
+   * Põe a janela da prévia no aparelho e liga o desenho.
+   *
+   * Sem WebGL para o segundo contexto a janela simplesmente não
+   * aparece — o celular continua inteiro, só sem o personagem.
+   */
+  private mountPreview(): void {
+    const preview = this.host.preview?.();
+    if (!preview || preview.unavailable) {
+      this.previewSlot.hidden = true;
+      return;
+    }
+    if (preview.canvas.parentElement !== this.previewSlot) {
+      clear(this.previewSlot);
+      this.previewSlot.appendChild(preview.canvas);
+    }
+    this.previewSlot.hidden = false;
+    preview.start();
   }
 
   onBack(): void {
@@ -213,6 +323,9 @@ export class EdenPhoneUI implements Screen {
     else if (app === 'imoveis') buildHomes(this.host, this.content);
     else if (app === 'atividades') buildActivities(this.host, this.content);
     else this.buildFeature(app.slice('recurso:'.length));
+    // Afters é a tela em que o corpo é o assunto: a prévia ocupa mais
+    // espaço para o jogador ver o efeito enquanto arrasta o controle.
+    this.previewSlot.classList.toggle('phone-preview--tall', app === 'afters');
     this.content.scrollTop = 0;
     if (focus) (this.content.querySelector<HTMLElement>('button') ?? this.homeButton).focus({ preventScroll: true });
   }

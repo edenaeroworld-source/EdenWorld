@@ -132,6 +132,16 @@ export class InputManager {
     this.refreshTouchVisibility();
   }
 
+  /**
+   * Permite (ou não) capturar o cursor.
+   *
+   * O EdenPhone lateral mantém a gameplay ligada, então o cursor
+   * precisa continuar livre para clicar nos aplicativos.
+   */
+  setPointerLockAllowed(allowed: boolean): void {
+    this.keyboard.setPointerLockAllowed(allowed);
+  }
+
   /** Permite (ou não) exibir os controles de toque — ex.: ocultos em vistas panorâmicas. */
   setTouchControlsAllowed(allowed: boolean): void {
     this.touchControlsAllowed = allowed;

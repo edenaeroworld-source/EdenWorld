@@ -1915,6 +1915,257 @@ input[type='range']::-moz-range-thumb {
   }
 }
 
+/* ===================================================================== */
+/* EdenPhone lateral                                                     */
+/*                                                                       */
+/* O aparelho encosta numa borda da tela e o mundo continua rodando      */
+/* atrás dele. Por isso a camada inteira é transparente a cliques: só    */
+/* o celular recebe o ponteiro, e arrastar no resto da tela continua     */
+/* girando a câmera.                                                     */
+/* ===================================================================== */
+
+.screen--phone {
+  justify-content: flex-end;
+  align-items: center;
+  padding: calc(10px + var(--safe-t)) calc(10px + var(--safe-r)) calc(10px + var(--safe-b)) calc(10px + var(--safe-l));
+  pointer-events: none;
+  background: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  animation: none;
+}
+
+.screen--phone-left {
+  justify-content: flex-start;
+}
+
+.screen--phone > * {
+  pointer-events: auto;
+}
+
+/* Entrada: desliza da borda em que o aparelho mora. */
+.phone--side {
+  width: min(372px, 34vw);
+  max-width: 92vw;
+  height: min(690px, 92%);
+  animation: phone-slide-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.phone--side.phone--left {
+  animation-name: phone-slide-in-left;
+}
+
+/* Saída: o mesmo caminho, de trás para frente. A tela já saiu da pilha, */
+/* então o jogo voltou a responder antes de a animação terminar.        */
+.screen--phone.is-leaving {
+  pointer-events: none;
+}
+
+.screen--phone.is-leaving .phone--side {
+  animation: phone-slide-out 0.26s ease-in both;
+}
+
+.screen--phone.is-leaving .phone--side.phone--left {
+  animation-name: phone-slide-out-left;
+}
+
+@keyframes phone-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(118%) rotate(5deg);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) rotate(0deg);
+  }
+}
+
+@keyframes phone-slide-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(-118%) rotate(-5deg);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) rotate(0deg);
+  }
+}
+
+@keyframes phone-slide-out {
+  from {
+    opacity: 1;
+    transform: translateX(0) rotate(0deg);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(118%) rotate(5deg);
+  }
+}
+
+@keyframes phone-slide-out-left {
+  from {
+    opacity: 1;
+    transform: translateX(0) rotate(0deg);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-118%) rotate(-5deg);
+  }
+}
+
+/* Vidro de verdade: o aparelho lateral deixa o mundo transparecer nas  */
+/* bordas, como um objeto segurado contra a paisagem.                   */
+.phone--side {
+  background:
+    linear-gradient(160deg, rgba(248, 253, 255, 0.92) 0%, rgba(185, 215, 236, 0.86) 38%, rgba(127, 169, 201, 0.84) 100%);
+  -webkit-backdrop-filter: blur(10px) saturate(1.3);
+  backdrop-filter: blur(10px) saturate(1.3);
+  box-shadow:
+    0 22px 48px rgba(4, 40, 100, 0.45),
+    0 0 0 1px rgba(255, 255, 255, 0.35),
+    inset 0 2px 0 #fff,
+    inset 0 -3px 8px rgba(6, 40, 90, 0.3);
+}
+
+/* O botão de guardar, preso à moldura e sempre no alcance do polegar. */
+.phone__dismiss {
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  border-radius: 50%;
+  background: linear-gradient(180deg, #ffffff 0%, #cfe6f7 48%, #8fc0e0 100%);
+  color: #0a3b66;
+  box-shadow: 0 4px 12px rgba(4, 40, 100, 0.4);
+  cursor: pointer;
+}
+
+.phone--left .phone__dismiss {
+  right: auto;
+  left: -10px;
+}
+
+.phone__dismiss:hover,
+.phone__dismiss:focus-visible {
+  background: linear-gradient(180deg, #ffffff 0%, #e6f5ff 48%, #a8d6f2 100%);
+}
+
+/* --------------------------------------------------------------------- */
+/* Prévia do personagem: projeção holográfica, sem fundo                  */
+/*                                                                        */
+/* Nada de painel sólido atrás do modelo. O que existe é um halo aqua     */
+/* difuso e um piso de luz — o personagem flutua sobre o vidro do         */
+/* aparelho, e o canvas é transparente de verdade (alpha: true, clear     */
+/* alpha 0).                                                              */
+/* --------------------------------------------------------------------- */
+
+.phone-preview {
+  position: relative;
+  height: 168px;
+  flex: none;
+  margin: 2px 2px 8px;
+  border-radius: 26px;
+  overflow: hidden;
+  transition: height 0.22s ease;
+  /* Só o halo. Sem `background-color`: o fundo é o aparelho. */
+  background:
+    radial-gradient(60% 46% at 50% 92%, rgba(130, 255, 225, 0.4), rgba(130, 255, 225, 0) 72%),
+    radial-gradient(74% 62% at 50% 24%, rgba(170, 230, 255, 0.26), rgba(170, 230, 255, 0) 76%);
+}
+
+.phone-preview--tall {
+  height: 248px;
+}
+
+.phone-preview__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* O canvas é o personagem e mais nada: fundo transparente. */
+  background: transparent;
+  pointer-events: none;
+}
+
+/* Linhas de varredura finíssimas, por cima do modelo: é o que dá o ar */
+/* de projeção sem precisar de caixa opaca.                            */
+.phone-preview::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.07) 0 1px, rgba(255, 255, 255, 0) 1px 4px);
+  mix-blend-mode: screen;
+}
+
+/* O HUD se encolhe para o lado livre em vez de disputar o canto com o */
+/* aparelho. Os controles de toque vão junto: andar e pular continuam  */
+/* acessíveis com o celular aberto.                                    */
+.hud__corner--tr,
+.hud__corner--tl,
+.touch-buttons,
+.touch-stick {
+  transition: transform 0.26s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ui--phone .hud__corner--tr,
+.ui--phone .touch-buttons {
+  transform: translateX(calc(-1 * min(372px, 34vw) - 8px));
+}
+
+.ui--phone-left .hud__corner--tl,
+.ui--phone-left .touch-stick {
+  transform: translateX(calc(min(372px, 34vw) + 8px));
+}
+
+.ui--phone-left .hud__corner--tr,
+.ui--phone-left .touch-buttons {
+  transform: none;
+}
+
+/* Retrato e telas pequenas: o aparelho ocupa uma faixa maior, mas    */
+/* nunca a tela inteira — o mundo continua à vista do outro lado.     */
+@media (max-aspect-ratio: 9/10) {
+  .phone--side {
+    width: min(360px, 78vw);
+    height: min(640px, 76%);
+  }
+
+  .screen--phone {
+    align-items: flex-start;
+  }
+
+  .ui--phone .hud__corner--tr,
+  .ui--phone-left .hud__corner--tl,
+  .ui--phone .touch-buttons,
+  .ui--phone-left .touch-stick {
+    transform: none;
+  }
+}
+
+@media (max-height: 560px) {
+  .phone-preview {
+    height: 120px;
+  }
+
+  .phone-preview--tall {
+    height: 170px;
+  }
+}
+
+/* Quem pediu menos animação não recebe o deslize. */
+@media (prefers-reduced-motion: reduce) {
+  .phone--side,
+  .screen--phone.is-leaving .phone--side {
+    animation-duration: 0.01s;
+  }
+}
+
 /* Retrato: o criador de avatar vira uma folha inferior. */
 @media (max-aspect-ratio: 9/10) {
   .screen--side {
