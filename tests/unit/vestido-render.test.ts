@@ -34,14 +34,16 @@ import { describe, expect, it } from 'vitest';
 import { Avatar } from '../../src/player/Avatar';
 import { AvatarAnimator, Ch, type Pose } from '../../src/player/AvatarAnimator';
 import { DEFAULT_APPEARANCE } from '../../src/player/AvatarAppearance';
-import { type Canvas, canvas, drawAvatar, png, stack, strip } from '../helpers/raster';
+import * as THREE from 'three';
+import { benchGeometries } from '../../src/cities/aurora-city/Decorations';
+import { type Canvas, canvas, drawAvatar, drawProp, png, stack, strip } from '../helpers/raster';
 
 const W = 250;
 const H = 400;
 const SCALE = 205;
 
 /** Roda o animador até a pose assentar e devolve o quadro pedido. */
-function settle(state: 'idle' | 'walk' | 'run', speed: number, frames = 90): Pose {
+function settle(state: 'idle' | 'walk' | 'run' | 'sit', speed: number, frames = 90): Pose {
   const animator = new AvatarAnimator();
   let pose = animator.update(1 / 60, { state, speed, stridePhase: 0, verticalSpeed: 0, elapsed: 0 });
   for (let i = 1; i <= frames; i += 1) {
@@ -63,6 +65,35 @@ function hipTwist(): Pose {
   pose[Ch.LegLX] = -0.3;
   pose[Ch.LegRX] = 0.18;
   return pose;
+}
+
+/**
+ * O mesmo banco de Aurora, posto onde o motor põe quem senta nele.
+ *
+ * `PlayerMotor.sit` deixa a origem do personagem em `seat.y - 0.345`
+ * e `seat.z + 0.02`; o banco, portanto, fica 12,5 cm abaixo e 2 cm
+ * atrás dela. Desenhar o banco de verdade é o que torna a folha uma
+ * prova: se a saia o atravessa, o z-buffer mostra.
+ */
+function bench(turn: number): THREE.Object3D {
+  const { frame, wood } = benchGeometries();
+  const group = new THREE.Group();
+  group.add(new THREE.Mesh(frame), new THREE.Mesh(wood));
+  group.position.set(0, -0.125, -0.02);
+  const pivot = new THREE.Group();
+  pivot.add(group);
+  pivot.rotation.y = turn;
+  return pivot;
+}
+
+/** Painel de quem está sentada: o banco entra junto, no mesmo z-buffer. */
+function seated(avatar: Avatar, pose: Pose, turn: number): Canvas {
+  const c = canvas(W, H);
+  avatar.applyPose(pose, 3);
+  const view = { scale: 260, originX: W / 2, originY: 352, turn };
+  drawProp(c, bench(turn), view, [150, 110, 78]);
+  drawAvatar(c, avatar, view);
+  return c;
 }
 
 function panel(avatar: Avatar, pose: Pose, turn: number): Canvas {
@@ -89,7 +120,13 @@ describe.runIf(process.env.EDEN_RENDER)('vestido no quadril (visual)', () => {
     const torcido = hipTwist();
     const linha3 = strip([panel(avatar, correndo, Math.PI / 2), panel(avatar, torcido, 0), panel(avatar, torcido, Math.PI * 0.3)]);
 
-    const sheet = stack([linha1, linha2, linha3]);
+    // Linha 4: sentada no banco — de frente, de perfil e de três
+    // quartos por trás, que é de onde se veria o pano passar pela
+    // tábua ou pelo espaldar.
+    const sentada = settle('sit', 0, 150);
+    const linha4 = strip([seated(avatar, sentada, 0), seated(avatar, sentada, Math.PI / 2), seated(avatar, sentada, Math.PI * 0.75)]);
+
+    const sheet = stack([linha1, linha2, linha3, linha4]);
     const name = process.env.EDEN_VESTIDO_ANTES ? 'vestido-antes.png' : 'vestido-depois.png';
     writeFileSync(resolve(process.cwd(), 'docs', name), png(sheet.width, sheet.height, sheet.rgb));
     expect(sheet.width).toBeGreaterThan(0);

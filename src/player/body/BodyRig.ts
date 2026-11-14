@@ -31,9 +31,36 @@ export const Bone = {
   ShinL: 8,
   ThighR: 9,
   ShinR: 10,
+  /**
+   * Os quatro ossos da saia, pendurados no quadril.
+   *
+   * Uma saia não é pele: ela cai do quadril e se apoia no que
+   * encontrar — a perna que avança, o colo de quem senta, o banco. O
+   * corpo não tem osso que descreva isso, e usar a coxa no lugar
+   * obriga o pano a escolher entre ficar parado (e ser atravessado) e
+   * colar na perna (e virar calça).
+   *
+   * São quatro porque o pano precisa responder por direção: o da
+   * frente deita no colo, os dos lados acompanham cada perna, o de
+   * trás se recolhe sobre o assento. Cada vértice pertence aos dois
+   * vizinhos que o cercam, então a peça continua sendo uma superfície
+   * só.
+   */
+  SkirtL: 11,
+  SkirtF: 12,
+  SkirtR: 13,
+  SkirtB: 14,
 } as const;
 
-export const BONE_COUNT = 11;
+export const BONE_COUNT = 15;
+
+/** Os ossos da saia, na ordem dos azimutes que `FollowSpec` espera. */
+export const SKIRT_QUADRANTS: readonly [number, number, number, number] = [
+  Bone.SkirtL,
+  Bone.SkirtF,
+  Bone.SkirtR,
+  Bone.SkirtB,
+];
 
 /** Nome de cada osso — os mesmos das malhas antigas. */
 export const BONE_NAMES: readonly string[] = Object.freeze([
@@ -48,6 +75,10 @@ export const BONE_NAMES: readonly string[] = Object.freeze([
   'perna-e',
   'coxa-d',
   'perna-d',
+  'saia-e',
+  'saia-f',
+  'saia-d',
+  'saia-t',
 ]);
 
 /* ------------------------- medidas de referência ------------------------- */
@@ -81,6 +112,123 @@ export const HEAD_CENTER = 0.16;
 
 /** Altura da articulação do quadril no corpo de referência. */
 export const HIP_HEIGHT = THIGH + SHIN + ANKLE;
+
+/* ---------------------------- a saia em pose ----------------------------- */
+
+/**
+ * Quanto a saia acompanha a perna ao andar, e quanto ao sentar.
+ *
+ * Andando, o pano fica para trás da perna: segue metade do balanço e
+ * o resto a forma da peça absorve (ver `strideRoom`, em
+ * `BodyBuilder`). Sentada, não há balanço nenhum — a coxa vira uma
+ * prateleira horizontal e o tecido **deita** nela. Por isso o fator
+ * sobe quase a um: o que antes era folga agora é apoio.
+ */
+export const SKIRT_FOLLOW_WALK = 0.5;
+/**
+ * Sentada, cada quadrante faz uma coisa diferente — é para isso que
+ * eles existem. A frente deita sobre o colo; as laterais quase não
+ * giram, porque a saia de quem senta não vai para a frente, ela
+ * desce ao lado, e ainda se recolhe para dentro, espremida entre o
+ * quadril e a tábua. Seguir tudo junto a 0,92 inflava a saia num
+ * balão — número nenhum acusou isso, só a imagem.
+ */
+export const SKIRT_FOLLOW_LAP = 0.6;
+export const SKIRT_SIDE_LAP = 0.25;
+export const SKIRT_TUCK = 0.25;
+
+/** Fração da abertura lateral da perna que a saia acompanha. */
+export const SKIRT_SPREAD = 0.5;
+
+/**
+ * A janela de flexão em que a saia entende que virou colo.
+ *
+ * O sinal é a **média** das duas coxas, não cada uma: caminhando, uma
+ * perna vai e a outra vem, e a média fica em zero por mais larga que
+ * seja a passada. Só quando as duas dobram juntas — sentar, agachar —
+ * é que a média cresce. Assim a regra não precisa saber se existe um
+ * banco embaixo: ela lê a postura, e vale para o jogador, para as
+ * NPCs e para o Panteão sem combinar nada com ninguém.
+ *
+ * A média máxima medida por estado é 0,000 rad caminhando, correndo,
+ * nadando e descendo escada — as pernas se cancelam exatamente —,
+ * 0,220 pulando e subindo escada, e 1,500 sentada. A janela fica
+ * entre os dois grupos, e é larga de propósito: quanto mais estreita,
+ * mais rápido o pano se mexe no quadro em que ela é atravessada, e
+ * foi assim que apareceu um tranco de 13 cm ao levantar.
+ */
+export const LAP_FROM = 0.4;
+export const LAP_TO = 1.45;
+
+/**
+ * Quanto a saia inteira sobe ao sentar, em metros.
+ *
+ * Uma saia de 36 cm não cabe entre o quadril e o assento, onde sobram
+ * 10: o banco empurra o pano para cima, e é por isso que toda saia
+ * sobe um pouco quando a gente senta. Sem isso a barra atravessa a
+ * tábua — eram 55 vértices dentro da madeira, agora são 32.
+ */
+export const SKIRT_LIFT = 0.24;
+
+/**
+ * O recolhimento a mais do pano de trás, em metros e radianos.
+ *
+ * Atrás não é só o assento que empurra: o corpo senta em cima do
+ * pano. Ele se junta entre as costas e a tábua, sobe mais que o
+ * resto e tomba para a frente — para trás encostaria no espaldar,
+ * que fica a 30 cm do centro e inclinado 0,18 rad.
+ */
+export const SKIRT_GATHER = 0.06;
+export const SKIRT_BACK_TILT = 0.35;
+
+function smoothstep(from: number, to: number, value: number): number {
+  const t = Math.min(1, Math.max(0, (value - from) / (to - from)));
+  return t * t * (3 - 2 * t);
+}
+
+function mix(from: number, to: number, t: number): number {
+  return from + (to - from) * t;
+}
+
+/** O quanto a pose é um colo: 0 em pé, 1 sentada. */
+export function lapAmount(legLX: number, legRX: number): number {
+  return smoothstep(LAP_FROM, LAP_TO, -(legLX + legRX) * 0.5);
+}
+
+/**
+ * Põe os quatro ossos da saia de acordo com as pernas.
+ *
+ * Quem decide o quanto o pano anda é esta função, não os pesos da
+ * malha: os pesos dizem apenas que a barra é pano solto e a cintura
+ * é costura. Essa separação é o que permite a mesma saia cair reta
+ * em pé, balançar na corrida e deitar no colo — sem tocar na
+ * geometria, que continua a mesma em todas as três.
+ */
+export function poseSkirt(bones: readonly THREE.Bone[], legLX: number, legRX: number, legLZ: number, legRZ: number): void {
+  const average = (legLX + legRX) * 0.5;
+  const lap = lapAmount(legLX, legRX);
+  const front = mix(SKIRT_FOLLOW_WALK, SKIRT_FOLLOW_LAP, lap);
+  const side = mix(SKIRT_FOLLOW_WALK, SKIRT_SIDE_LAP, lap);
+  const tuck = SKIRT_TUCK * lap;
+  const lift = SKIRT_LIFT * lap;
+
+  // Cada lado segue a sua própria perna, e se recolhe para dentro ao
+  // sentar: a saia de quem senta não vai para a frente, ela desce ao
+  // lado, espremida entre o quadril e a tábua.
+  bones[Bone.SkirtL].rotation.set(side * legLX, 0, SKIRT_SPREAD * legLZ - tuck);
+  bones[Bone.SkirtR].rotation.set(side * legRX, 0, SKIRT_SPREAD * legRZ + tuck);
+  // A frente segue a média: zero na passada, o colo inteiro ao sentar.
+  bones[Bone.SkirtF].rotation.set(front * average, 0, 0);
+  // As costas não giram com perna nenhuma: elas se recolhem. O tombo
+  // é para a frente, trazendo a barra para cima do assento; para trás
+  // ela entraria no espaldar.
+  bones[Bone.SkirtB].rotation.set(-SKIRT_BACK_TILT * lap, 0, 0);
+
+  bones[Bone.SkirtL].position.y = lift;
+  bones[Bone.SkirtR].position.y = lift;
+  bones[Bone.SkirtF].position.y = lift;
+  bones[Bone.SkirtB].position.y = lift + SKIRT_GATHER * lap;
+}
 
 /**
  * Medidas de um corpo concreto, em metros, no espaço de bind.
@@ -250,8 +398,12 @@ export function createSkeleton(m: BodyMetrics): BodySkeleton {
   place(Bone.ThighR, -m.legX, -0.02, 0);
   place(Bone.ShinL, 0, -m.thigh, 0);
   place(Bone.ShinR, 0, -m.thigh, 0);
+  // Os ossos da saia giram em torno da origem do quadril: é de lá que
+  // o pano pende, não da junta da perna.
+  for (const index of SKIRT_QUADRANTS) place(index, 0, 0, 0);
 
   bones[Bone.Hips].add(bones[Bone.Torso], bones[Bone.ThighL], bones[Bone.ThighR]);
+  for (const index of SKIRT_QUADRANTS) bones[Bone.Hips].add(bones[index]);
   bones[Bone.Torso].add(bones[Bone.Head], bones[Bone.ArmL], bones[Bone.ArmR]);
   bones[Bone.ArmL].add(bones[Bone.ForeL]);
   bones[Bone.ArmR].add(bones[Bone.ForeR]);

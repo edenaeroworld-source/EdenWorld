@@ -245,3 +245,74 @@ export function stack(rows: { width: number; height: number; rgb: Uint8Array }[]
   }
   return { width, height, rgb };
 }
+
+/**
+ * Desenha um objeto de cenário na mesma tela e no mesmo z-buffer.
+ *
+ * Serve para pôr o personagem *dentro* do mundo em vez de no vazio:
+ * se a saia atravessa o banco, é aqui que isso aparece, porque quem
+ * decide o que fica na frente é a profundidade, não a ordem.
+ */
+export function drawProp(target: Canvas, object: THREE.Object3D, view: View, tint: [number, number, number]): void {
+  object.updateMatrixWorld(true);
+  const { width: W, height: H, rgb, depth } = target;
+  const normalMatrix = new THREE.Matrix3();
+  const world = new THREE.Vector3();
+  const normal = new THREE.Vector3();
+
+  object.traverse((node) => {
+    const mesh = node as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const positions = mesh.geometry.getAttribute('position');
+    const normals = mesh.geometry.getAttribute('normal');
+    if (!positions) return;
+    normalMatrix.getNormalMatrix(mesh.matrixWorld);
+
+    const vx: number[] = [];
+    const vy: number[] = [];
+    const vz: number[] = [];
+    const shade: number[] = [];
+    for (let i = 0; i < positions.count; i += 1) {
+      world.set(positions.getX(i), positions.getY(i), positions.getZ(i)).applyMatrix4(mesh.matrixWorld);
+      normal.set(normals ? normals.getX(i) : 0, normals ? normals.getY(i) : 1, normals ? normals.getZ(i) : 0);
+      normal.applyMatrix3(normalMatrix).normalize();
+      vx.push(view.originX + world.x * view.scale);
+      vy.push(view.originY - world.y * view.scale);
+      vz.push(world.z);
+      shade.push(0.5 + 0.6 * Math.max(0, normal.dot(LIGHT)));
+    }
+
+    const index = mesh.geometry.getIndex();
+    const count = index ? index.count : positions.count;
+    for (let t = 0; t < count; t += 3) {
+      const a = index ? index.getX(t) : t;
+      const b = index ? index.getX(t + 1) : t + 1;
+      const c = index ? index.getX(t + 2) : t + 2;
+      const minX = Math.max(0, Math.floor(Math.min(vx[a], vx[b], vx[c])));
+      const maxX = Math.min(W - 1, Math.ceil(Math.max(vx[a], vx[b], vx[c])));
+      const minY = Math.max(0, Math.floor(Math.min(vy[a], vy[b], vy[c])));
+      const maxY = Math.min(H - 1, Math.ceil(Math.max(vy[a], vy[b], vy[c])));
+      const area = (vx[b] - vx[a]) * (vy[c] - vy[a]) - (vx[c] - vx[a]) * (vy[b] - vy[a]);
+      if (Math.abs(area) < 1e-9) continue;
+      for (let y = minY; y <= maxY; y += 1) {
+        for (let x = minX; x <= maxX; x += 1) {
+          const px = x + 0.5;
+          const py = y + 0.5;
+          const w0 = ((vx[b] - px) * (vy[c] - py) - (vx[c] - px) * (vy[b] - py)) / area;
+          const w1 = ((vx[c] - px) * (vy[a] - py) - (vx[a] - px) * (vy[c] - py)) / area;
+          const w2 = 1 - w0 - w1;
+          if (w0 < 0 || w1 < 0 || w2 < 0) continue;
+          const z = w0 * vz[a] + w1 * vz[b] + w2 * vz[c];
+          const slot = y * W + x;
+          if (z <= depth[slot]) continue;
+          depth[slot] = z;
+          const lit = w0 * shade[a] + w1 * shade[b] + w2 * shade[c];
+          const i = slot * 3;
+          rgb[i] = Math.min(255, Math.round(tint[0] * lit));
+          rgb[i + 1] = Math.min(255, Math.round(tint[1] * lit));
+          rgb[i + 2] = Math.min(255, Math.round(tint[2] * lit));
+        }
+      }
+    }
+  });
+}
