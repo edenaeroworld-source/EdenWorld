@@ -57,6 +57,30 @@ export interface Station {
   zone?: number;
   /** Origem da junta que a zona usa como referência (espaço de bind). */
   origin?: readonly [number, number, number];
+  /** Acompanhamento das pernas, por vértice (ver `FollowSpec`). */
+  follow?: FollowSpec;
+}
+
+/**
+ * Como um anel acompanha as pernas, vértice a vértice.
+ *
+ * Uma saia não é nem um tubo rígido nem uma calça. Presa só ao
+ * quadril, ela fica parada enquanto a coxa avança e o joelho sai pelo
+ * tecido; presa à coxa, cada metade segue a sua perna e a peça se
+ * abre ao meio como uma tesoura. O meio-termo é dar a cada vértice um
+ * peso que depende de onde ele está: máximo em cima de cada coxa,
+ * **zero nas colunas da frente e de trás**, onde os dois lados se
+ * encontram. Como o peso varia de forma contínua e os dois lados
+ * concordam (zero) onde se tocam, a superfície continua inteira — é
+ * uma única malha costurada, não duas abas.
+ */
+export interface FollowSpec {
+  /** Osso que puxa os vértices do lado `x > 0`. */
+  left: number;
+  /** Osso que puxa os vértices do lado `x < 0`. */
+  right: number;
+  /** Peso máximo, aplicado em cima da coxa. */
+  weight: number;
 }
 
 /** Opções de uma varredura. */
@@ -83,6 +107,9 @@ export interface LoftOptions {
 }
 
 const WHITE = new THREE.Color();
+
+/** Largura angular da costura onde os dois lados do tecido se encontram. */
+const SEAM_BLEND = 0.35;
 
 /**
  * Acumula superfícies e as funde numa malha indexada com normais suaves.
@@ -114,12 +141,12 @@ export class SurfaceBuilder {
     return this.index.length / 3;
   }
 
-  private pushVertex(x: number, y: number, z: number, station: Station): number {
+  private pushVertex(x: number, y: number, z: number, station: Station, override?: SkinBinding): number {
     const id = this.position.length / 3;
     this.position.push(x, y, z);
     WHITE.set(station.color);
     this.color.push(WHITE.r, WHITE.g, WHITE.b);
-    const { bone, bone2, blend } = station.skin;
+    const { bone, bone2, blend } = override ?? station.skin;
     const w = bone2 === undefined ? 0 : Math.min(1, Math.max(0, blend ?? 0));
     this.skinIndex.push(bone, bone2 ?? bone, 0, 0);
     this.skinWeight.push(1 - w, w, 0, 0);
@@ -140,7 +167,25 @@ export class SurfaceBuilder {
       const cos = Math.cos(angle);
       const sin = Math.sin(angle);
       const depth = sin >= 0 ? station.rz : rzBack;
-      ids.push(this.pushVertex(cx + cos * station.rx * scale, station.y, cz + sin * depth * scale, station));
+      let bind: SkinBinding | undefined;
+      if (station.follow !== undefined) {
+        const f = station.follow;
+        // `cos` é a posição lateral normalizada do vértice: 1 em cima
+        // da coxa esquerda, −1 na direita, 0 nas duas colunas onde as
+        // metades se encontram.
+        //
+        // A rampa é **curta** de propósito. Com um decaimento largo
+        // (|cos| ou cos²) o peso desabava justamente no painel da
+        // frente — que é por onde o joelho sai quando a perna avança,
+        // o pior caso da corrida. Aqui o peso só cai nos ~20° em
+        // volta de cada costura: o suficiente para os dois lados
+        // concordarem onde se tocam, sem desarmar o resto da peça.
+        const t = Math.min(1, Math.abs(cos) / SEAM_BLEND);
+        const lateral = t * t * (3 - 2 * t);
+        const w = f.weight * lateral;
+        if (w > 0.001) bind = { bone: station.skin.bone, bone2: cos >= 0 ? f.left : f.right, blend: w };
+      }
+      ids.push(this.pushVertex(cx + cos * station.rx * scale, station.y, cz + sin * depth * scale, station, bind));
     }
     return ids;
   }
@@ -426,5 +471,15 @@ function blendStations(a: Station, b: Station, t: number): Station {
     skin,
     zone: near.zone,
     origin: near.origin,
+    // O acompanhamento é interpolado junto: é o que faz o peso subir
+    // suavemente da cintura (zero) para a barra, sem degrau entre os
+    // anéis de controle.
+    follow: blendFollow(a.follow, b.follow, t),
   };
+}
+
+function blendFollow(a: FollowSpec | undefined, b: FollowSpec | undefined, t: number): FollowSpec | undefined {
+  if (a === undefined && b === undefined) return undefined;
+  const spec = a ?? b!;
+  return { left: spec.left, right: spec.right, weight: lerp(a?.weight ?? 0, b?.weight ?? 0, t) };
 }
