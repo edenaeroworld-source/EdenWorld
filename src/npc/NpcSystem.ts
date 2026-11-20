@@ -249,6 +249,9 @@ export class NpcSystem implements GameSystem {
    */
   private detailDistance: number;
   private shadows: boolean;
+  /** Teto de densidade de malha vindo do perfil de qualidade. */
+  private characterDetail: BodyDetailLevel;
+  private characterPhysical: boolean;
   private assignTimer = 0;
   private chatTimer = 0;
   /** Passos por segundo da simulação dos habitantes (0 = todo quadro). */
@@ -280,6 +283,8 @@ export class NpcSystem implements GameSystem {
     this.simHz = options.quality.npcSimHz;
     this.routinePerFrame = options.quality.npcRoutinePerFrame;
     this.shadows = options.quality.shadows;
+    this.characterDetail = options.quality.characterDetail;
+    this.characterPhysical = options.quality.characterPhysical;
     this.group.name = 'habitantes';
     this.scene.add(this.group);
     this.auraGeometry = new THREE.RingGeometry(0.62, 1.05, 32);
@@ -662,6 +667,7 @@ export class NpcSystem implements GameSystem {
       : new Avatar();
     avatar.fill = 0.1;
     avatar.setShadows(this.shadows);
+    avatar.setMaterialTier(this.characterPhysical);
     avatar.root.visible = false;
     this.group.add(avatar.root);
     slot.avatar = avatar;
@@ -681,10 +687,20 @@ export class NpcSystem implements GameSystem {
    * com a mesma silhueta e a mesma altura de topo, porque os anéis
    * são os mesmos e só o número de lados muda.
    */
+  /** Fração de `detailDistance` dentro da qual se usa 'ultra'. */
+  private static readonly ULTRA_BAND = 0.3;
+
   private detailFor(distance: number): BodyDetailLevel {
     if (distance > this.detailDistance * 2) return 'baixa';
     if (distance > this.detailDistance) return 'media';
-    return 'alta';
+    // 'ultra' é um degrau a mais, e um degrau caro: a malha custa
+    // perto de cem milissegundos para montar. Dar isso à multidão
+    // inteira seria trocar um engasgo por cinquenta. Fica para quem
+    // está a um terço da faixa de detalhe — as poucas pessoas com
+    // quem se está realmente a conversar — e só onde o perfil de
+    // qualidade permite.
+    const ultra = this.characterDetail === 'ultra' && distance < this.detailDistance * NpcSystem.ULTRA_BAND;
+    return ultra ? 'ultra' : 'alta';
   }
 
   /**
@@ -701,7 +717,8 @@ export class NpcSystem implements GameSystem {
     const current = avatar.detail;
     const near = this.detailDistance;
     const keep =
-      (current === 'alta' && distance < near * 1.15) ||
+      (current === 'ultra' && distance < near * NpcSystem.ULTRA_BAND * 1.15) ||
+      (current === 'alta' && distance < near * 1.15 && distance > near * NpcSystem.ULTRA_BAND * 0.85) ||
       (current === 'media' && distance > near * 0.85 && distance < near * 2.3) ||
       (current === 'baixa' && distance > near * 1.7);
     if (keep) return;
@@ -977,8 +994,16 @@ export class NpcSystem implements GameSystem {
     this.simHz = profile.npcSimHz;
     this.routinePerFrame = profile.npcRoutinePerFrame;
     this.shadows = profile.shadows;
-    for (const slot of this.slots) slot.avatar?.setShadows(profile.shadows);
-    for (const deity of this.deities) deity.avatar?.setShadows(profile.shadows);
+    this.characterDetail = profile.characterDetail;
+    this.characterPhysical = profile.characterPhysical;
+    for (const slot of this.slots) {
+      slot.avatar?.setShadows(profile.shadows);
+      slot.avatar?.setMaterialTier(profile.characterPhysical);
+    }
+    for (const deity of this.deities) {
+      deity.avatar?.setShadows(profile.shadows);
+      deity.avatar?.setMaterialTier(profile.characterPhysical);
+    }
     // Excedente de avatares (qualidade reduzida): libera os últimos.
     for (let i = this.maxVisible; i < this.slots.length; i++) {
       const slot = this.slots[i];

@@ -23,7 +23,7 @@ import { Zone as MorphZone } from '../../afters/AftersMorph';
 import { TAU } from '../../utils/math';
 import type { AvatarAppearance } from '../AvatarAppearance';
 import type { BodyProportions } from './BodyProportions';
-import { Bone, type BodyDetail, type BodyMetrics, FACE, HEAD_CENTER, SKIRT_BREAK_Y, SKIRT_FOLLOW_WALK, SKIRT_HEM_QUADRANTS, SKIRT_QUADRANTS, morphOrigins } from './BodyRig';
+import { Bone, type BodyDetail, type BodyMetrics, FACE, Finish, HEAD_CENTER, SKIRT_BREAK_Y, SKIRT_FOLLOW_WALK, SKIRT_HEM_QUADRANTS, SKIRT_QUADRANTS, morphOrigins } from './BodyRig';
 import { type FollowSpec, type SkinBinding, type Station, SurfaceBuilder, subdivideProfile } from './BodySurface';
 
 type Hex = THREE.ColorRepresentation;
@@ -45,6 +45,8 @@ interface Ctl {
   x?: number;
   z?: number;
   color: Hex;
+  /** Acabamento (`Finish`). Omitido, vale o do construtor. */
+  finish?: number;
   bone: number;
   /** Osso secundário, para descrever a rampa de uma articulação. */
   bone2?: number;
@@ -53,6 +55,22 @@ interface Ctl {
   zone?: number;
   origin?: readonly [number, number, number];
   follow?: FollowSpec;
+}
+
+/**
+ * Marca cada estação de uma varredura com o seu acabamento, a partir
+ * da cor que ela já declara.
+ *
+ * O braço vai da manga ao pulso nu e à mão numa varredura só, e a
+ * perna da calça ao tênis. Quem monta já escolheu `skin`, `shoe` ou a
+ * cor da roupa para cada anel; isto só traduz essa escolha, em vez de
+ * repetir o acabamento em trinta estações à mão.
+ */
+function withFinish(control: Ctl[], skin: Hex, shoe?: Hex): Ctl[] {
+  for (const c of control) {
+    c.finish = c.color === skin ? Finish.Skin : shoe !== undefined && c.color === shoe ? Finish.Rubber : Finish.Cloth;
+  }
+  return control;
 }
 
 function toStations(control: readonly Ctl[]): Station[] {
@@ -64,6 +82,7 @@ function toStations(control: readonly Ctl[]): Station[] {
     x: c.x,
     z: c.z,
     color: c.color,
+    finish: c.finish,
     skin: c.bone2 === undefined ? { bone: c.bone } : { bone: c.bone, bone2: c.bone2, blend: c.blend ?? 0.5 },
     zone: c.zone,
     origin: c.origin,
@@ -99,15 +118,19 @@ export function buildBodyGeometry(a: AvatarAppearance, p: BodyProportions, m: Bo
   const bareLegs = outfit === 'vestido';
   const dress = outfit === 'vestido';
 
+  // Cada parte declara o seu acabamento antes de ser varrida.
+  b.surface = Finish.Cloth;
   buildTorso(b, { m, detail, skin, top, bottom, accent, outfit, dress, origins });
   for (const side of [1, -1] as const) {
     buildArm(b, side, { m, detail, skin, top, accent, longSleeves, bareArms, outfit });
     buildLeg(b, side, { m, detail, skin, bottom, shoe, longPants, bareLegs, outfit, origins });
   }
+  b.surface = Finish.Skin;
   buildHead(b, a, p, m, detail);
   // Onde a saia começa no buffer: é assim que um teste separa o tecido
   // do corpo sem adivinhar por cor ou por raio.
   const skirtStart = b.vertexCount;
+  b.surface = Finish.Cloth;
   if (dress) buildSkirt(b, m, detail, top, origins);
 
   // A oclusão é a última coisa antes de fechar a malha: ela precisa do
@@ -189,7 +212,7 @@ function buildTorso(b: SurfaceBuilder, ctx: TorsoCtx): void {
     { y: m.neckY + 0.045, rx: m.neckR * 0.99, rz: m.neckR, color: skin, bone: Bone.Head },
   ];
 
-  b.loft(subdivideProfile(toStations(control), detail.steps), {
+  b.loft(subdivideProfile(toStations(withFinish(control, skin)), detail.steps), {
     segments: detail.segments,
     capBottom: 0.055,
     capRings: 2,
@@ -584,7 +607,7 @@ function buildArm(b: SurfaceBuilder, side: 1 | -1, ctx: ArmCtx): void {
     { y: wristY - 0.135, rx: m.armWrist * 0.6, rz: m.armWrist * 1.05, x, color: skin, bone: foreBone },
   ];
 
-  b.loft(subdivideProfile(toStations(control), detail.steps), {
+  b.loft(subdivideProfile(toStations(withFinish(control, skin)), detail.steps), {
     segments: detail.segments,
     descending: true,
     capTop: 0.018,
@@ -596,7 +619,9 @@ function buildArm(b: SurfaceBuilder, side: 1 | -1, ctx: ArmCtx): void {
   // nada na ponta. De longe não faz diferença; de perto é a primeira
   // coisa que denuncia um modelo cru, porque a mão é a parte do corpo
   // que o olho mais conhece depois do rosto.
+  b.surface = Finish.Skin;
   if (detail.segments >= 26) buildFingers(b, side, x, wristY, m, skin, detail, foreBone);
+  b.surface = Finish.Cloth;
 
   // O polegar, puxado da própria palma.
   b.feature([x - side * m.armWrist * 0.7, wristY - 0.052, m.armWrist * 0.5], [0.028, 0.034, 0.03], 0.016, [-side * 0.8, -0.2, 0.55]);
@@ -672,7 +697,7 @@ function buildLeg(b: SurfaceBuilder, side: 1 | -1, ctx: LegCtx): void {
     { y: ankleY - 0.05, rx: m.legAnkle * 1.18, rz: m.legAnkle * 2.5, z: 0.045, x, color: shoe, bone: shinBone },
   ];
 
-  b.loft(subdivideProfile(toStations(control), detail.steps), {
+  b.loft(subdivideProfile(toStations(withFinish(control, skin, shoe)), detail.steps), {
     segments: detail.segments,
     descending: true,
     capTop: 0.03,
@@ -874,6 +899,8 @@ function buildHead(b: SurfaceBuilder, a: AvatarAppearance, p: BodyProportions, m
   // que vem de `AvatarFace`.
   const eyeRings = detail.segments >= 30 ? 11 : detail.segments >= 14 ? 8 : 5;
   const ball = FACE.eyeBall * R;
+  // O olho é molhado: quase sem rugosidade, e com verniz por cima.
+  b.surface = Finish.Eye;
   for (const side of [-1, 1]) {
     const ex = side * eyeX;
     // Olhar levemente convergente, como o de quem olha para a frente.
@@ -900,6 +927,7 @@ function buildHead(b: SurfaceBuilder, a: AvatarAppearance, p: BodyProportions, m
     );
   }
 
+  b.surface = Finish.Skin;
   // Um toque de cor nas maçãs, que é metade da identidade Frutiger Aero
   // — mas pintado, não colado. Eram duas bolas achatadas, e de perfil
   // apareciam como abas rosa saindo da bochecha.
@@ -920,8 +948,11 @@ function buildHead(b: SurfaceBuilder, a: AvatarAppearance, p: BodyProportions, m
     b.paint([side * R * 0.25, cy - 0.052, R * 0.8], [R * 0.07, R * 0.1, R * 0.16], socket, 0.35);
   }
 
+  b.surface = Finish.Hair;
   buildHair(b, a, m, detail, cy, R);
+  b.surface = Finish.Shine;
   buildAccessory(b, a, m, detail, cy, R);
+  b.surface = Finish.Skin;
 }
 
 /* --------------------------- cabelo e acessório --------------------------- */

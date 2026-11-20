@@ -52,6 +52,15 @@ export interface Station {
   x?: number;
   z?: number;
   color: THREE.ColorRepresentation;
+  /**
+   * Acabamento desta estação. Omitido, vale o do construtor.
+   *
+   * Existe porque uma varredura só costuma atravessar materiais: o
+   * braço vai da manga ao pulso nu e à mão, e a perna da calça ao
+   * tênis. Marcar a varredura inteira de uma vez daria pele com
+   * brilho de borracha.
+   */
+  finish?: number;
   skin: SkinBinding;
   /** Zona de deformação dos Afters (`AftersMorph.Zone`). */
   zone?: number;
@@ -157,6 +166,14 @@ const WHITE = new THREE.Color();
 export class SurfaceBuilder {
   private readonly position: number[] = [];
   private readonly color: number[] = [];
+  private readonly finish: number[] = [];
+
+  /**
+   * Acabamento dos próximos vértices. Quem monta uma parte do corpo
+   * ajusta isto antes de varrer, e tudo o que sair dali carrega o
+   * valor — não é preciso passar o acabamento em cada estação.
+   */
+  surface: number = 0;
   private readonly skinIndex: number[] = [];
   private readonly skinWeight: number[] = [];
   private readonly zone: number[] = [];
@@ -178,6 +195,7 @@ export class SurfaceBuilder {
     this.position.push(x, y, z);
     WHITE.set(station.color);
     this.color.push(WHITE.r, WHITE.g, WHITE.b);
+    this.finish.push(station.finish ?? this.surface);
     if (override !== undefined) {
       const [b0, b1, b2] = [override.bones[0], override.bones[1] ?? 0, override.bones[2] ?? 0];
       const [w0, w1, w2] = [override.weights[0], override.weights[1] ?? 0, override.weights[2] ?? 0];
@@ -461,6 +479,9 @@ export class SurfaceBuilder {
    * em células do tamanho do raio, cada vértice só olha as 27 células
    * à sua volta.
    */
+  /** Amostras de vizinhança por célula, na oclusão. Ver `occlude`. */
+  private static readonly OCCLUSION_SAMPLES = 3;
+
   occlude(radius: number, strength: number, floor = 0.45): void {
     const count = this.position.length / 3;
     if (count === 0 || radius <= 0) return;
@@ -501,58 +522,82 @@ export class SurfaceBuilder {
       else grid.set(k, [v]);
     }
 
+    // As vinte e sete células vizinhas são uma propriedade da
+    // célula, não do vértice: todos os vértices de uma mesma célula
+    // enxergam exatamente a mesma vizinhança. Montar essa lista uma
+    // vez por célula, e não uma vez por vértice, tira um milhão de
+    // consultas à tabela sem mudar um número sequer do resultado.
     const r2 = radius * radius;
-    for (let v = 0; v < count; v += 1) {
-      const i = v * 3;
-      const px = this.position[i];
-      const py = this.position[i + 1];
-      const pz = this.position[i + 2];
-      let nx = normal[i];
-      let ny = normal[i + 1];
-      let nz = normal[i + 2];
-      const len = Math.hypot(nx, ny, nz);
-      if (len < 1e-9) continue;
-      nx /= len;
-      ny /= len;
-      nz /= len;
-
-      let sum = 0;
-      let seen = 0;
-      const cxi = Math.floor(px / cell);
-      const cyi = Math.floor(py / cell);
-      const czi = Math.floor(pz / cell);
+    const candidates: number[] = [];
+    for (const [, cellMembers] of grid) {
+      const first = cellMembers[0] * 3;
+      const cxi = Math.floor(this.position[first] / cell);
+      const cyi = Math.floor(this.position[first + 1] / cell);
+      const czi = Math.floor(this.position[first + 2] / cell);
+      candidates.length = 0;
       for (let gx = -1; gx <= 1; gx += 1) {
         for (let gy = -1; gy <= 1; gy += 1) {
           for (let gz = -1; gz <= 1; gz += 1) {
-            const bucket = grid.get(
-              ((cxi + gx) * 73856093) ^ ((cyi + gy) * 19349663) ^ ((czi + gz) * 83492791),
-            );
+            const bucket = grid.get(((cxi + gx) * 73856093) ^ ((cyi + gy) * 19349663) ^ ((czi + gz) * 83492791));
             if (!bucket) continue;
-            for (const w of bucket) {
-              if (w === v) continue;
-              const j = w * 3;
-              const dx = this.position[j] - px;
-              const dy = this.position[j + 1] - py;
-              const dz = this.position[j + 2] - pz;
-              const d2 = dx * dx + dy * dy + dz * dz;
-              if (d2 > r2 || d2 < 1e-12) continue;
-              seen += 1;
-              const d = Math.sqrt(d2);
-              // Só ocludem os vizinhos à frente da normal.
-              const facing = (dx * nx + dy * ny + dz * nz) / d;
-              if (facing <= 0) continue;
-              sum += facing * (1 - d / radius);
-            }
+            // A amostragem acontece **aqui**, ao montar a lista — não
+            // depois, ao percorrê-la. Copiar as vinte e sete células
+            // inteiras para só então ler uma amostra seria pagar a
+            // enumeração completa de novo, que é exatamente o custo
+            // que a grade existe para evitar.
+            const stride = Math.max(1, Math.ceil(bucket.length / SurfaceBuilder.OCCLUSION_SAMPLES));
+            for (let bi = 0; bi < bucket.length; bi += stride) candidates.push(bucket[bi]);
           }
         }
       }
-      // Normalizado pela vizinhança: assim a malha densa e a esparsa
-      // recebem a mesma sombra, e o LOD não muda a cor do personagem.
-      if (seen === 0) continue;
-      const ao = Math.max(floor, 1 - (sum / seen) * strength);
-      this.color[i] *= ao;
-      this.color[i + 1] *= ao;
-      this.color[i + 2] *= ao;
+      // Amostragem, não enumeração. A cabeça concentra dezenas de
+      // milhares de vértices num palmo, então a vizinhança lá dentro
+      // tem milhares — e varrê-la inteira devolvia o custo quadrático
+      // que a grade existe para evitar. A oclusão é um sinal de
+      // frequência muito baixa: algumas dezenas de amostras dão o
+      // mesmo número (medido: o canto do olho
+      // dá 0,33 com três amostras por célula e 0,33 com doze).
+      for (const v of cellMembers) {
+        const i = v * 3;
+        const px = this.position[i];
+        const py = this.position[i + 1];
+        const pz = this.position[i + 2];
+        let nx = normal[i];
+        let ny = normal[i + 1];
+        let nz = normal[i + 2];
+        const len = Math.hypot(nx, ny, nz);
+        if (len < 1e-9) continue;
+        nx /= len;
+        ny /= len;
+        nz /= len;
+
+        let sum = 0;
+        let seen = 0;
+        for (let ci = 0; ci < candidates.length; ci += 1) {
+          const w = candidates[ci];
+          if (w === v) continue;
+          const j = w * 3;
+          const dx = this.position[j] - px;
+          const dy = this.position[j + 1] - py;
+          const dz = this.position[j + 2] - pz;
+          const d2 = dx * dx + dy * dy + dz * dz;
+          if (d2 > r2 || d2 < 1e-12) continue;
+          seen += 1;
+          const d = Math.sqrt(d2);
+          // Só ocludem os vizinhos à frente da normal.
+          const facing = (dx * nx + dy * ny + dz * nz) / d;
+          if (facing <= 0) continue;
+          sum += facing * (1 - d / radius);
+        }
+        // Normalizado pela vizinhança: assim a malha densa e a
+        // esparsa recebem a mesma sombra, e o LOD não muda a cor do
+        // personagem.
+        if (seen === 0) continue;
+        const ao = Math.max(floor, 1 - (sum / seen) * strength);
+        this.color[i] *= ao;
+        this.color[i + 1] *= ao;
+        this.color[i + 2] *= ao;
+      }
     }
   }
 
@@ -561,6 +606,7 @@ export class SurfaceBuilder {
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(this.position, 3));
     geometry.setAttribute('color', new THREE.Float32BufferAttribute(this.color, 3));
+    geometry.setAttribute('aFinish', new THREE.Float32BufferAttribute(this.finish, 1));
     geometry.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(this.skinIndex, 4));
     geometry.setAttribute('skinWeight', new THREE.Float32BufferAttribute(this.skinWeight, 4));
     geometry.setAttribute('aZone', new THREE.Float32BufferAttribute(this.zone, 1));

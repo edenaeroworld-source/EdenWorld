@@ -139,6 +139,27 @@ export const HEAD_R = 0.176;
  * Com as medidas num lugar só, a pálpebra é uma calota concêntrica ao
  * globo: ela gira em torno do centro do olho, como a de verdade.
  */
+/**
+ * Que tipo de superfície é cada vértice.
+ *
+ * O avatar inteiro — pele, roupa, cabelo, olho, sola de sapato — sai
+ * num desenho só, com um material só. Isso é bom para o desempenho e
+ * ruim para a aparência: a pele recebia o mesmo brilho da borracha do
+ * tênis, e o olho o mesmo da camiseta. Um número por vértice resolve
+ * sem partir a malha: o shader lê daqui a rugosidade, o metal e o
+ * brilho de tecido de cada fragmento.
+ */
+export const Finish = Object.freeze({
+  Skin: 0,
+  Cloth: 1,
+  Hair: 2,
+  Eye: 3,
+  Rubber: 4,
+  Shine: 5,
+} as const);
+
+export type FinishId = (typeof Finish)[keyof typeof Finish];
+
 export const FACE = Object.freeze({
   /**
    * Medidas tiradas do cânone do rosto, em frações da **largura** da
@@ -486,9 +507,16 @@ export interface BodyDetail {
  * existindo e continuam servindo ao LOD de `NpcSystem`.
  */
 export const BODY_DETAIL: Readonly<Record<'ultra' | 'alta' | 'media' | 'baixa', BodyDetail>> = Object.freeze({
+  // 'alta' continua exatamente na densidade que sempre teve. A
+  // tentação, ao remasterizar, é subir todo mundo um degrau — mas
+  // quem rodava em 'alta' é a máquina mediana, e engrossar a malha
+  // dela triplicou o custo de montar um corpo (13 ms para 40 ms
+  // medidos) sem que ninguém tivesse pedido. O ganho de forma — olho
+  // com órbita, lábio com volume, oclusão — não custa vértice e vale
+  // para todos os níveis. O que custa vértice fica em 'ultra'.
   ultra: { segments: 44, steps: 7, headRings: 30, occlusion: 1 },
-  alta: { segments: 30, steps: 5, headRings: 21, occlusion: 0.85 },
-  media: { segments: 18, steps: 3, headRings: 13, occlusion: 0.6 },
+  alta: { segments: 20, steps: 4, headRings: 14, occlusion: 0.85 },
+  media: { segments: 14, steps: 3, headRings: 11, occlusion: 0.55 },
   baixa: { segments: 10, steps: 2, headRings: 8, occlusion: 0 },
 });
 

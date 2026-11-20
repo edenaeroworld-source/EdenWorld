@@ -21,7 +21,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Zone as MorphZone } from '../afters/AftersMorph';
 import { clamp01, createRng, damp, type Rng } from '../utils/math';
 import type { AvatarAppearance } from './AvatarAppearance';
-import { FACE } from './body/BodyRig';
+import { FACE, Finish } from './body/BodyRig';
 import { EXPRESSION_WEIGHTS, type Expression, FACE_MORPHS, type FaceMorph } from './Expressions';
 
 export type { Expression, FaceMorph } from './Expressions';
@@ -131,7 +131,7 @@ const MORPH_POSES: Readonly<Record<FaceMorph, FacePose>> = {
   },
 };
 
-function tinted(geometry: THREE.BufferGeometry, color: THREE.ColorRepresentation): THREE.BufferGeometry {
+function tinted(geometry: THREE.BufferGeometry, color: THREE.ColorRepresentation, finish: number = Finish.Skin): THREE.BufferGeometry {
   const flat = geometry.index ? geometry.toNonIndexed() : geometry;
   if (flat !== geometry) geometry.dispose();
   flat.deleteAttribute('uv');
@@ -144,6 +144,11 @@ function tinted(geometry: THREE.BufferGeometry, color: THREE.ColorRepresentation
     colors[i * 3 + 2] = tone.b;
   }
   flat.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  // O acabamento acompanha a peça: o cílio é cabelo, o lábio é pele
+  // mais úmida, o vão da boca é pele. Sem isto o rosto inteiro sairia
+  // com a rugosidade da pele, inclusive os cílios.
+  const finishes = new Float32Array(count).fill(finish);
+  flat.setAttribute('aFinish', new THREE.BufferAttribute(finishes, 1));
   return flat;
 }
 
@@ -218,7 +223,7 @@ function buildPose(pose: FacePose, colors: { brow: number; skin: number; lip: nu
     geometry.applyMatrix4(new THREE.Matrix4().makeRotationZ(Math.PI / 2 - 0.85 + tilt * side));
     geometry.applyMatrix4(new THREE.Matrix4().makeRotationY(side * -0.3));
     geometry.translate(side * EYE_X, EYE_Y + BROW_LIFT * R + lift * R * 0.4 - arc * 0.46, BROW_Z);
-    parts.push(tinted(geometry, colors.brow));
+    parts.push(tinted(geometry, colors.brow, Finish.Hair));
   }
 
   // --- pálpebras: calotas concêntricas ao globo ---
@@ -256,7 +261,7 @@ function buildPose(pose: FacePose, colors: { brow: number; skin: number; lip: nu
     lashEdge.computeVertexNormals();
     lashEdge.translate(side * EYE_X, EYE_Y, EYE_Z);
     lash.dispose();
-    parts.push(tinted(lashEdge, colors.lash));
+    parts.push(tinted(lashEdge, colors.lash, Finish.Hair));
   }
 
   // --- boca: dois lábios cheios, não um anel ---
