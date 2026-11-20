@@ -24,6 +24,14 @@ export interface CreatureParts {
   head: THREE.Object3D | null;
   tail: THREE.Object3D | null;
   legs: THREE.Object3D[];
+  /**
+   * O joelho (ou jarrete) de cada pata, na mesma ordem de `legs`.
+   *
+   * A articulação precisa ser dirigida de fora: uma perna que dobra
+   * sozinha num ângulo fixo é só um cilindro torto. Quem anda é o
+   * `WildlifeView`, então é ele que dobra — veja `flexKnee`.
+   */
+  knees: THREE.Object3D[];
   wings: THREE.Object3D[];
   /** Altura do bicho em pé, para assentar no chão. */
   standHeight: number;
@@ -175,6 +183,7 @@ export function buildCreature(species: Species, scale = 1, detail: CreatureDetai
     head: null,
     tail: null,
     legs: [],
+    knees: [],
     wings: [],
     standHeight: s,
     materials,
@@ -386,6 +395,17 @@ export function buildCreature(species: Species, scale = 1, detail: CreatureDetai
   }
 
   // Patas.
+  //
+  // Eram uma cápsula só por pata: um cilindro sem joelho, que na
+  // caminhada girava inteiro a partir do quadril como um pêndulo de
+  // relógio. Agora cada pata é uma corrente de dois ossos com um
+  // joelho no meio e um pé no fim.
+  //
+  // A dobra segue a anatomia do quadrúpede, que é a parte que faz a
+  // silhueta ser reconhecível: a pata da frente dobra o cotovelo
+  // para trás, a de trás dobra o jarrete para a frente. Os dois
+  // juntos desenham o zigue-zague que distingue um bicho de quatro
+  // patas de uma mesa.
   const legLength = s * (crawl ? 0.26 : hop ? 0.5 : 0.7);
   const legRadius = s * (crawl ? 0.06 : 0.09);
   const spread = bodyRadius * 0.85;
@@ -395,14 +415,68 @@ export function buildCreature(species: Species, scale = 1, detail: CreatureDetai
     [spread, -bodyLength * 0.3],
     [-spread, -bodyLength * 0.3],
   ];
+  const hipY = s * (crawl ? 0.3 : 0.72) - bodyRadius * 0.4;
   for (const [lx, lz] of positions) {
+    const front = lz > 0;
+    // Quem rasteja tem a pata quase na horizontal, aberta para o
+    // lado; quem salta tem a coxa longa e o pé comprido. O resto
+    // divide o osso quase ao meio, com a coxa um pouco maior.
+    const upperShare = hop && !front ? 0.56 : 0.52;
+    // Ângulos de repouso, medidos do eixo vertical. O sinal é o que
+    // separa cotovelo de jarrete.
+    const thighTilt = crawl ? (front ? -0.5 : 0.5) : front ? -0.2 : 0.26;
+    const kneeBend = crawl ? (front ? 0.95 : -0.95) : front ? 0.42 : -0.5;
+
+    // Com a perna dobrada o pé sobe, e o bicho flutuaria acima do
+    // chão. Mede-se a queda real da corrente e alongam-se os ossos
+    // até ela valer `legLength` de novo.
+    const drop = Math.cos(thighTilt) * upperShare + Math.cos(thighTilt + kneeBend) * (1 - upperShare);
+    const bone = legLength / Math.max(0.35, drop);
+    const upper = bone * upperShare;
+    const lower = bone * (1 - upperShare);
+
     const pivot = new THREE.Group();
-    pivot.position.set(lx, s * (crawl ? 0.3 : 0.72) - bodyRadius * 0.4, lz);
-    const leg = new THREE.Mesh(track(new THREE.CapsuleGeometry(legRadius, legLength, 3, detail.small)), trim);
-    leg.position.y = -legLength / 2;
-    pivot.add(leg);
+    pivot.position.set(lx, hipY, lz);
+    pivot.rotation.x = thighTilt;
+
+    const thigh = new THREE.Mesh(
+      track(new THREE.CapsuleGeometry(legRadius * 1.15, upper, 3, detail.small)),
+      trim,
+    );
+    thigh.position.y = -upper / 2;
+    pivot.add(thigh);
+
+    const knee = new THREE.Group();
+    knee.position.y = -upper;
+    knee.rotation.x = kneeBend;
+    pivot.add(knee);
+
+    // A canela é mais fina que a coxa — é o afunilamento que faz a
+    // pata parecer uma pata.
+    const shank = new THREE.Mesh(
+      track(new THREE.CapsuleGeometry(legRadius * 0.82, lower, 3, detail.small)),
+      trim,
+    );
+    shank.position.y = -lower / 2;
+    knee.add(shank);
+
+    // Pé: sem ele a perna acaba numa ponta arredondada no chão.
+    // Aponta para a frente e fica na horizontal, compensando as duas
+    // rotações acima para assentar chapado no solo.
+    const foot = new THREE.Mesh(
+      track(new THREE.CapsuleGeometry(legRadius * 0.78, legRadius * (crawl ? 2.4 : 1.7), 2, detail.small)),
+      trim,
+    );
+    foot.rotation.x = Math.PI / 2 - thighTilt - kneeBend;
+    foot.position.set(0, -lower + legRadius * 0.3, legRadius * 0.5);
+    knee.add(foot);
+
     root.add(pivot);
     parts.legs.push(pivot);
+    parts.knees.push(knee);
+    // O repouso fica guardado para a animação poder voltar a ele.
+    pivot.userData.rest = thighTilt;
+    knee.userData.rest = kneeBend;
   }
 
   // Rabo.

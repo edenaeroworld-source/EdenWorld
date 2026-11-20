@@ -74,6 +74,10 @@ const ui = {
 };
 
 let angle = 0;
+/** Multiplicador de distância da câmera, para aproximar um detalhe. */
+let zoom = 1;
+/** Deslocamento do alvo, para enquadrar algo fora do centro. */
+const alvoOff = new THREE.Vector3();
 
 function limpar(): void {
   for (const a of avatars) {
@@ -138,8 +142,9 @@ function enquadrar(): void {
   // O alvo do rosto fica na linha do nariz, não na dos olhos: era por
   // isso que a boca e o queixo saíam fora do quadro.
   const alvo = new THREE.Vector3(0, rosto ? 1.56 : 0.95, 0);
-  const dist = rosto ? 0.95 : largo ? 6.2 : 3.6;
-  camera.position.set(Math.sin(angle) * dist, alvo.y + (rosto ? 0.04 : 0.35), Math.cos(angle) * dist);
+  const dist = (rosto ? 0.95 : largo ? 6.2 : 3.6) * zoom;
+  alvo.add(alvoOff);
+  camera.position.set(alvo.x + Math.sin(angle) * dist, alvo.y + (rosto ? 0.04 : 0.35) * zoom, alvo.z + Math.cos(angle) * dist);
   camera.lookAt(alvo);
 }
 
@@ -239,6 +244,14 @@ const dbg = gl.getExtension('WEBGL_debug_renderer_info');
   olhar(a: number) {
     ui.girar = false;
     angle = a;
+  },
+  /** Aproxima (f < 1) ou afasta (f > 1) a câmera. */
+  perto(f: number) {
+    zoom = f;
+  },
+  /** Move o alvo da câmera, para enquadrar algo fora do centro. */
+  mirar(x: number, y: number, z: number) {
+    alvoOff.set(x, y, z);
   },
 };
 

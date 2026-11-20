@@ -65,6 +65,29 @@ const STATE_TIME: Record<WildAnimal['state'], [number, number]> = {
   fugindo: [1.5, 3],
 };
 
+/**
+ * Gira o quadril a partir da pose de repouso, em vez de substituí-la.
+ *
+ * As patas agora nascem com uma inclinação anatômica — cotovelo para
+ * trás na frente, jarrete para a frente atrás. Escrever `rotation.x`
+ * direto apagaria isso e devolveria o pêndulo reto de antes.
+ */
+function swingLeg(leg: THREE.Object3D, angle: number): void {
+  const rest = (leg.userData.rest as number | undefined) ?? 0;
+  leg.rotation.x = rest + angle;
+}
+
+/**
+ * Dobra o joelho somando ao repouso, sempre no sentido em que a
+ * articulação dobra — um joelho que dobrasse para os dois lados
+ * seria pior que um joelho nenhum. `amount` negativo é ignorado.
+ */
+function flexKnee(knee: THREE.Object3D | undefined, amount: number): void {
+  if (!knee) return;
+  const rest = (knee.userData.rest as number | undefined) ?? 0;
+  knee.rotation.x = rest + Math.sign(rest || 1) * Math.max(0, amount);
+}
+
 export class WildlifeView {
   readonly group = new THREE.Group();
   private readonly options: WildlifeViewOptions;
@@ -286,7 +309,7 @@ export class WildlifeView {
     if (species.movement === 'nada') {
       const sweep = Math.sin(t * (moving ? 6 : 2.2)) * 0.5;
       if (parts.tail) parts.tail.rotation.y = sweep;
-      for (let i = 0; i < parts.legs.length; i += 1) parts.legs[i].rotation.x = sweep * 0.4;
+      for (let i = 0; i < parts.legs.length; i += 1) swingLeg(parts.legs[i], sweep * 0.4);
       parts.root.position.y = baseY + Math.sin(t * 1.4) * 0.06;
       parts.root.rotation.z = Math.sin(t * 2.4) * 0.08;
       return;
@@ -307,7 +330,11 @@ export class WildlifeView {
     if (data.state === 'descansando') {
       // Deitado: corpo baixo, patas recolhidas, respiração.
       parts.root.position.y = baseY - species.size * 0.3;
-      for (const leg of parts.legs) leg.rotation.x = 0.9;
+      // Deitado, a pata recolhe: quadril à frente e joelho bem fechado.
+      for (let i = 0; i < parts.legs.length; i += 1) {
+        swingLeg(parts.legs[i], 0.9);
+        flexKnee(parts.knees[i], 0.8);
+      }
       if (parts.head) parts.head.rotation.x = 0.35 + Math.sin(t * 1.1) * 0.03;
       if (parts.tail) parts.tail.rotation.y = Math.sin(t * 0.8) * 0.15;
       return;
@@ -318,7 +345,10 @@ export class WildlifeView {
       const hop = Math.abs(Math.sin(t * 5.5));
       parts.root.position.y = baseY + hop * species.size * 1.5;
       for (let i = 0; i < parts.legs.length; i += 1) {
-        parts.legs[i].rotation.x = -hop * 1.1 + (i < 2 ? 0.2 : -0.2);
+        swingLeg(parts.legs[i], -hop * 1.1 + (i < 2 ? 0.2 : -0.2));
+        // No alto do pulo as pernas recolhem; na descida, estendem
+        // para receber o chão.
+        flexKnee(parts.knees[i], hop * 0.85);
       }
       parts.root.rotation.x = -hop * 0.22;
       if (parts.tail) parts.tail.rotation.x = -0.4 - hop * 0.3;
@@ -329,7 +359,12 @@ export class WildlifeView {
     for (let i = 0; i < parts.legs.length; i += 1) {
       // Diagonais opostas em fase: é o que faz parecer andar.
       const sign = i === 0 || i === 3 ? 1 : -1;
-      parts.legs[i].rotation.x = stride * sign * 0.55;
+      const swing = stride * sign * 0.55;
+      swingLeg(parts.legs[i], swing);
+      // O joelho dobra na recolhida e estende no apoio: é isso que
+      // tira o pé do chão em vez de arrastá-lo. Sem essa metade da
+      // fase a pata articulada andaria igual ao cilindro antigo.
+      flexKnee(parts.knees[i], Math.max(0, swing) * 1.1);
     }
     parts.root.position.y = baseY + (moving ? Math.abs(stride) * species.size * 0.08 : Math.sin(t * 1.4) * species.size * 0.02);
     parts.root.rotation.x = 0;
