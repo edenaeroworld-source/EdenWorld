@@ -23,7 +23,7 @@ import { Zone as MorphZone } from '../../afters/AftersMorph';
 import { TAU } from '../../utils/math';
 import type { AvatarAppearance } from '../AvatarAppearance';
 import type { BodyProportions } from './BodyProportions';
-import { Bone, type BodyDetail, type BodyMetrics, HEAD_CENTER, SKIRT_BREAK_Y, SKIRT_FOLLOW_WALK, SKIRT_HEM_QUADRANTS, SKIRT_QUADRANTS, morphOrigins } from './BodyRig';
+import { Bone, type BodyDetail, type BodyMetrics, FACE, Finish, HEAD_CENTER, SKIRT_BREAK_Y, SKIRT_FOLLOW_WALK, SKIRT_HEM_QUADRANTS, SKIRT_QUADRANTS, morphOrigins } from './BodyRig';
 import { type FollowSpec, type SkinBinding, type Station, SurfaceBuilder, subdivideProfile } from './BodySurface';
 
 type Hex = THREE.ColorRepresentation;
@@ -45,6 +45,8 @@ interface Ctl {
   x?: number;
   z?: number;
   color: Hex;
+  /** Acabamento (`Finish`). Omitido, vale o do construtor. */
+  finish?: number;
   bone: number;
   /** Osso secundário, para descrever a rampa de uma articulação. */
   bone2?: number;
@@ -53,6 +55,22 @@ interface Ctl {
   zone?: number;
   origin?: readonly [number, number, number];
   follow?: FollowSpec;
+}
+
+/**
+ * Marca cada estação de uma varredura com o seu acabamento, a partir
+ * da cor que ela já declara.
+ *
+ * O braço vai da manga ao pulso nu e à mão numa varredura só, e a
+ * perna da calça ao tênis. Quem monta já escolheu `skin`, `shoe` ou a
+ * cor da roupa para cada anel; isto só traduz essa escolha, em vez de
+ * repetir o acabamento em trinta estações à mão.
+ */
+function withFinish(control: Ctl[], skin: Hex, shoe?: Hex): Ctl[] {
+  for (const c of control) {
+    c.finish = c.color === skin ? Finish.Skin : shoe !== undefined && c.color === shoe ? Finish.Rubber : Finish.Cloth;
+  }
+  return control;
 }
 
 function toStations(control: readonly Ctl[]): Station[] {
@@ -64,6 +82,7 @@ function toStations(control: readonly Ctl[]): Station[] {
     x: c.x,
     z: c.z,
     color: c.color,
+    finish: c.finish,
     skin: c.bone2 === undefined ? { bone: c.bone } : { bone: c.bone, bone2: c.bone2, blend: c.blend ?? 0.5 },
     zone: c.zone,
     origin: c.origin,
@@ -99,16 +118,26 @@ export function buildBodyGeometry(a: AvatarAppearance, p: BodyProportions, m: Bo
   const bareLegs = outfit === 'vestido';
   const dress = outfit === 'vestido';
 
+  // Cada parte declara o seu acabamento antes de ser varrida.
+  b.surface = Finish.Cloth;
   buildTorso(b, { m, detail, skin, top, bottom, accent, outfit, dress, origins });
   for (const side of [1, -1] as const) {
     buildArm(b, side, { m, detail, skin, top, accent, longSleeves, bareArms, outfit });
     buildLeg(b, side, { m, detail, skin, bottom, shoe, longPants, bareLegs, outfit, origins });
   }
+  b.surface = Finish.Skin;
   buildHead(b, a, p, m, detail);
   // Onde a saia começa no buffer: é assim que um teste separa o tecido
   // do corpo sem adivinhar por cor ou por raio.
   const skirtStart = b.vertexCount;
+  b.surface = Finish.Cloth;
   if (dress) buildSkirt(b, m, detail, top, origins);
+
+  // A oclusão é a última coisa antes de fechar a malha: ela precisa do
+  // corpo inteiro montado para saber o que esconde o quê. É daqui que
+  // sai a sombra na órbita, sob o queixo, na dobra do pescoço, entre
+  // as pernas e por baixo da saia.
+  if (detail.occlusion > 0) b.occlude(m.headR * 0.55, 2.4 * detail.occlusion, 0.38);
 
   const geometry = b.build();
   geometry.userData.parts = dress ? { saia: [skirtStart, b.vertexCount] } : {};
@@ -183,7 +212,7 @@ function buildTorso(b: SurfaceBuilder, ctx: TorsoCtx): void {
     { y: m.neckY + 0.045, rx: m.neckR * 0.99, rz: m.neckR, color: skin, bone: Bone.Head },
   ];
 
-  b.loft(subdivideProfile(toStations(control), detail.steps), {
+  b.loft(subdivideProfile(toStations(withFinish(control, skin)), detail.steps), {
     segments: detail.segments,
     capBottom: 0.055,
     capRings: 2,
@@ -578,13 +607,21 @@ function buildArm(b: SurfaceBuilder, side: 1 | -1, ctx: ArmCtx): void {
     { y: wristY - 0.135, rx: m.armWrist * 0.6, rz: m.armWrist * 1.05, x, color: skin, bone: foreBone },
   ];
 
-  b.loft(subdivideProfile(toStations(control), detail.steps), {
+  b.loft(subdivideProfile(toStations(withFinish(control, skin)), detail.steps), {
     segments: detail.segments,
     descending: true,
     capTop: 0.018,
     capBottom: 0.022,
     capRings: 2,
   });
+
+  // Dedos. A mão era uma pá — larga de frente, fina de lado, e sem
+  // nada na ponta. De longe não faz diferença; de perto é a primeira
+  // coisa que denuncia um modelo cru, porque a mão é a parte do corpo
+  // que o olho mais conhece depois do rosto.
+  b.surface = Finish.Skin;
+  if (detail.segments >= 26) buildFingers(b, side, x, wristY, m, skin, detail, foreBone);
+  b.surface = Finish.Cloth;
 
   // O polegar, puxado da própria palma.
   b.feature([x - side * m.armWrist * 0.7, wristY - 0.052, m.armWrist * 0.5], [0.028, 0.034, 0.03], 0.016, [-side * 0.8, -0.2, 0.55]);
@@ -660,7 +697,7 @@ function buildLeg(b: SurfaceBuilder, side: 1 | -1, ctx: LegCtx): void {
     { y: ankleY - 0.05, rx: m.legAnkle * 1.18, rz: m.legAnkle * 2.5, z: 0.045, x, color: shoe, bone: shinBone },
   ];
 
-  b.loft(subdivideProfile(toStations(control), detail.steps), {
+  b.loft(subdivideProfile(toStations(withFinish(control, skin, shoe)), detail.steps), {
     segments: detail.segments,
     descending: true,
     capTop: 0.03,
@@ -681,6 +718,78 @@ function buildLeg(b: SurfaceBuilder, side: 1 | -1, ctx: LegCtx): void {
 }
 
 /* -------------------------------- cabeça --------------------------------- */
+
+/**
+ * Os quatro dedos e o polegar.
+ *
+ * Cada dedo é uma varredura curta com três falanges sugeridas pelo
+ * perfil — grossa na base, um estreitamento no meio, arredondada na
+ * ponta. Eles saem da borda da palma, que é larga em z e fina em x,
+ * então se espalham em z e apontam para baixo.
+ *
+ * Só nos níveis densos: `baixa` e `media` continuam com a pá de
+ * antes, que a essa distância é indistinguível e custa um quinto.
+ */
+function buildFingers(
+  b: SurfaceBuilder,
+  side: number,
+  x: number,
+  wristY: number,
+  m: BodyMetrics,
+  skin: THREE.ColorRepresentation,
+  detail: BodyDetail,
+  foreBone: number,
+): void {
+  const w = m.armWrist;
+  const palmY = wristY - 0.1;
+  const segments = Math.max(6, Math.round(detail.segments * 0.34));
+
+  // Comprimento relativo: indicador, médio, anelar, mínimo.
+  const plan: readonly { z: number; length: number; thick: number }[] = [
+    { z: 0.82, length: 0.9, thick: 0.95 },
+    { z: 0.3, length: 1, thick: 1 },
+    { z: -0.26, length: 0.94, thick: 0.95 },
+    { z: -0.76, length: 0.78, thick: 0.84 },
+  ];
+
+  for (const finger of plan) {
+    const fz = finger.z * w * 1.12;
+    const r = w * 0.3 * finger.thick;
+    const len = 0.062 * finger.length;
+    // Leve curvatura para a frente, como uma mão relaxada.
+    const curl = 0.1;
+    const control: Ctl[] = [
+      { y: palmY, rx: r * 1.1, rz: r * 1.12, x, z: fz, color: skin, bone: foreBone },
+      { y: palmY - len * 0.36, rx: r, rz: r * 1.02, x, z: fz + len * curl * 0.4, color: skin, bone: foreBone },
+      { y: palmY - len * 0.68, rx: r * 0.92, rz: r * 0.94, x, z: fz + len * curl, color: skin, bone: foreBone },
+      { y: palmY - len, rx: r * 0.72, rz: r * 0.74, x, z: fz + len * curl * 1.5, color: skin, bone: foreBone },
+    ];
+    b.loft(subdivideProfile(toStations(control), 2), {
+      segments,
+      descending: true,
+      capTop: r * 0.3,
+      capBottom: r * 0.7,
+      capRings: 2,
+    });
+  }
+
+  // Polegar: sai do lado de dentro da palma, mais alto e mais grosso,
+  // e aponta para a frente em vez de para baixo.
+  const tr = w * 0.36;
+  const thumb: Ctl[] = [
+    { y: wristY - 0.028, rx: tr * 1.05, rz: tr * 1.05, x: x - side * w * 0.2, z: w * 0.55, color: skin, bone: foreBone },
+    { y: wristY - 0.052, rx: tr * 0.98, rz: tr, x: x - side * w * 0.34, z: w * 0.95, color: skin, bone: foreBone },
+    { y: wristY - 0.076, rx: tr * 0.84, rz: tr * 0.86, x: x - side * w * 0.42, z: w * 1.3, color: skin, bone: foreBone },
+    { y: wristY - 0.094, rx: tr * 0.62, rz: tr * 0.64, x: x - side * w * 0.46, z: w * 1.5, color: skin, bone: foreBone },
+  ];
+  b.loft(subdivideProfile(toStations(thumb), 2), {
+    segments,
+    descending: true,
+    capTop: tr * 0.3,
+    capBottom: tr * 0.7,
+    capRings: 2,
+  });
+}
 
 /**
  * Crânio, maxilar, nariz, orelhas e olhos.
@@ -724,18 +833,119 @@ function buildHead(b: SurfaceBuilder, a: AvatarAppearance, p: BodyProportions, m
     capRings: 2,
   });
 
-  const eyeY = cy + 0.022;
-  const eyeX = R * 0.37;
-  const eyeZ = R * 0.78;
+  const eyeY = cy + FACE.eyeY * R;
+  const eyeX = FACE.eyeX * R;
+  const eyeZ = FACE.eyeZ * R;
 
   // Órbitas: a superfície afunda onde o olho vai sentar. Sem isto o
   // olho fica pousado na bochecha, que é a cara de boneco de feira.
+  // Fundas o bastante para o globo entrar — antes a cova era rasa e o
+  // olho ficava proeminente, de boneco assustado.
   for (const side of [-1, 1]) {
-    b.feature([side * eyeX, eyeY, eyeZ], [R * 0.3, R * 0.2, R * 0.3], -R * 0.1, [0, 0, 1]);
+    b.feature([side * eyeX, eyeY, eyeZ + R * 0.1], [R * 0.27, R * 0.2, R * 0.3], -R * 0.28, [0, 0, 1]);
+    // Canto interno, mais fundo: é o que dá a forma de amêndoa.
+    b.feature([side * (eyeX - R * 0.17), eyeY - R * 0.02, eyeZ + R * 0.12], [R * 0.1, R * 0.1, R * 0.2], -R * 0.07, [0, 0, 1]);
   }
-  // Nariz: puxado da testa para baixo, estreito, com a ponta curta.
-  b.feature([0, cy + 0.012, R * 0.9], [R * 0.17, R * 0.3, R * 0.4], R * 0.17, [0, 0, 1]);
-  b.feature([0, cy - 0.022, R * 0.92], [R * 0.2, R * 0.12, R * 0.35], R * 0.07, [0, 0, 1]);
+  // Nariz: esculpido na própria pele do crânio.
+  //
+  // Duas tentativas ficaram pelo caminho e vale dizer por quê. Foram
+  // quatro gaussianas somadas na casca: uma gaussiana é um morro
+  // liso, serve para levantar massa, não para desenhar dorso, ponta e
+  // asa. Depois virou uma varredura própria, como a orelha — tinha a
+  // forma certa, mas era **outra superfície atravessando esta**, e na
+  // base, onde o crânio está em 0,937R e o anel da base chegava a
+  // 0,955R, ela furava a pele e deixava uma borda visível sobre o
+  // lábio. Afundar o anel esconderia a borda sem resolver nada: as
+  // duas superfícies continuariam duas.
+  //
+  // Agora o nariz é a mesma malha do rosto. A pele é refinada só
+  // nesta bola e levantada até um campo de altura com união suave —
+  // onde o nariz avança mais que o crânio, a pele sobe; onde ele é
+  // mais fundo (a raiz, entre os olhos), nada acontece e o traço
+  // acaba sozinho. Não existe junção porque não existem duas peças.
+  // Perfil do nariz, tudo em múltiplos do raio da cabeça: altura a
+  // partir do centro, meia-largura, meia-profundidade e o centro em
+  // z. A frente do traço naquela altura é `z0 + rz`. Em metros
+  // absolutos, como estava, o nariz não acompanharia `headSize` — e o
+  // resto do rosto (olho em +0,12R, boca em −0,44R) já fala em R.
+  // Referência: a frente do crânio aqui está medida em 0,97R, então
+  // uma ponta em 1,19R avança um quarto de raio além do plano do
+  // rosto, que é o que um nariz faz.
+  const noseProfile: readonly (readonly [number, number, number, number])[] = [
+    // Abaixo da base o campo mergulha para dentro do crânio: é isso
+    // que faz o nariz terminar sem degrau em cima do lábio (−0,44R).
+    [-0.41, 0.15, 0.02, 0.78],
+    [-0.375, 0.19, 0.055, 0.82],
+    [-0.33, 0.215, 0.11, 0.86],
+    // Asas: o ponto mais largo.
+    [-0.278, 0.235, 0.17, 0.93],
+    // Ponta.
+    [-0.193, 0.175, 0.22, 0.97],
+    // Supraponta: o degrau que separa a ponta do dorso, e que é o que
+    // faz um nariz parecer um nariz em vez de um cone.
+    [-0.091, 0.12, 0.17, 0.945],
+    [0.045, 0.098, 0.135, 0.875],
+    // Raiz, logo acima da linha dos olhos. A frente aqui (0,88R) já
+    // está atrás do crânio (0,97R), então a união suave não levanta
+    // nada e o dorso se dissolve na testa por conta própria.
+    [0.17, 0.085, 0.1, 0.78],
+  ];
+  const noseLow = cy + noseProfile[0][0] * R;
+  const noseHigh = cy + noseProfile[noseProfile.length - 1][0] * R;
+  const noseHeight = (x: number, y: number): number => {
+    if (y < noseLow || y > noseHigh) return -Infinity;
+    let k = 0;
+    while (k < noseProfile.length - 2 && y > cy + noseProfile[k + 1][0] * R) k += 1;
+    const [y0, rx0, rz0, z0] = noseProfile[k];
+    const [y1, rx1, rz1, z1] = noseProfile[k + 1];
+    const raw = (y - (cy + y0 * R)) / Math.max(1e-6, (y1 - y0) * R);
+    // Suavizado entre estações: interpolar reto deixaria uma faixa
+    // facetada por estação, que a luz especular denuncia na hora.
+    const t = raw * raw * (3 - 2 * raw);
+    const rx = (rx0 + (rx1 - rx0) * t) * R;
+    const u = Math.abs(x) / rx;
+    if (u >= 1) return -Infinity;
+    const rz = (rz0 + (rz1 - rz0) * t) * R;
+    const z = (z0 + (z1 - z0) * t) * R;
+    // Superelipse em vez de círculo: deixa o dorso com topo mais chato
+    // e as laterais mais verticais, que é o corte de um nariz.
+    return z + rz * Math.pow(1 - Math.pow(u, 2.8), 1 / 2.8);
+  };
+  const noseCenter: readonly [number, number, number] = [0, cy - 0.02, R * 0.88];
+  // O alvo de aresta acompanha o nível, e não é fixo.
+  //
+  // A primeira versão usava R·0,05 nos quatro níveis, com o argumento
+  // de que assim o rosto chegava refinado ao mesmo ponto partindo de
+  // malhas diferentes. Como meta de aparência fazia sentido; como
+  // orçamento, não: em `baixa` o nariz passava a concentrar 21% dos
+  // vértices do corpo inteiro e estourava o teto de malha do nível —
+  // um quinto do personagem gasto num traço que, a 55 m de distância
+  // de detalhe, ninguém vê. O teste `a malha baixa é mais leve que o
+  // avatar antigo inteiro` pegou exatamente isso.
+  //
+  // Agora o alvo é uma fração do próprio anel do nível: o nariz fica
+  // sempre umas três vezes mais fino que o corpo ao redor, e nunca
+  // mais fino que R·0,05, que é o que `ultra` precisa para ter asa e
+  // dorso. Quem roda em aparelho fraco recebe um nariz grosseiro, que
+  // é o certo — é o mesmo lugar onde a mão não tem dedos.
+  const noseEdge = Math.max(R * 0.05, ((2 * Math.PI * R) / detail.segments) * 0.38);
+  b.refine(noseCenter, R * 0.5, noseEdge, 4);
+  // A largura da união decide se o nariz lê como nariz. Em R·0,05 ela
+  // era do tamanho da própria ponta (R·0,19) e dissolvia o traço num
+  // morro; R·0,018 mantém a continuidade na primeira derivada e ainda
+  // deixa a asa e o dorso com contorno.
+  b.sculptFront(noseCenter, R * 0.5, noseHeight, R * 0.018);
+  for (const side of [-1, 1]) {
+    // Narina: um sulco por baixo da asa, não um furo. Furo de verdade
+    // exigiria abrir a malha e, à distância de câmera do jogo, não se
+    // ganharia nada.
+    b.feature([side * R * 0.12, cy - R * 0.345, R * 1.0], [R * 0.05, R * 0.028, R * 0.09], -R * 0.022, [0, -1, 0.3]);
+    // Sulco que separa a asa da bochecha.
+    b.feature([side * R * 0.26, cy - R * 0.28, R * 0.82], [R * 0.05, R * 0.1, R * 0.18], -R * 0.042, [0, 0, 1]);
+    // Filtro: a calha entre a base do nariz e o lábio. Anatomia, não
+    // mais o remendo que tapava a borda da varredura antiga.
+    b.feature([side * R * 0.05, cy - R * 0.41, R * 0.92], [R * 0.07, R * 0.035, R * 0.14], R * 0.018, [0, 0, 1]);
+  }
   // Arco da sobrancelha.
   b.feature([0, cy + 0.058, R * 0.82], [R * 0.75, R * 0.1, R * 0.4], R * 0.045, [0, 0, 1]);
   // Queixo e maçãs do rosto.
@@ -743,8 +953,23 @@ function buildHead(b: SurfaceBuilder, a: AvatarAppearance, p: BodyProportions, m
   for (const side of [-1, 1]) {
     b.feature([side * R * 0.62, cy - 0.045, R * 0.6], [R * 0.3, R * 0.22, R * 0.35], R * 0.05);
   }
-  // Lábio superior, um degrau raso.
-  b.feature([0, cy - 0.072, R * 0.82], [R * 0.3, R * 0.07, R * 0.3], R * 0.035, [0, 0, 1]);
+
+  // Boca: o volume dos lábios vem da própria pele, e não de uma peça
+  // colada. O arco vermelho que havia antes era um anel pousado na
+  // bochecha; o que faz um lábio é o degrau à volta dele.
+  const my = cy + FACE.mouthY * R;
+  const mz = FACE.mouthZ * R;
+  // Filtro: o sulco entre o nariz e o lábio de cima.
+  b.feature([0, my + R * 0.16, mz + R * 0.1], [R * 0.06, R * 0.08, R * 0.2], -R * 0.03, [0, 0, 1]);
+  // Lábio superior e inferior, com a linha da boca afundada entre eles.
+  b.feature([0, my + R * 0.055, mz + R * 0.06], [R * 0.28, R * 0.055, R * 0.22], R * 0.055, [0, 0, 1]);
+  b.feature([0, my - R * 0.075, mz + R * 0.06], [R * 0.26, R * 0.07, R * 0.22], R * 0.06, [0, 0, 1]);
+  b.feature([0, my - R * 0.01, mz + R * 0.09], [R * 0.3, R * 0.025, R * 0.2], -R * 0.035, [0, 0, 1]);
+  // Sulco sob o lábio de baixo, e os cantos da boca.
+  b.feature([0, my - R * 0.17, mz + R * 0.04], [R * 0.16, R * 0.05, R * 0.2], -R * 0.025, [0, 0, 1]);
+  for (const side of [-1, 1]) {
+    b.feature([side * FACE.mouthHalf * R, my - R * 0.01, mz], [R * 0.06, R * 0.07, R * 0.18], -R * 0.03, [0, 0, 1]);
+  }
 
   // Orelhas: varredura própria, rente ao crânio, achatada em x.
   for (const side of [-1, 1]) {
@@ -758,24 +983,68 @@ function buildHead(b: SurfaceBuilder, a: AvatarAppearance, p: BodyProportions, m
     b.loft(subdivideProfile(toStations(ear), 2), { segments: Math.max(8, Math.round(detail.segments * 0.6)), capTop: R * 0.03, capBottom: R * 0.03, capRings: 1 });
   }
 
-  // Olhos: esclera, íris e pupila, assentados na órbita.
-  const eyeRings = detail.segments >= 14 ? 7 : 5;
+  // Olhos: um globo esférico de verdade, com íris e pupila assentadas
+  // na superfície dele. Antes a esclera era mais alta que larga
+  // (0,17 × 0,20) e a íris ocupava dois terços da sua largura — um
+  // olho que nenhuma pálpebra conseguiria fechar. Agora o globo é
+  // redondo, entra na órbita, e quem define a abertura é a pálpebra,
+  // que vem de `AvatarFace`.
+  const eyeRings = detail.segments >= 30 ? 11 : detail.segments >= 14 ? 8 : 5;
+  const ball = FACE.eyeBall * R;
+  // O olho é molhado: quase sem rugosidade, e com verniz por cima.
+  b.surface = Finish.Eye;
   for (const side of [-1, 1]) {
     const ex = side * eyeX;
-    b.ball([ex, eyeY, eyeZ - R * 0.07], [R * 0.17, R * 0.2, R * 0.15], { color: 0xfdfdff, skin: { bone: Bone.Head } }, eyeRings);
-    b.ball([ex, eyeY - R * 0.01, eyeZ + R * 0.04], [R * 0.11, R * 0.13, R * 0.07], { color: a.eyeColor, skin: { bone: Bone.Head } }, eyeRings);
-    b.ball([ex, eyeY - R * 0.015, eyeZ + R * 0.08], [R * 0.055, R * 0.065, R * 0.04], { color: 0x14161c, skin: { bone: Bone.Head } }, 5);
-    b.ball([ex + R * 0.05, eyeY + R * 0.07, eyeZ + R * 0.08], [R * 0.032, R * 0.032, R * 0.025], { color: 0xffffff, skin: { bone: Bone.Head } }, 4);
+    // Olhar levemente convergente, como o de quem olha para a frente.
+    const toe = -side * R * 0.006;
+    b.ball([ex, eyeY, eyeZ], [ball, ball, ball * 0.94], { color: 0xf6f4f2, skin: { bone: Bone.Head } }, eyeRings);
+    b.ball(
+      [ex + toe, eyeY, eyeZ + ball * 0.74],
+      [FACE.iris * R, FACE.iris * R, ball * 0.3],
+      { color: a.eyeColor, skin: { bone: Bone.Head } },
+      eyeRings,
+    );
+    b.ball(
+      [ex + toe, eyeY, eyeZ + ball * 0.9],
+      [FACE.pupil * R, FACE.pupil * R, ball * 0.16],
+      { color: 0x0d0f14, skin: { bone: Bone.Head } },
+      Math.max(5, eyeRings - 3),
+    );
+    // Brilho pequeno, no alto e para dentro — onde o céu bate.
+    b.ball(
+      [ex + toe - side * R * 0.022, eyeY + R * 0.03, eyeZ + ball * 0.93],
+      [FACE.spark * R, FACE.spark * R, ball * 0.1],
+      { color: 0xffffff, skin: { bone: Bone.Head } },
+      4,
+    );
   }
 
-  // Um toque de cor nas maçãs, que é metade da identidade Frutiger Aero.
-  const blush = new THREE.Color(skin).lerp(new THREE.Color(0xff8fa8), 0.34).getHex();
+  b.surface = Finish.Skin;
+  // Um toque de cor nas maçãs, que é metade da identidade Frutiger Aero
+  // — mas pintado, não colado. Eram duas bolas achatadas, e de perfil
+  // apareciam como abas rosa saindo da bochecha.
+  const blush = new THREE.Color(skin).lerp(new THREE.Color(0xff8fa8), 0.5).getHex();
   for (const side of [-1, 1]) {
-    b.ball([side * R * 0.66, cy - 0.055, R * 0.66], [R * 0.17, R * 0.1, R * 0.05], { color: blush, skin: { bone: Bone.Head } }, 5);
+    b.paint([side * R * 0.62, cy - 0.08, R * 0.62], [R * 0.3, R * 0.19, R * 0.3], blush, 0.5);
+  }
+  // Pálpebra e canto do olho um tom abaixo: é sombra própria, e é o
+  // que tira o ar de bola pousada no rosto.
+  const socket = new THREE.Color(skin).lerp(new THREE.Color(0x6b4433), 0.3).getHex();
+  for (const side of [-1, 1]) {
+    b.paint([side * eyeX, eyeY + R * 0.11, eyeZ + R * 0.16], [R * 0.21, R * 0.1, R * 0.2], socket, 0.5);
+    b.paint([side * (eyeX - R * 0.16), eyeY, eyeZ + R * 0.16], [R * 0.08, R * 0.1, R * 0.18], socket, 0.45);
+  }
+  // Sombra sob o lábio e nas asas do nariz, pelo mesmo motivo.
+  b.paint([0, my - R * 0.15, mz + R * 0.12], [R * 0.18, R * 0.06, R * 0.16], socket, 0.3);
+  for (const side of [-1, 1]) {
+    b.paint([side * R * 0.25, cy - 0.052, R * 0.8], [R * 0.07, R * 0.1, R * 0.16], socket, 0.35);
   }
 
+  b.surface = Finish.Hair;
   buildHair(b, a, m, detail, cy, R);
+  b.surface = Finish.Shine;
   buildAccessory(b, a, m, detail, cy, R);
+  b.surface = Finish.Skin;
 }
 
 /* --------------------------- cabelo e acessório --------------------------- */
@@ -797,7 +1066,7 @@ function buildHair(b: SurfaceBuilder, a: AvatarAppearance, m: BodyMetrics, detai
 
   // Calota: cobre da nuca ao alto, deixando a testa livre na frente.
   const cap: Ctl[] = [
-    { y: cy + 0.02, rx: R * 1.0 * gap, rz: R * 0.5, rzBack: R * 1.02 * gap, color: hair, bone: Bone.Head },
+    { y: cy + 0.055, rx: R * 1.0 * gap, rz: R * 0.42, rzBack: R * 1.02 * gap, color: hair, bone: Bone.Head },
     { y: cy + 0.062, rx: R * 1.01 * gap, rz: R * 0.86 * gap, rzBack: R * 1.04 * gap, color: hair, bone: Bone.Head },
     { y: cy + 0.1, rx: R * 0.96 * gap, rz: R * 0.92 * gap, rzBack: R * 1.02 * gap, color: hair, bone: Bone.Head },
     { y: cy + 0.142, rx: R * 0.83 * gap, rz: R * 0.78 * gap, rzBack: R * 0.89 * gap, color: hair, bone: Bone.Head },
@@ -805,8 +1074,12 @@ function buildHair(b: SurfaceBuilder, a: AvatarAppearance, m: BodyMetrics, detai
   ];
   b.loft(subdivideProfile(toStations(cap), detail.steps), { segments, capTop: R * 0.3, capRings: 2 });
 
-  // Franja: uma aba que desce sobre a testa, na própria casca.
-  b.feature([0, cy + 0.075, R * 0.95], [R * 0.9, R * 0.08, R * 0.5], R * 0.08, [0, -0.35, 1]);
+  // Franja: uma aba que desce sobre a testa, na própria casca. Ela
+  // existe de propósito e faz parte do penteado — mas descia até a
+  // altura dos olhos, e um rosto sem testa não tem onde pôr a
+  // sobrancelha. Agora para no terço de cima, como uma franja de
+  // verdade.
+  b.feature([0, cy + 0.125, R * 0.95], [R * 0.9, R * 0.085, R * 0.5], R * 0.075, [0, -0.3, 1]);
 
   switch (a.hairStyle) {
     case 'longo': {

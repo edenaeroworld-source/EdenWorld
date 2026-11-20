@@ -123,6 +123,76 @@ export const NECK_Y = 0.48;
 export const LEG_X = 0.095;
 /** Raio da cabeça de referência. */
 export const HEAD_R = 0.176;
+
+/**
+ * Âncoras do rosto, em múltiplos do raio da cabeça e com origem no
+ * centro dela.
+ *
+ * Existem porque o rosto é montado em dois lugares: `buildHead` escava
+ * a órbita e assenta o globo ocular na malha do corpo, e `AvatarFace`
+ * põe por cima as peças que se mexem — pálpebras, sobrancelhas,
+ * lábios. Enquanto cada um tinha os seus próprios números, as peças
+ * não se encontravam: a pálpebra ficava em `y = 0,222` e o topo do
+ * globo em `0,217`, ou seja, ela nunca cobriu olho nenhum. Era uma
+ * almofada pousada acima do olho, e é isso que a imagem mostrava.
+ *
+ * Com as medidas num lugar só, a pálpebra é uma calota concêntrica ao
+ * globo: ela gira em torno do centro do olho, como a de verdade.
+ */
+/**
+ * Que tipo de superfície é cada vértice.
+ *
+ * O avatar inteiro — pele, roupa, cabelo, olho, sola de sapato — sai
+ * num desenho só, com um material só. Isso é bom para o desempenho e
+ * ruim para a aparência: a pele recebia o mesmo brilho da borracha do
+ * tênis, e o olho o mesmo da camiseta. Um número por vértice resolve
+ * sem partir a malha: o shader lê daqui a rugosidade, o metal e o
+ * brilho de tecido de cada fragmento.
+ */
+export const Finish = Object.freeze({
+  Skin: 0,
+  Cloth: 1,
+  Hair: 2,
+  Eye: 3,
+  Rubber: 4,
+  Shine: 5,
+} as const);
+
+export type FinishId = (typeof Finish)[keyof typeof Finish];
+
+export const FACE = Object.freeze({
+  /**
+   * Medidas tiradas do cânone do rosto, em frações da **largura** da
+   * cabeça (que vale `2R`), e não escolhidas a olho:
+   *
+   *  · a abertura do olho mede 21% da largura da cabeça;
+   *  · a íris, 45% dessa abertura;
+   *  · a distância entre os cantos internos é a largura de um olho;
+   *  · a boca mede 33% da largura da cabeça;
+   *  · os olhos ficam a 48% da altura, do alto para baixo.
+   *
+   * Conferidas contra um rosto de referência antes de entrarem aqui.
+   * A versão anterior tinha o globo com 13% da largura — olhos de
+   * boneco, pequenos demais para a pálpebra ter o que cobrir.
+   */
+  eyeX: 0.38,
+  eyeY: 0.12,
+  eyeZ: 0.695,
+  /** Raio do globo: 19% da largura da cabeça em diâmetro. */
+  eyeBall: 0.158,
+  iris: 0.082,
+  pupil: 0.033,
+  spark: 0.015,
+  /**
+   * Onde a **pele** está, na frente do rosto — não onde o globo está.
+   * A distinção custou caro: ancoradas no centro do olho, a boca e as
+   * sobrancelhas ficavam três centímetros dentro da cabeça.
+   */
+  browZ: 0.89,
+  mouthY: -0.44,
+  mouthZ: 0.93,
+  mouthHalf: 0.3,
+});
 /**
  * Altura do centro da cabeça sobre a junta do pescoço.
  *
@@ -412,12 +482,42 @@ export interface BodyDetail {
   steps: number;
   /** Anéis do crânio. */
   headRings: number;
+  /**
+   * Força da oclusão ambiente assada na cor dos vértices. `0` desliga.
+   *
+   * Custa tempo de montagem, não de quadro — por isso quem está longe,
+   * e vai ser remontado com frequência pelo LOD, recebe menos ou nada.
+   */
+  occlusion: number;
 }
 
-export const BODY_DETAIL: Readonly<Record<'alta' | 'media' | 'baixa', BodyDetail>> = Object.freeze({
-  alta: { segments: 20, steps: 4, headRings: 14 },
-  media: { segments: 14, steps: 3, headRings: 11 },
-  baixa: { segments: 10, steps: 2, headRings: 8 },
+/**
+ * Quatro densidades, de perto para longe.
+ *
+ * O desenho da cabeça sempre teve órbita, dorso de nariz, arco da
+ * sobrancelha, maçãs e degrau do lábio — `buildHead` escava todos com
+ * `feature()`. O que faltava era **resolução para expressá-los**: com
+ * catorze anéis de crânio, uma órbita de `R·0,3` de raio cai sobre um
+ * anel e meio, e um anel e meio não faz uma órbita, faz um amassado.
+ * Era por isso que o rosto parecia um boneco apesar de a anatomia
+ * estar escrita no código.
+ *
+ * `ultra` é o nível novo, para quem está perto e tem máquina: aí o
+ * rosto tem anel onde precisa de anel. Os outros três continuam
+ * existindo e continuam servindo ao LOD de `NpcSystem`.
+ */
+export const BODY_DETAIL: Readonly<Record<'ultra' | 'alta' | 'media' | 'baixa', BodyDetail>> = Object.freeze({
+  // 'alta' continua exatamente na densidade que sempre teve. A
+  // tentação, ao remasterizar, é subir todo mundo um degrau — mas
+  // quem rodava em 'alta' é a máquina mediana, e engrossar a malha
+  // dela triplicou o custo de montar um corpo (13 ms para 40 ms
+  // medidos) sem que ninguém tivesse pedido. O ganho de forma — olho
+  // com órbita, lábio com volume, oclusão — não custa vértice e vale
+  // para todos os níveis. O que custa vértice fica em 'ultra'.
+  ultra: { segments: 44, steps: 7, headRings: 30, occlusion: 1 },
+  alta: { segments: 20, steps: 4, headRings: 14, occlusion: 0.85 },
+  media: { segments: 14, steps: 3, headRings: 11, occlusion: 0.55 },
+  baixa: { segments: 10, steps: 2, headRings: 8, occlusion: 0 },
 });
 
 export type BodyDetailLevel = keyof typeof BODY_DETAIL;

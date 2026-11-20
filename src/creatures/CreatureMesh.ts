@@ -24,6 +24,14 @@ export interface CreatureParts {
   head: THREE.Object3D | null;
   tail: THREE.Object3D | null;
   legs: THREE.Object3D[];
+  /**
+   * O joelho (ou jarrete) de cada pata, na mesma ordem de `legs`.
+   *
+   * A articulação precisa ser dirigida de fora: uma perna que dobra
+   * sozinha num ângulo fixo é só um cilindro torto. Quem anda é o
+   * `WildlifeView`, então é ele que dobra — veja `flexKnee`.
+   */
+  knees: THREE.Object3D[];
   wings: THREE.Object3D[];
   /** Altura do bicho em pé, para assentar no chão. */
   standHeight: number;
@@ -36,8 +44,97 @@ export interface CreatureParts {
  * Monta o corpo de uma espécie.
  *
  * @param scale multiplicador global, para filhotes e variação.
+ * @param detail densidade de malha, vinda do perfil de qualidade.
  */
-export function buildCreature(species: Species, scale = 1): CreatureParts {
+
+/** Densidade de malha dos bichos, por nível de qualidade. */
+export interface CreatureDetail {
+  /** Gomos em volta do corpo. */
+  radial: number;
+  /** Estações ao longo do dorso. */
+  along: number;
+  /** Gomos das peças pequenas (focinho, patas, orelhas). */
+  small: number;
+}
+
+export const CREATURE_DETAIL: Readonly<Record<'ultra' | 'alta' | 'media' | 'baixa', CreatureDetail>> = Object.freeze({
+  ultra: { radial: 20, along: 18, small: 10 },
+  alta: { radial: 14, along: 13, small: 8 },
+  media: { radial: 10, along: 9, small: 6 },
+  baixa: { radial: 7, along: 6, small: 4 },
+});
+
+/** Uma estação do dorso: distância ao longo do eixo e raio ali. */
+interface Spine {
+  /** Posição em z, de −1 (rabo) a 1 (cabeça). */
+  t: number;
+  /** Raio lateral, em múltiplos de `radius`. */
+  rx: number;
+  /** Raio vertical. */
+  ry: number;
+  /** Deslocamento vertical do eixo — é o que curva o lombo. */
+  y?: number;
+}
+
+/**
+ * Varre um perfil ao longo do dorso e fecha as pontas.
+ *
+ * O corpo de todo bicho era uma cápsula: um cilindro de raio
+ * constante com duas meias-esferas. Nenhum animal tem raio constante
+ * — o peito é mais largo que a cintura, a garupa é mais alta que o
+ * ombro, e é essa variação que faz a diferença entre um bicho e um
+ * comprimido. Uma varredura custa os mesmos vértices que a cápsula e
+ * aceita qualquer silhueta.
+ */
+function sweptBody(spine: readonly Spine[], radius: number, length: number, detail: CreatureDetail): THREE.BufferGeometry {
+  const radial = Math.max(4, detail.radial);
+  const position: number[] = [];
+  const index: number[] = [];
+  const ring = (t: number, rx: number, ry: number, y: number): number => {
+    const first = position.length / 3;
+    for (let i = 0; i < radial; i += 1) {
+      const a = (i / radial) * Math.PI * 2;
+      position.push(Math.cos(a) * rx, y + Math.sin(a) * ry, (t * length) / 2);
+    }
+    return first;
+  };
+
+  // Ponta do rabo: um só vértice, para a varredura fechar sem disco.
+  const tail = spine[0];
+  position.push(0, (tail.y ?? 0) * radius, (tail.t * length) / 2);
+  const tailTip = 0;
+
+  const rings: number[] = [];
+  for (const st of spine) rings.push(ring(st.t, st.rx * radius, st.ry * radius, (st.y ?? 0) * radius));
+
+  const nose = spine[spine.length - 1];
+  position.push(0, (nose.y ?? 0) * radius, (nose.t * length) / 2);
+  const noseTip = position.length / 3 - 1;
+
+  for (let i = 0; i < radial; i += 1) {
+    const j = (i + 1) % radial;
+    index.push(tailTip, rings[0] + j, rings[0] + i);
+    index.push(noseTip, rings[rings.length - 1] + i, rings[rings.length - 1] + j);
+  }
+  for (let r = 0; r + 1 < rings.length; r += 1) {
+    for (let i = 0; i < radial; i += 1) {
+      const j = (i + 1) % radial;
+      const a = rings[r] + i;
+      const b = rings[r] + j;
+      const c = rings[r + 1] + i;
+      const d = rings[r + 1] + j;
+      index.push(a, b, d, a, d, c);
+    }
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(position, 3));
+  geometry.setIndex(index);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+export function buildCreature(species: Species, scale = 1, detail: CreatureDetail = CREATURE_DETAIL.alta): CreatureParts {
   const main = new THREE.Color(species.colors[0]);
   const accent = new THREE.Color(species.colors[1]);
 
@@ -47,8 +144,14 @@ export function buildCreature(species: Species, scale = 1): CreatureParts {
   const makeMaterial = (color: THREE.Color): THREE.MeshStandardMaterial => {
     const material = new THREE.MeshStandardMaterial({
       color,
-      roughness: species.glows ? 0.3 : 0.78,
+      // Pelo e pena são superfícies muito difusas, mas não mates: o
+      // realce largo é o que faz o lombo parecer curvo. Quem brilha é
+      // quase liso, para a luz própria ter onde escorregar.
+      roughness: species.glows ? 0.3 : 0.82,
       metalness: 0,
+      // O mundo guarda um PMREM do céu em `scene.environment`; sem
+      // ler dele, o bicho ficava mais fosco que o chão em que pisa.
+      envMapIntensity: species.glows ? 0.6 : 1.1,
       emissive: species.glows ? color.clone().multiplyScalar(0.7) : new THREE.Color(0x000000),
       emissiveIntensity: species.glows ? 1.4 : 0,
       transparent: species.glows,
@@ -80,6 +183,7 @@ export function buildCreature(species: Species, scale = 1): CreatureParts {
     head: null,
     tail: null,
     legs: [],
+    knees: [],
     wings: [],
     standHeight: s,
     materials,
@@ -91,17 +195,33 @@ export function buildCreature(species: Species, scale = 1): CreatureParts {
   if (plan === 'voa') {
     // Quem voa: corpo pequeno, asas grandes, sem pernas visíveis.
     const bodyLength = s * 1.6;
-    const body = new THREE.Mesh(track(new THREE.SphereGeometry(s * 0.5, 10, 8)), skin);
-    body.scale.set(1, 0.85, bodyLength / (s * 1.0));
+    // Fuso de ave: peito cheio à frente, afinando para a cauda.
+    const body = new THREE.Mesh(
+      track(
+        sweptBody(
+          [
+            { t: -1, rx: 0.18, ry: 0.18 },
+            { t: -0.55, rx: 0.58, ry: 0.5 },
+            { t: -0.1, rx: 0.95, ry: 0.84 },
+            { t: 0.45, rx: 1.0, ry: 0.9 },
+            { t: 1, rx: 0.42, ry: 0.44 },
+          ],
+          s * 0.5,
+          bodyLength,
+          detail,
+        ),
+      ),
+      skin,
+    );
     root.add(body);
     parts.body = body;
 
-    const head = new THREE.Mesh(track(new THREE.SphereGeometry(s * 0.34, 9, 7)), skin);
+    const head = new THREE.Mesh(track(new THREE.SphereGeometry(s * 0.34, detail.small + 1, detail.small - 1)), skin);
     head.position.set(0, s * 0.2, bodyLength * 0.55);
     root.add(head);
     parts.head = head;
 
-    const beak = new THREE.Mesh(track(new THREE.ConeGeometry(s * 0.12, s * 0.34, 6)), trim);
+    const beak = new THREE.Mesh(track(new THREE.ConeGeometry(s * 0.12, s * 0.34, detail.small)), trim);
     beak.rotation.x = Math.PI / 2;
     beak.position.z = s * 0.3;
     head.add(beak);
@@ -110,7 +230,9 @@ export function buildCreature(species: Species, scale = 1): CreatureParts {
     const butterfly = species.id.includes('borboleta');
     for (const side of [-1, 1]) {
       const wing = new THREE.Group();
-      const shape = butterfly ? track(new THREE.CircleGeometry(s * 1.1, 10)) : track(new THREE.SphereGeometry(s * 0.9, 8, 5));
+      const shape = butterfly
+        ? track(new THREE.CircleGeometry(s * 1.1, detail.small + 2))
+        : track(new THREE.SphereGeometry(s * 0.9, detail.small, Math.max(4, detail.small - 3)));
       const mesh = new THREE.Mesh(shape, trim);
       if (butterfly) {
         mesh.position.x = side * s * 0.95;
@@ -126,7 +248,7 @@ export function buildCreature(species: Species, scale = 1): CreatureParts {
       parts.wings.push(wing);
     }
 
-    const tail = new THREE.Mesh(track(new THREE.ConeGeometry(s * 0.26, s * 0.8, 6)), trim);
+    const tail = new THREE.Mesh(track(new THREE.ConeGeometry(s * 0.26, s * 0.8, detail.small)), trim);
     tail.rotation.x = -Math.PI / 2;
     tail.position.z = -bodyLength * 0.6;
     root.add(tail);
@@ -137,7 +259,23 @@ export function buildCreature(species: Species, scale = 1): CreatureParts {
 
   if (plan === 'nada') {
     // Quem nada: corpo fusiforme e cauda que varre.
-    const body = new THREE.Mesh(track(new THREE.SphereGeometry(s * 0.6, 12, 9)), skin);
+    const body = new THREE.Mesh(
+      track(
+        sweptBody(
+          [
+            { t: -1, rx: 0.1, ry: 0.22 },
+            { t: -0.6, rx: 0.42, ry: 0.62 },
+            { t: -0.1, rx: 0.86, ry: 1.02 },
+            { t: 0.45, rx: 0.94, ry: 1.0 },
+            { t: 1, rx: 0.3, ry: 0.38 },
+          ],
+          s * 0.6,
+          s * 1.9,
+          detail,
+        ),
+      ),
+      skin,
+    );
     body.scale.set(0.7, 0.72, 1.9);
     root.add(body);
     parts.body = body;
@@ -154,7 +292,7 @@ export function buildCreature(species: Species, scale = 1): CreatureParts {
     parts.tail = tail;
 
     for (const side of [-1, 1]) {
-      const fin = new THREE.Mesh(track(new THREE.ConeGeometry(s * 0.26, s * 0.5, 4)), trim);
+      const fin = new THREE.Mesh(track(new THREE.ConeGeometry(s * 0.26, s * 0.5, Math.max(4, detail.small - 2))), trim);
       fin.rotation.z = (side * Math.PI) / 2.4;
       fin.position.set(side * s * 0.46, -s * 0.1, s * 0.2);
       root.add(fin);
@@ -166,7 +304,7 @@ export function buildCreature(species: Species, scale = 1): CreatureParts {
 
   if (plan === 'flutua') {
     // Criaturas do Éden: um núcleo luminoso e satélites em volta.
-    const core = new THREE.Mesh(track(new THREE.IcosahedronGeometry(s * 0.6, 1)), skin);
+    const core = new THREE.Mesh(track(new THREE.IcosahedronGeometry(s * 0.6, detail.radial >= 14 ? 2 : 1)), skin);
     root.add(core);
     parts.body = core;
 
@@ -187,16 +325,34 @@ export function buildCreature(species: Species, scale = 1): CreatureParts {
   const bodyLength = s * (crawl ? 2.6 : hop ? 1.5 : 1.9);
   const bodyRadius = s * (crawl ? 0.38 : hop ? 0.52 : 0.45);
 
-  const body = new THREE.Mesh(track(new THREE.CapsuleGeometry(bodyRadius, bodyLength - bodyRadius * 2, 5, 10)), skin);
-  body.rotation.x = Math.PI / 2;
+  // Peito largo, cintura marcada, garupa alta: é o perfil que separa
+  // um bicho de um comprimido. Quem rasteja é quase cilíndrico, quem
+  // salta tem a garupa bem acima do ombro.
+  const rump = hop ? 1.08 : crawl ? 0.96 : 1.0;
+  const spine: Spine[] = [
+    { t: -1, rx: 0.16, ry: 0.16, y: crawl ? 0 : 0.1 },
+    { t: -0.76, rx: 0.68 * rump, ry: 0.72 * rump, y: crawl ? 0 : 0.08 },
+    { t: -0.4, rx: 0.96 * rump, ry: 1.0 * rump, y: crawl ? 0 : 0.04 },
+    // A cintura é de verdade, mas discreta: afundá-la mais partia o
+    // bicho em dois caroços, um atrás e um à frente.
+    { t: -0.05, rx: 0.93, ry: 0.92, y: 0 },
+    { t: 0.32, rx: 1.0, ry: 0.98, y: 0.02 },
+    // A frente não afina até virar bico. Ela termina na base do
+    // pescoço, larga o bastante para a cabeça assentar em cima sem
+    // deixar degrau — era o degrau que fazia o corpo e a cabeça
+    // parecerem duas peças soltas encostadas uma na outra.
+    { t: 0.74, rx: 0.86, ry: 0.84, y: 0.07 },
+    { t: 1, rx: 0.62, ry: 0.6, y: 0.14 },
+  ];
+  const body = new THREE.Mesh(track(sweptBody(spine, bodyRadius, bodyLength, detail)), skin);
   body.position.y = s * (crawl ? 0.3 : 0.72);
   root.add(body);
   parts.body = body;
 
   const head = new THREE.Group();
-  const skull = new THREE.Mesh(track(new THREE.SphereGeometry(s * (hop ? 0.4 : 0.36), 10, 8)), skin);
+  const skull = new THREE.Mesh(track(new THREE.SphereGeometry(s * (hop ? 0.4 : 0.36), detail.small + 2, detail.small)), skin);
   head.add(skull);
-  const snout = new THREE.Mesh(track(new THREE.SphereGeometry(s * 0.2, 8, 6)), trim);
+  const snout = new THREE.Mesh(track(new THREE.SphereGeometry(s * 0.2, detail.small, detail.small - 2)), trim);
   snout.scale.set(0.8, 0.7, 1.4);
   snout.position.set(0, -s * 0.08, s * 0.36);
   head.add(snout);
@@ -204,8 +360,8 @@ export function buildCreature(species: Species, scale = 1): CreatureParts {
   // Orelhas: altas e longas em quem salta, triangulares em quem anda.
   for (const side of [-1, 1]) {
     const ear = hop
-      ? new THREE.Mesh(track(new THREE.CapsuleGeometry(s * 0.09, s * 0.6, 3, 6)), trim)
-      : new THREE.Mesh(track(new THREE.ConeGeometry(s * 0.16, s * 0.3, 5)), trim);
+      ? new THREE.Mesh(track(new THREE.CapsuleGeometry(s * 0.09, s * 0.6, 3, detail.small)), trim)
+      : new THREE.Mesh(track(new THREE.ConeGeometry(s * 0.16, s * 0.3, detail.small - 1)), trim);
     ear.position.set(side * s * 0.2, s * (hop ? 0.55 : 0.32), hop ? -s * 0.05 : 0);
     ear.rotation.z = side * 0.18;
     head.add(ear);
@@ -214,18 +370,42 @@ export function buildCreature(species: Species, scale = 1): CreatureParts {
   // Chifres do veado: só onde o nome diz que há.
   if (species.id === 'veado') {
     for (const side of [-1, 1]) {
-      const antler = new THREE.Mesh(track(new THREE.ConeGeometry(s * 0.07, s * 0.75, 5)), trim);
+      const antler = new THREE.Mesh(track(new THREE.ConeGeometry(s * 0.07, s * 0.75, detail.small - 1)), trim);
       antler.position.set(side * s * 0.18, s * 0.6, 0);
       antler.rotation.z = side * 0.4;
       head.add(antler);
     }
   }
 
-  head.position.set(0, s * (crawl ? 0.36 : 0.95), bodyLength * 0.52);
+  head.position.set(0, s * (crawl ? 0.36 : 0.95), bodyLength * (crawl ? 0.52 : 0.46));
   root.add(head);
   parts.head = head;
 
+  // Pescoço: sem ele a cabeça flutuava à frente do tronco. Quem
+  // rasteja não tem — a cabeça sai direto do corpo, que é o que faz
+  // um lagarto parecer um lagarto.
+  if (!crawl) {
+    const neck = new THREE.Mesh(
+      track(new THREE.CylinderGeometry(s * 0.19, s * 0.3, s * 0.42, detail.small + 2, 1, true)),
+      skin,
+    );
+    neck.position.set(0, s * 0.82, bodyLength * 0.4);
+    neck.rotation.x = -0.5;
+    root.add(neck);
+  }
+
   // Patas.
+  //
+  // Eram uma cápsula só por pata: um cilindro sem joelho, que na
+  // caminhada girava inteiro a partir do quadril como um pêndulo de
+  // relógio. Agora cada pata é uma corrente de dois ossos com um
+  // joelho no meio e um pé no fim.
+  //
+  // A dobra segue a anatomia do quadrúpede, que é a parte que faz a
+  // silhueta ser reconhecível: a pata da frente dobra o cotovelo
+  // para trás, a de trás dobra o jarrete para a frente. Os dois
+  // juntos desenham o zigue-zague que distingue um bicho de quatro
+  // patas de uma mesa.
   const legLength = s * (crawl ? 0.26 : hop ? 0.5 : 0.7);
   const legRadius = s * (crawl ? 0.06 : 0.09);
   const spread = bodyRadius * 0.85;
@@ -235,22 +415,76 @@ export function buildCreature(species: Species, scale = 1): CreatureParts {
     [spread, -bodyLength * 0.3],
     [-spread, -bodyLength * 0.3],
   ];
+  const hipY = s * (crawl ? 0.3 : 0.72) - bodyRadius * 0.4;
   for (const [lx, lz] of positions) {
+    const front = lz > 0;
+    // Quem rasteja tem a pata quase na horizontal, aberta para o
+    // lado; quem salta tem a coxa longa e o pé comprido. O resto
+    // divide o osso quase ao meio, com a coxa um pouco maior.
+    const upperShare = hop && !front ? 0.56 : 0.52;
+    // Ângulos de repouso, medidos do eixo vertical. O sinal é o que
+    // separa cotovelo de jarrete.
+    const thighTilt = crawl ? (front ? -0.5 : 0.5) : front ? -0.2 : 0.26;
+    const kneeBend = crawl ? (front ? 0.95 : -0.95) : front ? 0.42 : -0.5;
+
+    // Com a perna dobrada o pé sobe, e o bicho flutuaria acima do
+    // chão. Mede-se a queda real da corrente e alongam-se os ossos
+    // até ela valer `legLength` de novo.
+    const drop = Math.cos(thighTilt) * upperShare + Math.cos(thighTilt + kneeBend) * (1 - upperShare);
+    const bone = legLength / Math.max(0.35, drop);
+    const upper = bone * upperShare;
+    const lower = bone * (1 - upperShare);
+
     const pivot = new THREE.Group();
-    pivot.position.set(lx, s * (crawl ? 0.3 : 0.72) - bodyRadius * 0.4, lz);
-    const leg = new THREE.Mesh(track(new THREE.CapsuleGeometry(legRadius, legLength, 3, 6)), trim);
-    leg.position.y = -legLength / 2;
-    pivot.add(leg);
+    pivot.position.set(lx, hipY, lz);
+    pivot.rotation.x = thighTilt;
+
+    const thigh = new THREE.Mesh(
+      track(new THREE.CapsuleGeometry(legRadius * 1.15, upper, 3, detail.small)),
+      trim,
+    );
+    thigh.position.y = -upper / 2;
+    pivot.add(thigh);
+
+    const knee = new THREE.Group();
+    knee.position.y = -upper;
+    knee.rotation.x = kneeBend;
+    pivot.add(knee);
+
+    // A canela é mais fina que a coxa — é o afunilamento que faz a
+    // pata parecer uma pata.
+    const shank = new THREE.Mesh(
+      track(new THREE.CapsuleGeometry(legRadius * 0.82, lower, 3, detail.small)),
+      trim,
+    );
+    shank.position.y = -lower / 2;
+    knee.add(shank);
+
+    // Pé: sem ele a perna acaba numa ponta arredondada no chão.
+    // Aponta para a frente e fica na horizontal, compensando as duas
+    // rotações acima para assentar chapado no solo.
+    const foot = new THREE.Mesh(
+      track(new THREE.CapsuleGeometry(legRadius * 0.78, legRadius * (crawl ? 2.4 : 1.7), 2, detail.small)),
+      trim,
+    );
+    foot.rotation.x = Math.PI / 2 - thighTilt - kneeBend;
+    foot.position.set(0, -lower + legRadius * 0.3, legRadius * 0.5);
+    knee.add(foot);
+
     root.add(pivot);
     parts.legs.push(pivot);
+    parts.knees.push(knee);
+    // O repouso fica guardado para a animação poder voltar a ele.
+    pivot.userData.rest = thighTilt;
+    knee.userData.rest = kneeBend;
   }
 
   // Rabo.
   const tailPivot = new THREE.Group();
   const bushy = species.id === 'raposa' || species.id === 'esquilo';
   const tail = bushy
-    ? new THREE.Mesh(track(new THREE.CapsuleGeometry(s * 0.26, s * 0.8, 4, 8)), trim)
-    : new THREE.Mesh(track(new THREE.CapsuleGeometry(s * 0.08, s * 0.6, 3, 6)), trim);
+    ? new THREE.Mesh(track(new THREE.CapsuleGeometry(s * 0.26, s * 0.8, 4, detail.small + 1)), trim)
+    : new THREE.Mesh(track(new THREE.CapsuleGeometry(s * 0.08, s * 0.6, 3, detail.small)), trim);
   tail.position.y = -(bushy ? s * 0.5 : s * 0.35);
   tailPivot.add(tail);
   tailPivot.position.set(0, s * (crawl ? 0.34 : 0.8), -bodyLength * 0.52);

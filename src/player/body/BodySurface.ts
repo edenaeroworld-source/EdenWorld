@@ -52,6 +52,15 @@ export interface Station {
   x?: number;
   z?: number;
   color: THREE.ColorRepresentation;
+  /**
+   * Acabamento desta estação. Omitido, vale o do construtor.
+   *
+   * Existe porque uma varredura só costuma atravessar materiais: o
+   * braço vai da manga ao pulso nu e à mão, e a perna da calça ao
+   * tênis. Marcar a varredura inteira de uma vez daria pele com
+   * brilho de borracha.
+   */
+  finish?: number;
   skin: SkinBinding;
   /** Zona de deformação dos Afters (`AftersMorph.Zone`). */
   zone?: number;
@@ -157,6 +166,16 @@ const WHITE = new THREE.Color();
 export class SurfaceBuilder {
   private readonly position: number[] = [];
   private readonly color: number[] = [];
+  private readonly finish: number[] = [];
+  /** Oclusão por vértice: 1 = céu aberto, 0 = totalmente fechado. */
+  private readonly ao: number[] = [];
+
+  /**
+   * Acabamento dos próximos vértices. Quem monta uma parte do corpo
+   * ajusta isto antes de varrer, e tudo o que sair dali carrega o
+   * valor — não é preciso passar o acabamento em cada estação.
+   */
+  surface: number = 0;
   private readonly skinIndex: number[] = [];
   private readonly skinWeight: number[] = [];
   private readonly zone: number[] = [];
@@ -178,6 +197,8 @@ export class SurfaceBuilder {
     this.position.push(x, y, z);
     WHITE.set(station.color);
     this.color.push(WHITE.r, WHITE.g, WHITE.b);
+    this.finish.push(station.finish ?? this.surface);
+    this.ao.push(1);
     if (override !== undefined) {
       const [b0, b1, b2] = [override.bones[0], override.bones[1] ?? 0, override.bones[2] ?? 0];
       const [w0, w1, w2] = [override.weights[0], override.weights[1] ?? 0, override.weights[2] ?? 0];
@@ -386,6 +407,292 @@ export class SurfaceBuilder {
     }
   }
 
+  /** Normais por vértice, médias dos triângulos — as mesmas de `build()`. */
+  private vertexNormals(): Float32Array {
+    const normal = new Float32Array(this.position.length);
+    for (let t = 0; t < this.index.length; t += 3) {
+      const ia = this.index[t] * 3;
+      const ib = this.index[t + 1] * 3;
+      const ic = this.index[t + 2] * 3;
+      const ux = this.position[ib] - this.position[ia];
+      const uy = this.position[ib + 1] - this.position[ia + 1];
+      const uz = this.position[ib + 2] - this.position[ia + 2];
+      const vx = this.position[ic] - this.position[ia];
+      const vy = this.position[ic + 1] - this.position[ia + 1];
+      const vz = this.position[ic + 2] - this.position[ia + 2];
+      const fx = uy * vz - uz * vy;
+      const fy = uz * vx - ux * vz;
+      const fz = ux * vy - uy * vx;
+      for (const i of [ia, ib, ic]) {
+        normal[i] += fx;
+        normal[i + 1] += fy;
+        normal[i + 2] += fz;
+      }
+    }
+    for (let i = 0; i < normal.length; i += 3) {
+      const len = Math.hypot(normal[i], normal[i + 1], normal[i + 2]);
+      if (len < 1e-12) continue;
+      normal[i] /= len;
+      normal[i + 1] /= len;
+      normal[i + 2] /= len;
+    }
+    return normal;
+  }
+
+  /**
+   * Um vértice novo no meio da aresta `a`–`b`, com os atributos dos dois.
+   *
+   * A posição **não** é a média simples. O ponto médio de uma corda
+   * cai sobre o triângulo antigo, e subdividir assim não acrescenta
+   * curvatura nenhuma: a superfície continua exatamente a mesma, só
+   * que com mais vértices. O estrago é no sombreado — a normal de um
+   * vértice é a média dos triângulos que o cercam, e depois de
+   * subdividir todos esses triângulos são coplanares, então cada
+   * vértice passa a ter a normal da faceta em vez da normal da
+   * curva. O rosto inteiro amanhece facetado, com as facetas
+   * grosseiras do original agora visíveis uma a uma.
+   *
+   * A correção é a tesselação de Phong: projetar o ponto médio nos
+   * planos tangentes dos dois extremos e ir até a média das duas
+   * projeções. Isso devolve a curvatura que a malha grossa só
+   * insinuava nas normais, e os triângulos novos deixam de ser
+   * coplanares. O peso 0,75 é o usual — a projeção inteira exagera a
+   * barriga em arestas muito abertas.
+   */
+  private midpoint(a: number, b: number, normal?: number[]): number {
+    const id = this.position.length / 3;
+    let bulge: readonly [number, number, number] = [0, 0, 0];
+    if (normal) {
+      const mx = (this.position[a * 3] + this.position[b * 3]) / 2;
+      const my = (this.position[a * 3 + 1] + this.position[b * 3 + 1]) / 2;
+      const mz = (this.position[a * 3 + 2] + this.position[b * 3 + 2]) / 2;
+      let sx = 0;
+      let sy = 0;
+      let sz = 0;
+      for (const v of [a, b]) {
+        const nx = normal[v * 3];
+        const ny = normal[v * 3 + 1];
+        const nz = normal[v * 3 + 2];
+        const d = (mx - this.position[v * 3]) * nx + (my - this.position[v * 3 + 1]) * ny + (mz - this.position[v * 3 + 2]) * nz;
+        sx += mx - d * nx;
+        sy += my - d * ny;
+        sz += mz - d * nz;
+      }
+      bulge = [(sx / 2 - mx) * 0.75, (sy / 2 - my) * 0.75, (sz / 2 - mz) * 0.75];
+      // O vértice novo herda a normal interpolada dos extremos, para
+      // que o nível seguinte tenha de onde estimar a curvatura sem
+      // varrer a malha inteira de novo.
+      const nx = normal[a * 3] + normal[b * 3];
+      const ny = normal[a * 3 + 1] + normal[b * 3 + 1];
+      const nz = normal[a * 3 + 2] + normal[b * 3 + 2];
+      const len = Math.hypot(nx, ny, nz) || 1;
+      normal.push(nx / len, ny / len, nz / len);
+    }
+    for (let k = 0; k < 3; k += 1) {
+      this.position.push((this.position[a * 3 + k] + this.position[b * 3 + k]) / 2 + bulge[k]);
+      this.color.push((this.color[a * 3 + k] + this.color[b * 3 + k]) / 2);
+      this.origin.push(this.origin[a * 3 + k]);
+    }
+    this.ao.push((this.ao[a] + this.ao[b]) / 2);
+    // Acabamento, osso e zona são categorias, não quantidades: a média
+    // de `pele` com `pano` não é meio tecido, é um valor que o shader
+    // não sabe ler. Herdam de `a`. Toda região que se refina precisa,
+    // portanto, ser de um acabamento e de um osso só — no rosto é o
+    // caso, e `refinamento-nariz.test.ts` verifica que continua sendo.
+    this.finish.push(this.finish[a]);
+    this.zone.push(this.zone[a]);
+    for (let k = 0; k < 4; k += 1) {
+      this.skinIndex.push(this.skinIndex[a * 4 + k]);
+      this.skinWeight.push(this.skinWeight[a * 4 + k]);
+    }
+    return id;
+  }
+
+  /**
+   * Subdivide a malha dentro de uma bola, sem rachar nada.
+   *
+   * Serve para esculpir um traço fino numa superfície grossa. O crânio
+   * tem um anel a cada 2πR/44 ≈ 0,14R no nível `ultra`; um nariz tem
+   * 0,47R de largura. São três vértices atravessados — não dá para
+   * desenhar asa, dorso e ponta com três vértices, e é por isso que o
+   * nariz vinha sendo uma superfície separada, colada por cima.
+   *
+   * O risco de subdividir só um pedaço é o **T**: se um triângulo
+   * ganha um vértice no meio de uma aresta e o vizinho não, a malha
+   * racha exatamente ali, e a emenda volta — agora pior, porque é um
+   * buraco. A saída é decidir pela **aresta**, nunca pelo triângulo:
+   * uma aresta se parte se os dois extremos estão na bola e ela é mais
+   * comprida que o alvo. Como os dois triângulos que a dividem fazem a
+   * mesma pergunta sobre os mesmos dois vértices, respondem igual
+   * sempre, e nenhum T aparece. Cada triângulo vira 1, 2, 3 ou 4
+   * conforme quantas das suas arestas partiram.
+   *
+   * O custo é limitado pela bola e pelo alvo, não pelo nível de
+   * qualidade: a malha grossa de `baixa` se parte mais vezes que a de
+   * `ultra` e as duas chegam perto do mesmo tamanho de aresta no
+   * rosto. É o oposto de subir a densidade do corpo inteiro.
+   *
+   * Precisa rodar depois de `loft` e antes de `sculptFront`.
+   */
+  refine(center: readonly [number, number, number], radius: number, targetEdge: number, maxLevels = 4): void {
+    const [cx, cy, cz] = center;
+    const r2 = radius * radius;
+    const target2 = targetEdge * targetEdge;
+    const inside = (v: number): boolean => {
+      const dx = this.position[v * 3] - cx;
+      const dy = this.position[v * 3 + 1] - cy;
+      const dz = this.position[v * 3 + 2] - cz;
+      return dx * dx + dy * dy + dz * dz <= r2;
+    };
+    const tooLong = (a: number, b: number): boolean => {
+      const dx = this.position[a * 3] - this.position[b * 3];
+      const dy = this.position[a * 3 + 1] - this.position[b * 3 + 1];
+      const dz = this.position[a * 3 + 2] - this.position[b * 3 + 2];
+      return dx * dx + dy * dy + dz * dz > target2;
+    };
+
+    // Calculadas **uma vez**, da malha original. É o que a tesselação
+    // de Phong pede — a curvatura a reproduzir é a que a superfície de
+    // partida insinua, não a que o nível anterior já acrescentou — e
+    // de quebra evita varrer a malha inteira a cada nível, que era o
+    // grosso do custo: com quatro níveis, quatro passagens de normais
+    // sobre 62 mil triângulos para refinar um palmo de rosto.
+    const normal = Array.from(this.vertexNormals());
+
+    for (let level = 0; level < maxLevels; level += 1) {
+      const stride = this.position.length / 3;
+      // Quem está na bola, decidido uma vez por vértice. Sem isto, a
+      // pergunta era refeita seis vezes por triângulo — duas por
+      // aresta — sobre os 62 mil triângulos do corpo, para refinar um
+      // palmo de rosto. O resto do corpo agora sai do caminho com uma
+      // consulta a um byte.
+      const dentro = new Uint8Array(stride);
+      for (let v = 0; v < stride; v += 1) dentro[v] = inside(v) ? 1 : 0;
+      const cache = new Map<number, number>();
+      // Uma aresta entre dois acabamentos (ou dois ossos) diferentes
+      // nunca se parte. O vértice do meio teria de herdar categoria de
+      // um dos lados, e herdaria errado metade das vezes — pele com
+      // acabamento de olho, ou cabelo preso ao osso da bochecha. A
+      // bola do nariz encosta no cabelo e na órbita, então isto não é
+      // hipótese: é o que acontece. Assim o método fica correto para
+      // qualquer bola que o chamador escolher, em vez de depender de
+      // ele escolher bem.
+      const samePart = (a: number, b: number): boolean => {
+        if (this.finish[a] !== this.finish[b]) return false;
+        if (this.zone[a] !== this.zone[b]) return false;
+        for (let k = 0; k < 4; k += 1) {
+          if (this.skinIndex[a * 4 + k] !== this.skinIndex[b * 4 + k]) return false;
+          if (Math.abs(this.skinWeight[a * 4 + k] - this.skinWeight[b * 4 + k]) > 1e-6) return false;
+        }
+        return true;
+      };
+      const splits = (a: number, b: number): boolean =>
+        dentro[a] === 1 && dentro[b] === 1 && samePart(a, b) && tooLong(a, b);
+      const cut = (a: number, b: number): number => {
+        const key = a < b ? a * stride + b : b * stride + a;
+        const found = cache.get(key);
+        if (found !== undefined) return found;
+        const m = this.midpoint(a, b, normal);
+        cache.set(key, m);
+        return m;
+      };
+
+      const src = this.index.slice();
+      this.index.length = 0;
+      for (let t = 0; t < src.length; t += 3) {
+        const i0 = src[t];
+        const i1 = src[t + 1];
+        const i2 = src[t + 2];
+        // Longe da bola não há o que perguntar: é o caso de quase
+        // todo o corpo.
+        if (dentro[i0] === 0 && dentro[i1] === 0 && dentro[i2] === 0) {
+          this.index.push(i0, i1, i2);
+          continue;
+        }
+        const s0 = splits(i0, i1);
+        const s1 = splits(i1, i2);
+        const s2 = splits(i2, i0);
+        const n = (s0 ? 1 : 0) + (s1 ? 1 : 0) + (s2 ? 1 : 0);
+        if (n === 0) {
+          this.index.push(i0, i1, i2);
+        } else if (n === 3) {
+          const m0 = cut(i0, i1);
+          const m1 = cut(i1, i2);
+          const m2 = cut(i2, i0);
+          this.index.push(i0, m0, m2, m0, i1, m1, m2, m1, i2, m0, m1, m2);
+        } else if (n === 1) {
+          // Bissecção: o vértice novo liga ao canto oposto.
+          if (s0) {
+            const m = cut(i0, i1);
+            this.index.push(i0, m, i2, m, i1, i2);
+          } else if (s1) {
+            const m = cut(i1, i2);
+            this.index.push(i1, m, i0, m, i2, i0);
+          } else {
+            const m = cut(i2, i0);
+            this.index.push(i2, m, i1, m, i0, i1);
+          }
+        } else if (s0 && s1) {
+          // Duas arestas: uma ponta mais o quadrilátero que sobra.
+          const m0 = cut(i0, i1);
+          const m1 = cut(i1, i2);
+          this.index.push(m0, i1, m1, i0, m0, m1, i0, m1, i2);
+        } else if (s1 && s2) {
+          const m1 = cut(i1, i2);
+          const m2 = cut(i2, i0);
+          this.index.push(m1, i2, m2, i1, m1, m2, i1, m2, i0);
+        } else {
+          const m2 = cut(i2, i0);
+          const m0 = cut(i0, i1);
+          this.index.push(m2, i0, m0, i2, m2, m0, i2, m0, i1);
+        }
+      }
+      if (cache.size === 0) break; // já está fino o bastante
+    }
+  }
+
+  /**
+   * Levanta a frente da superfície até um campo de altura, com união
+   * suave.
+   *
+   * `height(x, y)` devolve até onde a pele deve avançar em z naquele
+   * ponto, ou `-Infinity` onde o traço não alcança. O vértice vai para
+   * o **máximo suave** entre onde já estava e esse alvo — nunca para
+   * trás. Onde o alvo está atrás da pele (a raiz do nariz, que é mais
+   * funda que a testa) nada acontece, e o traço termina sozinho, sem
+   * borda: é a união que faz a integração, não um disfarce por cima.
+   *
+   * O máximo suave é o polinomial, `mix(a, b, h) + k·h·(1 − h)`, que é
+   * contínuo na primeira derivada. O `max` cru também uniria as duas
+   * superfícies, mas deixaria uma quina de luz em toda a linha de
+   * encontro — exatamente o defeito que se quer eliminar.
+   */
+  sculptFront(
+    center: readonly [number, number, number],
+    radius: number,
+    height: (x: number, y: number) => number,
+    blend: number,
+  ): void {
+    const [cx, cy, cz] = center;
+    const r2 = radius * radius;
+    for (let i = 0; i < this.position.length; i += 3) {
+      const x = this.position[i];
+      const y = this.position[i + 1];
+      const z = this.position[i + 2];
+      const dx = x - cx;
+      const dy = y - cy;
+      const dz = z - cz;
+      // A bola também é o que protege a nuca: ela fica a mais de um
+      // raio de cabeça daqui, e um campo de altura em z puxaria o
+      // crânio inteiro para a frente se fosse aplicado sem limite.
+      if (dx * dx + dy * dy + dz * dz > r2) continue;
+      const aim = height(x, y);
+      if (!Number.isFinite(aim)) continue;
+      const h = Math.min(1, Math.max(0, 0.5 + (0.5 * (aim - z)) / blend));
+      this.position[i + 2] = z * (1 - h) + aim * h + blend * h * (1 - h);
+    }
+  }
+
   /**
    * Achata uma região contra um plano horizontal — a sola do pé.
    *
@@ -404,11 +711,231 @@ export class SurfaceBuilder {
     }
   }
 
+  /**
+   * Tinge os vértices dentro de uma região elipsoidal.
+   *
+   * O irmão de `feature`: aquele empurra a superfície, este pinta a
+   * que já existe. Serve para o que é cor e não é forma — o rubor das
+   * maçãs, o vermelho dos lábios, a sombra de uma dobra. Antes, o
+   * rubor eram duas bolas achatadas coladas na bochecha, e elas
+   * furavam a silhueta: de perfil, apareciam duas abas rosa saindo do
+   * rosto. Cor não precisa de geometria.
+   *
+   * @param amount 0 não muda nada, 1 substitui a cor no centro.
+   */
+  paint(
+    center: readonly [number, number, number],
+    radius: readonly [number, number, number],
+    color: THREE.ColorRepresentation,
+    amount: number,
+    falloff = 1.4,
+  ): void {
+    const [cx, cy, cz] = center;
+    const [rx, ry, rz] = radius;
+    const tone = new THREE.Color(color);
+    for (let i = 0, c = 0; i < this.position.length; i += 3, c += 3) {
+      const dx = (this.position[i] - cx) / rx;
+      const dy = (this.position[i + 1] - cy) / ry;
+      const dz = (this.position[i + 2] - cz) / rz;
+      const d2 = dx * dx + dy * dy + dz * dz;
+      if (d2 > 9) continue;
+      const w = Math.exp(-d2 * falloff) * amount;
+      if (w < 0.002) continue;
+      this.color[c] += (tone.r - this.color[c]) * w;
+      this.color[c + 1] += (tone.g - this.color[c + 1]) * w;
+      this.color[c + 2] += (tone.b - this.color[c + 2]) * w;
+    }
+  }
+
+  /**
+   * Oclusão ambiente assada na cor dos vértices.
+   *
+   * É o que mais separa um modelo cru de um acabado, e o que as
+   * referências de qualidade têm e este rosto não tinha: sombra nas
+   * órbitas, sob o queixo, na dobra do pescoço, embaixo do lábio,
+   * entre as pernas, por baixo da saia. Sem isso cada superfície
+   * recebe a mesma luz do céu e o rosto fica chapado, por mais
+   * anatomia que tenha.
+   *
+   * O método é o de nuvem de pontos: para cada vértice, os vizinhos
+   * que estão **à frente da sua normal** o ocludem, tanto mais quanto
+   * mais perto. Numa dobra, o vértice tem vizinhos dos dois lados
+   * dentro do hemisfério e escurece; numa superfície aberta, quase
+   * nenhum.
+   *
+   * Uma grade espacial evita o custo quadrático: com 37 mil vértices,
+   * comparar todos contra todos seriam 1,4 bilhão de pares. Dividido
+   * em células do tamanho do raio, cada vértice só olha as 27 células
+   * à sua volta.
+   */
+  /** Amostras de vizinhança por célula, na oclusão. Ver `occlude`. */
+  private static readonly OCCLUSION_SAMPLES = 3;
+
+  occlude(radius: number, strength: number, floor = 0.45): void {
+    const count = this.position.length / 3;
+    if (count === 0 || radius <= 0) return;
+
+    const normal = this.vertexNormals();
+
+    // Grade espacial, uma célula por raio.
+    const cell = radius;
+    const grid = new Map<number, number[]>();
+    const key = (x: number, y: number, z: number): number =>
+      (Math.floor(x / cell) * 73856093) ^ (Math.floor(y / cell) * 19349663) ^ (Math.floor(z / cell) * 83492791);
+    for (let v = 0; v < count; v += 1) {
+      const i = v * 3;
+      const k = key(this.position[i], this.position[i + 1], this.position[i + 2]);
+      const bucket = grid.get(k);
+      if (bucket) bucket.push(v);
+      else grid.set(k, [v]);
+    }
+
+    // As vinte e sete células vizinhas são uma propriedade da
+    // célula, não do vértice: todos os vértices de uma mesma célula
+    // enxergam exatamente a mesma vizinhança. Montar essa lista uma
+    // vez por célula, e não uma vez por vértice, tira um milhão de
+    // consultas à tabela sem mudar um número sequer do resultado.
+    const r2 = radius * radius;
+    const candidates: number[] = [];
+    for (const [, cellMembers] of grid) {
+      const first = cellMembers[0] * 3;
+      const cxi = Math.floor(this.position[first] / cell);
+      const cyi = Math.floor(this.position[first + 1] / cell);
+      const czi = Math.floor(this.position[first + 2] / cell);
+      candidates.length = 0;
+      for (let gx = -1; gx <= 1; gx += 1) {
+        for (let gy = -1; gy <= 1; gy += 1) {
+          for (let gz = -1; gz <= 1; gz += 1) {
+            const bucket = grid.get(((cxi + gx) * 73856093) ^ ((cyi + gy) * 19349663) ^ ((czi + gz) * 83492791));
+            if (!bucket) continue;
+            // A amostragem acontece **aqui**, ao montar a lista — não
+            // depois, ao percorrê-la. Copiar as vinte e sete células
+            // inteiras para só então ler uma amostra seria pagar a
+            // enumeração completa de novo, que é exatamente o custo
+            // que a grade existe para evitar.
+            const stride = Math.max(1, Math.ceil(bucket.length / SurfaceBuilder.OCCLUSION_SAMPLES));
+            for (let bi = 0; bi < bucket.length; bi += stride) candidates.push(bucket[bi]);
+          }
+        }
+      }
+      // Amostragem, não enumeração. A cabeça concentra dezenas de
+      // milhares de vértices num palmo, então a vizinhança lá dentro
+      // tem milhares — e varrê-la inteira devolvia o custo quadrático
+      // que a grade existe para evitar. A oclusão é um sinal de
+      // frequência muito baixa: algumas dezenas de amostras dão o
+      // mesmo número (medido: o canto do olho
+      // dá 0,33 com três amostras por célula e 0,33 com doze).
+      for (const v of cellMembers) {
+        const i = v * 3;
+        const px = this.position[i];
+        const py = this.position[i + 1];
+        const pz = this.position[i + 2];
+        let nx = normal[i];
+        let ny = normal[i + 1];
+        let nz = normal[i + 2];
+        const len = Math.hypot(nx, ny, nz);
+        if (len < 1e-9) continue;
+        nx /= len;
+        ny /= len;
+        nz /= len;
+
+        let sum = 0;
+        let seen = 0;
+        for (let ci = 0; ci < candidates.length; ci += 1) {
+          const w = candidates[ci];
+          if (w === v) continue;
+          const j = w * 3;
+          const dx = this.position[j] - px;
+          const dy = this.position[j + 1] - py;
+          const dz = this.position[j + 2] - pz;
+          const d2 = dx * dx + dy * dy + dz * dz;
+          if (d2 > r2 || d2 < 1e-12) continue;
+          seen += 1;
+          const d = Math.sqrt(d2);
+          // Só ocludem os vizinhos à frente da normal.
+          const facing = (dx * nx + dy * ny + dz * nz) / d;
+          if (facing <= 0) continue;
+          sum += facing * (1 - d / radius);
+        }
+        // Normalizado pela vizinhança: assim a malha densa e a
+        // esparsa recebem a mesma sombra, e o LOD não muda a cor do
+        // personagem.
+        //
+        // E vai para um atributo próprio, **não** multiplicado na cor.
+        // Oclusão ambiente descreve quanta luz do céu chega a um
+        // ponto; não tem nada a dizer sobre o sol, que vem de uma
+        // direção só e ou bate ou não bate. Misturá-la no albedo
+        // apagava os dois juntos: a pele na dobra perdia a luz direta
+        // também e saía cinza-oliva, porque o que restava era o
+        // ambiente esverdeado do chão. Quem separa os dois é o
+        // shader.
+        if (seen === 0) continue;
+        this.ao[v] = Math.max(floor, 1 - (sum / seen) * strength);
+      }
+    }
+
+    this.smoothOcclusion(2);
+  }
+
+  /**
+   * Passa um filtro de média na oclusão, pelos vizinhos da malha.
+   *
+   * A estimativa acima é uma **amostra**: três vértices por célula,
+   * não a vizinhança inteira. Onde a malha tem densidade parecida com
+   * a do resto, a amostra é quase a enumeração e o resultado é
+   * estável. Onde a malha é localmente muito mais fina — o nariz, que
+   * é refinado de propósito — cada célula passa a ter dezenas de
+   * vértices, a mesma amostra de três passa a representar muito mais
+   * gente, e a variância entre vizinhos explode. O efeito na tela é
+   * exatamente o que apareceu no primeiro render do nariz esculpido:
+   * manchas, do tamanho de um vértice, confinadas à região refinada.
+   *
+   * Aumentar o número de amostras custaria em toda a malha para
+   * resolver num palmo dela. Filtrar é mais barato e mais correto:
+   * oclusão ambiente é um sinal de frequência muito baixa, então
+   * média com os vizinhos não apaga informação nenhuma — só o ruído
+   * da amostragem. Duas passadas bastam, e o custo é linear no número
+   * de arestas.
+   */
+  private smoothOcclusion(passes: number): void {
+    const count = this.ao.length;
+    if (count === 0 || this.index.length === 0) return;
+    const total = new Float32Array(count);
+    const degree = new Uint16Array(count);
+    for (let t = 0; t < this.index.length; t += 3) {
+      const a = this.index[t];
+      const b = this.index[t + 1];
+      const c = this.index[t + 2];
+      degree[a] += 2;
+      degree[b] += 2;
+      degree[c] += 2;
+    }
+    for (let pass = 0; pass < passes; pass += 1) {
+      total.fill(0);
+      for (let t = 0; t < this.index.length; t += 3) {
+        const a = this.index[t];
+        const b = this.index[t + 1];
+        const c = this.index[t + 2];
+        total[a] += this.ao[b] + this.ao[c];
+        total[b] += this.ao[a] + this.ao[c];
+        total[c] += this.ao[a] + this.ao[b];
+      }
+      for (let v = 0; v < count; v += 1) {
+        if (degree[v] === 0) continue;
+        // Metade do próprio valor, metade da vizinhança: suaviza sem
+        // achatar o contraste que a dobra realmente tem.
+        this.ao[v] = this.ao[v] * 0.5 + (total[v] / degree[v]) * 0.5;
+      }
+    }
+  }
+
   /** Fecha a malha: normais médias, limites, atributos de pele e morph. */
   build(): THREE.BufferGeometry {
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(this.position, 3));
     geometry.setAttribute('color', new THREE.Float32BufferAttribute(this.color, 3));
+    geometry.setAttribute('aFinish', new THREE.Float32BufferAttribute(this.finish, 1));
+    geometry.setAttribute('aAo', new THREE.Float32BufferAttribute(this.ao, 1));
     geometry.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(this.skinIndex, 4));
     geometry.setAttribute('skinWeight', new THREE.Float32BufferAttribute(this.skinWeight, 4));
     geometry.setAttribute('aZone', new THREE.Float32BufferAttribute(this.zone, 1));

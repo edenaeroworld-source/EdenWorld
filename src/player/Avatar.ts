@@ -6,6 +6,7 @@ import { Ch, type Pose } from './AvatarAnimator';
 import { type Expression, FaceController, buildFaceGeometry } from './AvatarFace';
 import { type AvatarAppearance, DEFAULT_APPEARANCE } from './AvatarAppearance';
 import { buildBodyGeometry } from './body/BodyBuilder';
+import { finishVaryingGLSL, finishVertexGLSL } from './body/BodyFinish';
 import {
   BODY_DETAIL,
   type BodyDetailLevel,
@@ -95,6 +96,20 @@ vec3 edenBodyNormal(vec3 pos, vec3 nrm) {
  *
  * Três chamadas de desenho: corpo, rosto e auréola.
  */
+/**
+ * Se os avatares nascem com o material físico completo.
+ *
+ * Quem decide é o perfil de qualidade, no arranque e quando o jogador
+ * troca a configuração. Um avatar já em cena só muda por
+ * `setMaterialTier`, porque trocar material é recompilar shader — e
+ * isso não se faz no meio de um quadro sem motivo.
+ */
+let physicalByDefault = true;
+
+export function setAvatarMaterialDefault(physical: boolean): void {
+  physicalByDefault = physical;
+}
+
 export class Avatar {
   /** Origem nos pés; `rotation.y` é a direção do personagem. */
   readonly root = new THREE.Group();
@@ -108,7 +123,7 @@ export class Avatar {
   /** Mistura de expressões, fala e piscadas. */
   readonly face: FaceController;
   private readonly halo: THREE.Mesh;
-  private readonly material: THREE.MeshStandardMaterial;
+  private material: THREE.MeshStandardMaterial;
   /** Material de profundidade com a mesma deformação: a sombra acompanha. */
   private readonly depthMaterial: THREE.MeshDepthMaterial;
   private readonly haloMaterial: THREE.MeshBasicMaterial;
@@ -124,31 +139,110 @@ export class Avatar {
   private currentProportions: BodyProportions = DEFAULT_PROPORTIONS;
   private currentDetail: BodyDetailLevel = 'alta';
   private shadowsOn = true;
+  /** Se o material corrente tem os termos de tecido e verniz ligados. */
+  private physical: boolean;
+
+  /**
+   * Monta o material do corpo.
+   *
+   * `physical` liga os termos de brilho de tecido e de verniz, que são
+   * o que separa pano de pele de olho. Eles custam, e as máquinas
+   * fracas rodam o mesmo shader sem eles — a rugosidade por vértice,
+   * que é o grosso do ganho, continua nos dois casos.
+   */
+  private buildMaterial(physical: boolean): THREE.MeshStandardMaterial {
+    // Material físico quando a máquina aguenta: brilho de tecido e
+      // verniz saem daqui, e são o que separa pele de pano de olho. Nas
+      // máquinas fracas o mesmo shader roda sem esses dois termos — a
+      // rugosidade por vértice continua, que é o grosso do ganho.
+      const material = physical
+        ? new THREE.MeshPhysicalMaterial({
+            vertexColors: true,
+            roughness: 0.52,
+            metalness: 0.02,
+            // O mundo já guarda um PMREM do céu em `scene.environment`, e o
+            // resto do cenário o lê entre 1,25 e 1,8. O avatar lia com 1, o
+            // que o deixava mais fosco que tudo à volta.
+            envMapIntensity: 1.15,
+            // Precisam ser diferentes de zero para o Three.js compilar os
+            // termos; o valor por fragmento vem do acabamento.
+            sheen: 1,
+            sheenRoughness: 0.9,
+            sheenColor: new THREE.Color(0x1a1a1a),
+            clearcoat: 1,
+            clearcoatRoughness: 0.12,
+          })
+        : new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.52, metalness: 0.02, envMapIntensity: 1.15 });
+      material.name = 'avatar';
+      // Luz de preenchimento: soma um pouco da própria cor para que a pele e as
+      // roupas não fiquem acinzentadas na sombra (a luz ambiente é azulada).
+      material.onBeforeCompile = (shader) => {
+        shader.uniforms.avatarFill = this.fillUniform;
+        shader.uniforms.uBust = this.bustUniform;
+        shader.uniforms.uCurve = this.curveUniform;
+        shader.uniforms.uGestation = this.gestationUniform;
+        shader.fragmentShader = shader.fragmentShader
+          .replace('#include <common>', `#include <common>\nuniform float avatarFill;\n${finishVaryingGLSL()}`)
+          .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n\ttotalEmissiveRadiance += diffuseColor.rgb * avatarFill;')
+          // A rugosidade e o metal passam a vir do acabamento do vértice.
+          .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = edenRoughness(vFinish);')
+          .replace('#include <metalnessmap_fragment>', 'float metalnessFactor = edenMetalness(vFinish);')
+          // A oclusão assada entra aqui, no mesmo ponto em que o
+          // Three.js aplicaria um `aoMap`: depois das luzes, e só
+          // sobre a parcela indireta.
+          // O mapa de ambiente deixa de dobrar a luz ambiente: fica
+          // com o reflexo, que é o que só ele faz.
+          // `iblIrradiance` só acumula o que vem do mapa de ambiente —
+          // o mapa de luz entra em `irradiance`, à parte —, então
+          // escalá-lo depois do include atinge exatamente a parcela
+          // que se quer. (Substituir dentro do chunk não funciona:
+          // `onBeforeCompile` recebe os `#include` ainda fechados.)
+          .replace(
+            '#include <lights_fragment_maps>',
+            '#include <lights_fragment_maps>\n\tiblIrradiance *= edenEnvDiffuse( vFinish );',
+          )
+          .replace(
+            '#include <aomap_fragment>',
+            `#include <aomap_fragment>
+\tfloat edenAo = vAo;
+\treflectedLight.indirectDiffuse *= edenAo;
+\t{
+\t\tfloat edenDotNV = saturate( dot( geometryNormal, geometryViewDir ) );
+\t\treflectedLight.indirectSpecular *= edenApplyOcclusion( edenAo, material.roughness, edenDotNV );
+\t}`,
+          );
+        if (physical) {
+          // Depois que o Three.js monta o `material`, os termos de
+          // tecido e de verniz são remarcados por fragmento. Antes
+          // disso não adianta: `lights_physical_fragment` os sobrescreve.
+          shader.fragmentShader = shader.fragmentShader.replace(
+            '#include <lights_physical_fragment>',
+            `#include <lights_physical_fragment>
+\tmaterial.sheenColor *= edenSheen(vFinish);
+\tmaterial.clearcoat = edenClearcoat(vFinish);
+\tmaterial.clearcoatRoughness = mix(0.5, 0.04, edenClearcoat(vFinish));`,
+          );
+        }
+        // A deformação acontece no espaço de bind, **antes** da pele: é por
+        // isso que o volume continua certo com o braço levantado ou o corpo
+        // sentado. O Three.js injeta o `skinning_vertex` logo depois deste
+        // ponto, então a ordem sai de graça.
+        shader.vertexShader = shader.vertexShader
+          .replace(
+            '#include <common>',
+            `#include <common>\n${aftersMorphGLSL()}\n${gestationGLSL()}\n${bodyMorphGLSL()}\n${finishVertexGLSL()}`,
+          )
+          .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\n\tobjectNormal = edenBodyNormal(position, objectNormal);')
+          .replace('#include <begin_vertex>', '#include <begin_vertex>\n\ttransformed = edenBodyPosition(transformed);\n\tvFinish = aFinish;\n\tvAo = aAo;');
+      };
+      material.customProgramCacheKey = () => `eden-avatar-organico-${physical ? 'fisico' : 'simples'}`;
+      return material;
+  }
 
   constructor(appearance: AvatarAppearance = DEFAULT_APPEARANCE, proportions: BodyProportions = DEFAULT_PROPORTIONS) {
     this.root.name = 'avatar';
-    this.material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.52, metalness: 0.02 });
-    this.material.name = 'avatar';
-    // Luz de preenchimento: soma um pouco da própria cor para que a pele e as
-    // roupas não fiquem acinzentadas na sombra (a luz ambiente é azulada).
-    this.material.onBeforeCompile = (shader) => {
-      shader.uniforms.avatarFill = this.fillUniform;
-      shader.uniforms.uBust = this.bustUniform;
-      shader.uniforms.uCurve = this.curveUniform;
-      shader.uniforms.uGestation = this.gestationUniform;
-      shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', '#include <common>\nuniform float avatarFill;')
-        .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n\ttotalEmissiveRadiance += diffuseColor.rgb * avatarFill;');
-      // A deformação acontece no espaço de bind, **antes** da pele: é por
-      // isso que o volume continua certo com o braço levantado ou o corpo
-      // sentado. O Three.js injeta o `skinning_vertex` logo depois deste
-      // ponto, então a ordem sai de graça.
-      shader.vertexShader = shader.vertexShader
-        .replace('#include <common>', `#include <common>\n${aftersMorphGLSL()}\n${gestationGLSL()}\n${bodyMorphGLSL()}`)
-        .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\n\tobjectNormal = edenBodyNormal(position, objectNormal);')
-        .replace('#include <begin_vertex>', '#include <begin_vertex>\n\ttransformed = edenBodyPosition(transformed);');
-    };
-    this.material.customProgramCacheKey = () => 'eden-avatar-organico';
+    this.physical = physicalByDefault;
+    this.material = this.buildMaterial(this.physical);
 
     // O mapa de sombras usa um material próprio: sem isto a sombra do
     // avatar continuaria com a silhueta antiga enquanto o corpo muda.
@@ -306,6 +400,23 @@ export class Avatar {
    * A silhueta e as proporções não mudam — só a contagem de vértices —
    * então ninguém encolhe nem engorda ao mudar a qualidade gráfica.
    */
+  /**
+   * Liga ou desliga os termos caros do material deste avatar.
+   *
+   * Recompila o shader, então só age quando o valor muda mesmo. É
+   * chamado pelo mesmo caminho que já empurra sombras para o jogador
+   * (`Engine`) e para os habitantes (`NpcSystem`).
+   */
+  setMaterialTier(physical: boolean): void {
+    if (physical === this.physical) return;
+    this.physical = physical;
+    const old = this.material;
+    this.material = this.buildMaterial(physical);
+    this.body.material = this.material;
+    this.faceMesh.material = this.material;
+    old.dispose();
+  }
+
   setDetail(detail: BodyDetailLevel): void {
     if (detail === this.currentDetail) return;
     this.currentDetail = detail;

@@ -33,6 +33,7 @@ import { renderBaseMap } from '../interface/MapRenderer';
 import { DialogScreen, LoadingScreen, MainMenuScreen, PauseScreen, showErrorScreen } from '../interface/Screens';
 import { SettingsScreen } from '../interface/SettingsScreen';
 import { UIManager } from '../interface/UIManager';
+import { setAvatarMaterialDefault } from '../player/Avatar';
 import type { AvatarAppearance } from '../player/AvatarAppearance';
 import { Player } from '../player/Player';
 import type { MoveIntent } from '../player/PlayerMotor';
@@ -502,12 +503,18 @@ export class Engine {
       this.interiorScene?.applyQuality(profile);
       this.afters.applyQuality(profile.particleDensity, profile.environmentEffects);
       this.player.avatar.setShadows(profile.shadows);
+      this.player.avatar.setMaterialTier(profile.characterPhysical);
+      setAvatarMaterialDefault(profile.characterPhysical);
       const size = this.renderer.size;
       this.world.setViewport(size.width, size.height, this.renderer.effectivePixelRatio, this.rig.fov);
     });
     this.world.applyQuality(this.quality.current);
     this.afters.applyQuality(this.quality.current.particleDensity, this.quality.current.environmentEffects);
     this.player.avatar.setShadows(this.quality.current.shadows);
+    this.player.avatar.setMaterialTier(this.quality.current.characterPhysical);
+    // Os avatares criados daqui para a frente (habitantes, pré-visualização
+    // do criador) já nascem no acabamento certo, sem recompilar depois.
+    setAvatarMaterialDefault(this.quality.current.characterPhysical);
     this.renderer.onResize((width, height) => {
       this.rig.setViewport(width, height);
       this.world.setViewport(width, height, this.renderer.effectivePixelRatio, this.rig.fov);

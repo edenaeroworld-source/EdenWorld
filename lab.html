@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>EDENWORLD — bancada de validação dos personagens</title>
+    <style>
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; background: #0d1621; color: #e8f2ff; font: 14px/1.45 system-ui, sans-serif; }
+      #tela { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+      #painel {
+        position: fixed; top: 12px; left: 12px; z-index: 2; width: 268px;
+        background: rgba(10, 20, 32, 0.84); border: 1px solid rgba(140, 200, 255, 0.22);
+        border-radius: 12px; padding: 14px 16px; backdrop-filter: blur(8px);
+      }
+      h1 { font-size: 13px; margin: 0 0 10px; letter-spacing: 0.04em; text-transform: uppercase; color: #8fd0ff; }
+      label { display: block; margin: 10px 0 3px; font-size: 12px; color: #a8c4dd; }
+      select, input[type='range'] { width: 100%; }
+      select { background: #16293c; color: #e8f2ff; border: 1px solid rgba(140, 200, 255, 0.28); border-radius: 6px; padding: 5px 7px; }
+      button { width: 100%; margin-top: 12px; padding: 7px; border-radius: 7px; cursor: pointer;
+        background: #1d4b70; color: #e8f2ff; border: 1px solid rgba(140, 200, 255, 0.35); }
+      .v { float: right; color: #7fe3b0; font-variant-numeric: tabular-nums; }
+      #gpu { position: fixed; bottom: 10px; left: 12px; right: 12px; z-index: 2; font-size: 11px;
+        color: #7ea6c8; background: rgba(10, 20, 32, 0.7); padding: 6px 10px; border-radius: 7px; }
+    </style>
+  </head>
+  <body>
+    <canvas id="tela"></canvas>
+    <div id="painel">
+      <h1>Bancada — Character Remaster</h1>
+
+      <label for="modo">Cena</label>
+      <select id="modo">
+        <option value="corpo">Corpo inteiro</option>
+        <option value="rosto">Rosto de perto</option>
+        <option value="niveis">Os quatro níveis lado a lado</option>
+        <option value="bichos">Bichos</option>
+        <option value="elenco">Elenco de validação</option>
+      </select>
+
+      <label for="nivel">Nível de qualidade</label>
+      <select id="nivel">
+        <option value="ultra">ultra (ULTRA)</option>
+        <option value="alta">alta (HIGH)</option>
+        <option value="media">media (MOBILE)</option>
+        <option value="baixa">baixa (MOBILE fraco)</option>
+      </select>
+
+      <label for="roupa">Roupa</label>
+      <select id="roupa">
+        <option value="vestido">vestido</option>
+        <option value="casual">casual</option>
+        <option value="esportivo">esportivo</option>
+        <option value="formal">formal</option>
+      </select>
+
+      <label for="bust">AfterBust® <span class="v" id="bustv">0%</span></label>
+      <input id="bust" type="range" min="0" max="2.5" step="0.05" value="0" />
+
+      <label for="curve">AfterCurve® <span class="v" id="curvev">0%</span></label>
+      <input id="curve" type="range" min="0" max="2.5" step="0.05" value="0" />
+
+      <label for="hora">Hora do dia <span class="v" id="horav">10h</span></label>
+      <input id="hora" type="range" min="0" max="23" step="1" value="10" />
+
+      <button id="girar">Girar / parar</button>
+    </div>
+    <div id="gpu">…</div>
+    <script type="module" src="/src/lab/main.ts"></script>
+  </body>
+</html>

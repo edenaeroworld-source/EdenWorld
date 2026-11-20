@@ -1,5 +1,6 @@
 import type { PlatformInfo } from '../core/Platform';
 import { clamp } from '../utils/math';
+import type { BodyDetailLevel } from '../player/body/BodyRig';
 
 export type QualityLevel = 'baixa' | 'media' | 'alta' | 'ultra';
 
@@ -58,6 +59,22 @@ export interface QualityProfile {
   npcRoutinePerFrame: number;
   /** Efeitos de ambiente (brilho do sol na água, poeira luminosa, auras densas). */
   environmentEffects: boolean;
+  /**
+   * Densidade máxima de malha de personagem, para quem está perto.
+   *
+   * O LOD por distância de `NpcSystem` continua mandando dentro desse
+   * teto: numa máquina média ninguém passa de `alta`, por mais perto
+   * que esteja. É o que liga os três perfis pedidos — ULTRA, HIGH e
+   * MOBILE — à geometria dos personagens.
+   */
+  characterDetail: BodyDetailLevel;
+  /**
+   * Se o material do avatar inclui os termos de brilho de tecido e de
+   * verniz do olho. Custam compilação e tempo de fragmento; a
+   * rugosidade por vértice, que é o grosso do ganho, não depende
+   * disto e vale em todos os perfis.
+   */
+  characterPhysical: boolean;
 }
 
 const PRESETS: Record<QualityLevel, QualityProfile> = {
@@ -82,6 +99,8 @@ const PRESETS: Record<QualityLevel, QualityProfile> = {
     npcSimHz: 12,
     npcRoutinePerFrame: 1,
     environmentEffects: false,
+    characterDetail: 'baixa',
+    characterPhysical: false,
   },
   media: {
     level: 'media',
@@ -104,6 +123,8 @@ const PRESETS: Record<QualityLevel, QualityProfile> = {
     npcSimHz: 20,
     npcRoutinePerFrame: 2,
     environmentEffects: true,
+    characterDetail: 'media',
+    characterPhysical: false,
   },
   alta: {
     level: 'alta',
@@ -126,6 +147,8 @@ const PRESETS: Record<QualityLevel, QualityProfile> = {
     npcSimHz: 30,
     npcRoutinePerFrame: 2,
     environmentEffects: true,
+    characterDetail: 'alta',
+    characterPhysical: true,
   },
   ultra: {
     level: 'ultra',
@@ -148,6 +171,8 @@ const PRESETS: Record<QualityLevel, QualityProfile> = {
     npcSimHz: 0,
     npcRoutinePerFrame: 3,
     environmentEffects: true,
+    characterDetail: 'ultra',
+    characterPhysical: true,
   },
 };
 
@@ -214,6 +239,17 @@ export function suggestQualityLevel(hints: DeviceHints): QualityLevel {
   if (cores >= 8) return 'alta';
   if (cores >= 4) return 'media';
   return 'baixa';
+}
+
+/**
+ * Perfil bruto de um nível, sem passar pelo `QualitySystem`.
+ *
+ * Serve a quem só quer consultar o que um nível significa — a
+ * bancada de validação, por exemplo, que mostra lado a lado o que
+ * cada perfil pede de malha e de material.
+ */
+export function profileFor(level: QualityLevel): QualityProfile {
+  return PRESETS[level];
 }
 
 export function isQualityLevel(value: unknown): value is QualityLevel {
