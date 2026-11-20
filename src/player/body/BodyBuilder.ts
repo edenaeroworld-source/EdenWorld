@@ -20,10 +20,10 @@
 
 import * as THREE from 'three';
 import { Zone as MorphZone } from '../../afters/AftersMorph';
-import { TAU } from '../../utils/math';
+import { TAU, smoothstep } from '../../utils/math';
 import type { AvatarAppearance } from '../AvatarAppearance';
 import type { BodyProportions } from './BodyProportions';
-import { Bone, type BodyDetail, type BodyMetrics, FACE, Finish, HEAD_CENTER, SKIRT_BREAK_Y, SKIRT_FOLLOW_WALK, SKIRT_HEM_QUADRANTS, SKIRT_QUADRANTS, morphOrigins } from './BodyRig';
+import { Bone, type BodyDetail, type BodyMetrics, FACE, Finish, type FinishId, HEAD_CENTER, SKIRT_BREAK_Y, SKIRT_FOLLOW_WALK, SKIRT_HEM_QUADRANTS, SKIRT_QUADRANTS, morphOrigins } from './BodyRig';
 import { type FollowSpec, type SkinBinding, type Station, SurfaceBuilder, subdivideProfile } from './BodySurface';
 
 type Hex = THREE.ColorRepresentation;
@@ -112,17 +112,22 @@ export function buildBodyGeometry(a: AvatarAppearance, p: BodyProportions, m: Bo
   const accent = 0x29c8ff;
   const outfit = a.outfit;
 
-  const longSleeves = outfit === 'aero';
+  // O Manto Aurora: vestido longo de mangas compridas em vidro
+  // líquido. É o traje da Luma na arte oficial — gola alta, cauda, e
+  // um acabamento que não é pano.
+  const aurora = outfit === 'aurora';
+  const longSleeves = outfit === 'aero' || aurora;
   const bareArms = outfit === 'esportivo' || outfit === 'vestido';
   const longPants = outfit === 'casual' || outfit === 'aero';
   const bareLegs = outfit === 'vestido';
-  const dress = outfit === 'vestido';
+  const dress = outfit === 'vestido' || aurora;
+  const cloth: FinishId = aurora ? Finish.Glass : Finish.Cloth;
 
   // Cada parte declara o seu acabamento antes de ser varrida.
-  b.surface = Finish.Cloth;
+  b.surface = cloth;
   buildTorso(b, { m, detail, skin, top, bottom, accent, outfit, dress, origins });
   for (const side of [1, -1] as const) {
-    buildArm(b, side, { m, detail, skin, top, accent, longSleeves, bareArms, outfit });
+    buildArm(b, side, { m, detail, skin, top, accent, longSleeves, bareArms, outfit, cloth });
     buildLeg(b, side, { m, detail, skin, bottom, shoe, longPants, bareLegs, outfit, origins });
   }
   b.surface = Finish.Skin;
@@ -130,8 +135,8 @@ export function buildBodyGeometry(a: AvatarAppearance, p: BodyProportions, m: Bo
   // Onde a saia começa no buffer: é assim que um teste separa o tecido
   // do corpo sem adivinhar por cor ou por raio.
   const skirtStart = b.vertexCount;
-  b.surface = Finish.Cloth;
-  if (dress) buildSkirt(b, m, detail, top, origins);
+  b.surface = cloth;
+  if (dress) buildSkirt(b, m, detail, top, origins, aurora ? GOWN_HEM_Y : SKIRT_HEM_Y);
 
   // A oclusão é a última coisa antes de fechar a malha: ela precisa do
   // corpo inteiro montado para saber o que esconde o quê. É daqui que
@@ -227,6 +232,20 @@ function buildTorso(b: SurfaceBuilder, ctx: TorsoCtx): void {
   b.feature([0, 0.285, 0.09], [0.11, 0.07, 0.07], 0.01, [0, 0, 1]);
   b.feature([0, 0.3, -0.09], [0.12, 0.06, 0.06], 0.006, [0, 0, -1]);
 
+  if (outfit === 'aurora') {
+    // Gola alta: o manto fecha no pescoço, como na arte oficial. Sobe
+    // pelo próprio pescoço, sem folga, para não flutuar quando a
+    // cabeça gira — pertence ao osso da cabeça, como a gola Aero.
+    const collar: Ctl[] = [
+      { y: m.neckY - 0.03, rx: m.neckR * 1.1, rz: m.neckR * 1.1, color: top, bone: Bone.Head },
+      { y: m.neckY + 0.025, rx: m.neckR * 1.14, rz: m.neckR * 1.14, color: top, bone: Bone.Head },
+      { y: m.neckY + 0.07, rx: m.neckR * 1.2, rz: m.neckR * 1.2, color: shade(top, 0.3), bone: Bone.Head },
+    ];
+    b.loft(subdivideProfile(toStations(collar), detail.steps), { segments: Math.max(12, detail.segments) });
+    // O fecho luminoso que desce do queixo ao peito.
+    b.addGeometry(new THREE.BoxGeometry(0.012, 0.17, 0.008), { color: 0x9ff4ff, skin: { bone: Bone.Torso }, zone: MorphZone.Bust, origin: torso }, new THREE.Matrix4().makeTranslation(0, 0.33, 0.082));
+  }
+
   if (outfit === 'aero') {
     const ring = new THREE.TorusGeometry(m.neckR * 1.26, 0.015, 6, Math.max(10, detail.segments));
     b.addGeometry(ring, { color: accent, skin: { bone: Bone.Head } }, new THREE.Matrix4().makeRotationX(Math.PI / 2).setPosition(0, m.neckY - 0.045, 0));
@@ -289,6 +308,28 @@ const PELVIS_PROFILE: readonly { y: number; w: number; rz: number; rzBack: numbe
 const HIP_JOINT_Y = -0.02;
 /** Onde a barra da saia termina — acima do joelho. */
 const SKIRT_HEM_Y = -0.36;
+/**
+ * A barra do Manto Aurora, que é um vestido longo.
+ *
+ * O comprimento não é escolha de gosto: é o que a folga de passada
+ * permite. Ela cresce com a distância à junta do quadril, e a peça
+ * precisa ser larga o bastante para a coxa balançar dentro dela —
+ * medido com a própria conta de `strideRoom`:
+ *
+ * | barra  | folga exigida |
+ * |--------|---------------|
+ * | −0,36 (saia curta) | 214 mm |
+ * | −0,46 (abaixo do joelho) | 277 mm |
+ * | −0,62 (meia canela) | 378 mm |
+ * | −0,80 (chão) | 491 mm |
+ *
+ * A −0,62 o manto precisa abrir 38 cm de cada lado e deixa de ser
+ * coluna: vira crinolina. A −0,46 ele custa 6 cm a mais que a saia
+ * que já existia, e a silhueta continua reta. O vestido que varre o
+ * chão da arte oficial exigiria que a barra acompanhasse a perna
+ * (ver o relatório), o que é mudança no contrato da animação.
+ */
+const GOWN_HEM_Y = -0.46;
 
 /**
  * O perfil da coxa, em frações de `legTop`, nas alturas de `buildLeg`.
@@ -380,8 +421,8 @@ function swellFor(rx: number, rz: number, cx: number, cz: number, radius: number
  * que cai. Sem essa variação, ou a cintura fica inflada ou a barra
  * fica colada na perna.
  */
-function skirtClearance(y: number): number {
-  const drop = Math.max(0, Math.min(1, (HIP_JOINT_Y - y) / (HIP_JOINT_Y - SKIRT_HEM_Y)));
+function skirtClearance(y: number, hemY: number): number {
+  const drop = Math.max(0, Math.min(1, (HIP_JOINT_Y - y) / (HIP_JOINT_Y - hemY)));
   return 0.009 + 0.023 * drop;
 }
 
@@ -420,8 +461,8 @@ const FOLLOW_RAMP = 0.5;
  * coxa, agora diz quanto dela está livre para seguir seja lá o que
  * os ossos do pano fizerem.
  */
-function clothShare(y: number): number {
-  const drop = Math.max(0, Math.min(1, (HIP_JOINT_Y - y) / (HIP_JOINT_Y - SKIRT_HEM_Y)));
+function clothShare(y: number, hemY: number): number {
+  const drop = Math.max(0, Math.min(1, (HIP_JOINT_Y - y) / (HIP_JOINT_Y - hemY)));
   return drop ** FOLLOW_RAMP;
 }
 
@@ -444,8 +485,8 @@ const QUADRANT_WORST = 0.5;
  * partição, dá o quanto aquele anel de fato acompanha a perna — que
  * é o que `strideRoom` precisa saber para reservar o resto na forma.
  */
-function followWeight(y: number): number {
-  return SKIRT_FOLLOW * QUADRANT_WORST * clothShare(y);
+function followWeight(y: number, hemY: number): number {
+  return SKIRT_FOLLOW * QUADRANT_WORST * clothShare(y, hemY);
 }
 
 /**
@@ -458,8 +499,8 @@ function followWeight(y: number): number {
  * compensação que impede a saia de inflar como um vestido de baile só
  * para cobrir um joelho que ela já está acompanhando.
  */
-function strideRoom(y: number): number {
-  return Math.max(0, HIP_JOINT_Y - y) * STRIDE_TAN * (1 - followWeight(y));
+function strideRoom(y: number, hemY: number): number {
+  return Math.max(0, HIP_JOINT_Y - y) * STRIDE_TAN * (1 - followWeight(y, hemY));
 }
 
 /**
@@ -476,12 +517,15 @@ function strideRoom(y: number): number {
  * dois lados da saia rigidamente ligados, sem a tesoura que apareceria
  * se cada metade seguisse a sua coxa.
  */
-function buildSkirt(b: SurfaceBuilder, m: BodyMetrics, detail: BodyDetail, top: Hex, origins: ReturnType<typeof morphOrigins>): void {
+function buildSkirt(b: SurfaceBuilder, m: BodyMetrics, detail: BodyDetail, top: Hex, origins: ReturnType<typeof morphOrigins>, hemY: number): void {
   const hip = origins.hips;
   // Forma desejada: largura da barra e como ela afunila subindo.
-  const hemRx = m.hipWidth * 1.9;
+  // Quanto a barra abre. A saia curta é um cone (1,9× o quadril); o
+  // manto longo é uma coluna — se abrisse na mesma proporção, 26 cm
+  // mais abaixo, viraria uma tenda.
+  const hemRx = m.hipWidth * (hemY <= GOWN_HEM_Y ? 1.22 : 1.9);
   const want = (y: number): number => {
-    const t = Math.max(0, Math.min(1, (y - SKIRT_HEM_Y) / (0.09 - SKIRT_HEM_Y)));
+    const t = Math.max(0, Math.min(1, (y - hemY) / (0.09 - hemY)));
     // Curva suave: a saia abre devagar na cintura e acelera na barra.
     return m.waistWidth * 1.04 + (hemRx - m.waistWidth * 1.04) * (1 - t) ** 1.45;
   };
@@ -489,9 +533,15 @@ function buildSkirt(b: SurfaceBuilder, m: BodyMetrics, detail: BodyDetail, top: 
   // Da barra para cima: a varredura exige `y` crescente, e um perfil
   // escrito ao contrário sai com as normais para dentro — a saia
   // acende cinza, como se estivesse sempre na sombra.
-  const heights = [SKIRT_HEM_Y, -0.28, -0.21, -0.15, -0.1, -0.06, -0.02, 0.02, 0.055, 0.09];
+  // As alturas da saia curta, reescaladas para a barra pedida: a
+  // parte de cima (o corpete, acima da junta) não se mexe, e só o
+  // trecho pendurado estica. Assim o manto longo ganha anéis no
+  // comprimento novo em vez de esticar os que já existiam.
+  const base = [SKIRT_HEM_Y, -0.28, -0.21, -0.15, -0.1, -0.06, -0.02, 0.02, 0.055, 0.09];
+  const stretch = (HIP_JOINT_Y - hemY) / (HIP_JOINT_Y - SKIRT_HEM_Y);
+  const heights = base.map((y) => (y < HIP_JOINT_Y ? HIP_JOINT_Y + (y - HIP_JOINT_Y) * stretch : y));
   const control: Ctl[] = heights.map((y, i) => {
-    const clear = skirtClearance(y);
+    const clear = skirtClearance(y, hemY);
 
     // A forma desejada é o ponto de partida; o corpo é o piso.
     let rx = want(y);
@@ -508,7 +558,7 @@ function buildSkirt(b: SurfaceBuilder, m: BodyMetrics, detail: BodyDetail, top: 
     // porque a saia é a mesma para os dois lados e para os dois
     // sentidos da passada.
     const thigh = thighRadiusAt(m, y) + clear;
-    const reach = strideRoom(y);
+    const reach = strideRoom(y, hemY);
     if (thigh > 0) {
       for (const dz of [reach, -reach]) {
         const k = swellFor(rx, rz, m.legX, dz, thigh);
@@ -522,7 +572,7 @@ function buildSkirt(b: SurfaceBuilder, m: BodyMetrics, detail: BodyDetail, top: 
       // O anel de cima mergulha no corpete: some a borda da costura.
       rx: i === heights.length - 1 ? Math.min(rx, m.waistWidth * 0.97) : rx,
       rz: i === heights.length - 1 ? Math.min(rz, m.waistWidth * 0.72) : rz,
-      color: y <= SKIRT_HEM_Y ? shade(top, -0.1) : top,
+      color: y <= hemY ? shade(top, -0.1) : top,
       bone: Bone.Hips,
       zone: MorphZone.Curve,
       origin: hip,
@@ -532,7 +582,7 @@ function buildSkirt(b: SurfaceBuilder, m: BodyMetrics, detail: BodyDetail, top: 
       // é por anel, e não precisa de mistura: a barra gira em torno
       // da própria quebra, então o anel que está nela não se move e a
       // costura entre as duas fileiras continua fechada.
-      follow: { quadrants: y < SKIRT_BREAK_Y ? SKIRT_HEM_QUADRANTS : SKIRT_QUADRANTS, weight: clothShare(y) },
+      follow: { quadrants: y < SKIRT_BREAK_Y ? SKIRT_HEM_QUADRANTS : SKIRT_QUADRANTS, weight: clothShare(y, hemY) },
     };
   });
 
@@ -550,6 +600,8 @@ interface ArmCtx {
   longSleeves: boolean;
   bareArms: boolean;
   outfit: string;
+  /** `Finish.Cloth` para pano, `Finish.Glass` para o Manto Aurora. */
+  cloth: FinishId;
 }
 
 /**
@@ -621,7 +673,7 @@ function buildArm(b: SurfaceBuilder, side: 1 | -1, ctx: ArmCtx): void {
   // que o olho mais conhece depois do rosto.
   b.surface = Finish.Skin;
   if (detail.segments >= 26) buildFingers(b, side, x, wristY, m, skin, detail, foreBone);
-  b.surface = Finish.Cloth;
+  b.surface = ctx.cloth;
 
   // O polegar, puxado da própria palma.
   b.feature([x - side * m.armWrist * 0.7, wristY - 0.052, m.armWrist * 0.5], [0.028, 0.034, 0.03], 0.016, [-side * 0.8, -0.2, 0.55]);
@@ -1092,6 +1144,67 @@ function buildHair(b: SurfaceBuilder, a: AvatarAppearance, m: BodyMetrics, detai
       b.loft(subdivideProfile(toStations(fall), detail.steps), { segments, capBottom: R * 0.14, capRings: 2 });
       break;
     }
+    case 'ondulado': {
+      // A queda da Luma. Três coisas a separam de `longo`, e nenhuma
+      // é o comprimento:
+      //
+      //  · a seção é funda **atrás** e rasa **na frente**. Os dois
+      //    erros opostos já aconteceram: 1,4·R de largura virou aba
+      //    de faraó, e 0,8·R de profundidade frontal virou capuz
+      //    fechado sobre as bochechas;
+      //  · o raio de cada anel ondula ±12%, que é o que faz a
+      //    silhueta entrar e sair — a onda tem de estar no contorno,
+      //    senão some a três metros;
+      //  · as mechas são sulcos esculpidos na própria massa, não
+      //    tubos pendurados. Tubo solto ao lado da cabeça lê como
+      //    palito, e ainda custa anéis.
+      const bottomY = cy - 0.52;
+      const topY = cy + 0.045;
+      // Os anéis são o custo da onda: sem eles a queda é um cone, com
+      // nove ela ondula duas vezes e meia. No nível baixo a onda não
+      // sobrevive à resolução de qualquer jeito, e o orçamento manda
+      // — a malha baixa não pode pesar mais que o avatar antigo
+      // inteiro (6 496 triângulos).
+      const rings = detail.segments >= 26 ? 9 : detail.segments >= 14 ? 7 : 4;
+      const fall: Ctl[] = [];
+      for (let i = 0; i < rings; i += 1) {
+        const t = i / (rings - 1);
+        const y = bottomY + (topY - bottomY) * t;
+        // Cheio no ombro, arredondando na ponta: nem cone, nem tubo.
+        const grow = 0.74 + 0.3 * smoothstep(-0.1, 0.8, t) - 0.12 * smoothstep(0.75, 1, t);
+        const wave = 1 + Math.sin(t * Math.PI * 2.5 + 0.6) * 0.16;
+        fall.push({
+          y,
+          rx: R * 1.06 * grow * wave,
+          rz: R * (0.2 + 0.16 * t) * grow,
+          rzBack: R * (1.0 + 0.2 * t) * grow * wave,
+          z: -R * 0.24,
+          color: i % 2 === 0 ? dark : hair,
+          bone: Bone.Head,
+        });
+      }
+      b.loft(subdivideProfile(toStations(fall), detail.steps), { segments, capBottom: R * 0.14, capRings: 2 });
+
+      // Os sulcos entre as mechas: afundam a massa em seis pontos,
+      // alternando altura, sem acrescentar um único vértice. É o que
+      // dá leitura de fio no contorno e na sombra.
+      if (detail.segments >= 14) {
+        for (const side of [-1, 1]) {
+          for (let i = 0; i < 3; i += 1) {
+            const azimuth = side * (1.15 + i * 0.5);
+            const y = cy - 0.34 + i * 0.13;
+            const radius = R * 1.0;
+            b.feature(
+              [Math.sin(azimuth) * radius, y, Math.cos(azimuth) * radius - R * 0.2],
+              [R * 0.12, R * 0.3, R * 0.12],
+              -R * 0.1,
+              [Math.sin(azimuth), 0, Math.cos(azimuth)],
+            );
+          }
+        }
+      }
+      break;
+    }
     case 'rabo': {
       const tail: Ctl[] = [
         { y: cy - 0.17, rx: R * 0.1, rz: R * 0.1, z: -R * 1.42, color: dark, bone: Bone.Head },
@@ -1168,6 +1281,19 @@ function buildAccessory(b: SurfaceBuilder, a: AvatarAppearance, m: BodyMetrics, 
       b.addGeometry(new THREE.CylinderGeometry(R * 1.68, R * 1.74, 0.016, segs), { color: 0xf3ead6, skin: head }, new THREE.Matrix4().makeRotationX(-0.1).setPosition(0, cy + 0.14, -0.005));
       b.addGeometry(new THREE.CylinderGeometry(R * 0.78, R * 0.96, 0.12, segs), { color: 0xf3ead6, skin: head }, new THREE.Matrix4().makeRotationX(-0.1).setPosition(0, cy + 0.205, -0.012));
       b.addGeometry(new THREE.CylinderGeometry(R * 0.98, R * 0.99, 0.032, segs), { color: a.topColor, skin: head }, new THREE.Matrix4().makeRotationX(-0.1).setPosition(0, cy + 0.165, -0.008));
+      break;
+    }
+    case 'cristal': {
+      // Brincos de gota: pendem da orelha, em duas peças, para ler
+      // como cristal lapidado e não como bolinha.
+      for (const side of [-1, 1]) {
+        // Na frente da massa do cabelo, na linha do maxilar: dentro
+        // dela o brinco desaparece, e foi o que aconteceu na
+        // primeira tentativa.
+        const ex = side * R * 0.9;
+        b.ball([ex, cy - 0.01, R * 0.46], [R * 0.06, R * 0.06, R * 0.06], { color: 0xbff4ff, skin: head }, 5);
+        b.ball([ex, cy - 0.085, R * 0.46], [R * 0.085, R * 0.15, R * 0.085], { color: 0x3fd8e8, skin: head }, 6);
+      }
       break;
     }
     case 'flor': {

@@ -26,8 +26,20 @@
  */
 
 /** Rugosidade e metal de cada acabamento, na ordem de `Finish`. */
-export const FINISH_ROUGHNESS = [0.58, 0.88, 0.42, 0.08, 0.72, 0.22] as const;
-export const FINISH_METALNESS = [0.0, 0.0, 0.08, 0.0, 0.0, 0.55] as const;
+export const FINISH_ROUGHNESS = [0.58, 0.88, 0.42, 0.08, 0.72, 0.22, 0.12] as const;
+export const FINISH_METALNESS = [0.0, 0.0, 0.08, 0.0, 0.0, 0.55, 0.18] as const;
+/** Brilho de tecido: só o pano tem. */
+export const FINISH_SHEEN = [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0] as const;
+/** Verniz: o olho é molhado, o vidro líquido é envernizado por definição. */
+export const FINISH_CLEARCOAT = [0.06, 0.0, 0.14, 1.0, 0.0, 0.35, 1.0] as const;
+/** Quanto da irradiância do mapa de ambiente cada acabamento aceita. */
+export const FINISH_ENV_DIFFUSE = [0.22, 0.26, 0.5, 1.0, 0.26, 1.0, 0.85] as const;
+/**
+ * Iridescência: a película fina que faz o vidro líquido virar
+ * arco-íris no ângulo rasante. É o traço Frutiger Aero que não se
+ * consegue com cor de vértice — depende do ângulo de visão.
+ */
+export const FINISH_IRIDESCENCE = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0] as const;
 
 /**
  * GLSL que traduz o atributo em parâmetros do material.
@@ -39,6 +51,32 @@ export const FINISH_METALNESS = [0.0, 0.0, 0.08, 0.0, 0.0, 0.55] as const;
  * estreito o bastante para ninguém ver e largo o bastante para não
  * serrilhar.
  */
+/**
+ * Gera o seletor de uma propriedade a partir da sua tabela.
+ *
+ * `vFinish` chega interpolado entre vértices de acabamentos
+ * diferentes, o que daria uma mistura sem sentido na fronteira entre
+ * a manga e o braço. Por isso a leitura é por vizinhança: cada
+ * acabamento contribui com peso `1 - |id - i|`, que é zero fora do
+ * seu próprio anel.
+ *
+ * O corpo sai da tabela em vez de ser escrito à mão porque as duas
+ * coisas já divergiram uma vez: acrescentar um acabamento exigia
+ * lembrar de mexer em cinco funções com aridade fixa.
+ */
+function pick(name: string, table: readonly number[]): string {
+  const linhas = table
+    .map((v, i) => `  k = max(0.0, 1.0 - abs(id - ${i}.0)); v += ${v.toFixed(3)} * k; w += k;`)
+    .join('\n');
+  return `float ${name}(float id) {
+  float w = 0.0;
+  float v = 0.0;
+  float k;
+${linhas}
+  return w > 0.0 ? v / w : ${table[0].toFixed(3)};
+}`;
+}
+
 export function finishVertexGLSL(): string {
   return `
 attribute float aFinish;
@@ -53,31 +91,14 @@ export function finishVaryingGLSL(): string {
 varying float vFinish;
 varying float vAo;
 
-float edenFinishPick(float id, float a, float b, float c, float d, float e, float f) {
-  float w = 0.0;
-  float v = 0.0;
-  float k;
-  k = max(0.0, 1.0 - abs(id - 0.0)); v += a * k; w += k;
-  k = max(0.0, 1.0 - abs(id - 1.0)); v += b * k; w += k;
-  k = max(0.0, 1.0 - abs(id - 2.0)); v += c * k; w += k;
-  k = max(0.0, 1.0 - abs(id - 3.0)); v += d * k; w += k;
-  k = max(0.0, 1.0 - abs(id - 4.0)); v += e * k; w += k;
-  k = max(0.0, 1.0 - abs(id - 5.0)); v += f * k; w += k;
-  return w > 0.0 ? v / w : a;
-}
 
-float edenRoughness(float id) {
-  return edenFinishPick(id, ${FINISH_ROUGHNESS.map((v) => v.toFixed(3)).join(', ')});
-}
 
-float edenMetalness(float id) {
-  return edenFinishPick(id, ${FINISH_METALNESS.map((v) => v.toFixed(3)).join(', ')});
-}
+${pick('edenRoughness', FINISH_ROUGHNESS)}
+
+${pick('edenMetalness', FINISH_METALNESS)}
 
 /** Quanto cada acabamento recebe de brilho de tecido. */
-float edenSheen(float id) {
-  return edenFinishPick(id, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0);
-}
+${pick('edenSheen', FINISH_SHEEN)}
 
 /**
  * Aplica a oclusão assada — e só onde ela faz sentido.
@@ -117,13 +138,12 @@ float edenApplyOcclusion(float ao, float roughness, float dotNV) {
  * que só ele sabe fazer — o reflexo especular, que continua inteiro
  * e é o que dá o molhado do olho e o lustro do cabelo.
  */
-float edenEnvDiffuse(float id) {
-  return edenFinishPick(id, 0.22, 0.26, 0.5, 1.0, 0.26, 1.0);
-}
+${pick('edenEnvDiffuse', FINISH_ENV_DIFFUSE)}
 
 /** E de verniz — só o olho, que é molhado. */
-float edenClearcoat(float id) {
-  return edenFinishPick(id, 0.06, 0.0, 0.14, 1.0, 0.0, 0.35);
-}
+${pick('edenClearcoat', FINISH_CLEARCOAT)}
+
+/** E de película fina: só o vidro líquido. */
+${pick('edenIridescence', FINISH_IRIDESCENCE)}
 `;
 }
