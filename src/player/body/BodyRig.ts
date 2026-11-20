@@ -179,7 +179,7 @@ export const FACE = Object.freeze({
   eyeY: 0.12,
   eyeZ: 0.695,
   /** Raio do globo: 19% da largura da cabeça em diâmetro. */
-  eyeBall: 0.168,
+  eyeBall: 0.158,
   iris: 0.082,
   pupil: 0.033,
   spark: 0.015,

@@ -842,63 +842,94 @@ function buildHead(b: SurfaceBuilder, a: AvatarAppearance, p: BodyProportions, m
   // Fundas o bastante para o globo entrar — antes a cova era rasa e o
   // olho ficava proeminente, de boneco assustado.
   for (const side of [-1, 1]) {
-    b.feature([side * eyeX, eyeY, eyeZ + R * 0.1], [R * 0.27, R * 0.2, R * 0.3], -R * 0.225, [0, 0, 1]);
+    b.feature([side * eyeX, eyeY, eyeZ + R * 0.1], [R * 0.27, R * 0.2, R * 0.3], -R * 0.28, [0, 0, 1]);
     // Canto interno, mais fundo: é o que dá a forma de amêndoa.
     b.feature([side * (eyeX - R * 0.17), eyeY - R * 0.02, eyeZ + R * 0.12], [R * 0.1, R * 0.1, R * 0.2], -R * 0.07, [0, 0, 1]);
   }
-  // Nariz: varredura própria, como a orelha.
+  // Nariz: esculpido na própria pele do crânio.
   //
-  // Antes eram quatro bolhas gaussianas somadas na casca do crânio.
-  // Uma gaussiana é um morro liso: dá para levantar massa com ela,
-  // mas não para desenhar um dorso reto, uma ponta definida e uma
-  // narina. O resultado lia como um montinho vago no meio da cara —
-  // em WebGL, com realce especular, ficava ainda mais evidente, por
-  // não haver uma só aresta onde a luz pudesse quebrar.
+  // Duas tentativas ficaram pelo caminho e vale dizer por quê. Foram
+  // quatro gaussianas somadas na casca: uma gaussiana é um morro
+  // liso, serve para levantar massa, não para desenhar dorso, ponta e
+  // asa. Depois virou uma varredura própria, como a orelha — tinha a
+  // forma certa, mas era **outra superfície atravessando esta**, e na
+  // base, onde o crânio está em 0,937R e o anel da base chegava a
+  // 0,955R, ela furava a pele e deixava uma borda visível sobre o
+  // lábio. Afundar o anel esconderia a borda sem resolver nada: as
+  // duas superfícies continuariam duas.
   //
-  // Agora a forma é geometria de verdade, com as estações da
-  // anatomia: raiz estreita entre as sobrancelhas, dorso descendo,
-  // ponta saliente e base larga com as asas. As estações sobem em y,
-  // que é o que a varredura exige.
-  // A frente do crânio, medida, fica em 0,97R na altura do nariz. A
-  // primeira versão desta varredura chegava a 0,975R na ponta: rente
-  // à pele, e portanto invisível. Um nariz avança uns 15% do raio da
-  // cabeça além do plano do rosto — é daí que sai o 0,95R do eixo.
-  const noseZ = R * 0.95;
-  const nose: Ctl[] = [
-    // Base, onde o nariz encontra o lábio: larga e recuada.
-    { y: cy - 0.058, rx: R * 0.215, rz: R * 0.105, z: noseZ - R * 0.1, color: skin, bone: Bone.Head },
-    // Asas: o ponto mais largo, logo acima da base.
-    { y: cy - 0.049, rx: R * 0.235, rz: R * 0.15, z: noseZ - R * 0.03, color: skin, bone: Bone.Head },
-    // Ponta: o ponto mais saliente do rosto inteiro.
-    { y: cy - 0.034, rx: R * 0.175, rz: R * 0.19, z: noseZ, color: skin, bone: Bone.Head },
-    // Supraponta: o degrau que separa a ponta do dorso e é o que faz
-    // um nariz parecer um nariz em vez de um cone.
-    { y: cy - 0.016, rx: R * 0.12, rz: R * 0.145, z: noseZ - R * 0.025, color: skin, bone: Bone.Head },
-    // Dorso.
-    { y: cy + 0.008, rx: R * 0.095, rz: R * 0.12, z: noseZ - R * 0.085, color: skin, bone: Bone.Head },
-    // Raiz: a parte mais estreita e mais funda. Fica pouco acima da
-    // linha dos olhos (cy + 0,12R), não na altura da sobrancelha — na
-    // primeira tentativa ela estava em cy + 0,062 (três vezes mais
-    // alto) e o nariz lia como uma cunha comprida descendo da testa.
-    { y: cy + 0.03, rx: R * 0.085, rz: R * 0.1, z: noseZ - R * 0.17, color: skin, bone: Bone.Head },
+  // Agora o nariz é a mesma malha do rosto. A pele é refinada só
+  // nesta bola e levantada até um campo de altura com união suave —
+  // onde o nariz avança mais que o crânio, a pele sobe; onde ele é
+  // mais fundo (a raiz, entre os olhos), nada acontece e o traço
+  // acaba sozinho. Não existe junção porque não existem duas peças.
+  // Perfil do nariz, tudo em múltiplos do raio da cabeça: altura a
+  // partir do centro, meia-largura, meia-profundidade e o centro em
+  // z. A frente do traço naquela altura é `z0 + rz`. Em metros
+  // absolutos, como estava, o nariz não acompanharia `headSize` — e o
+  // resto do rosto (olho em +0,12R, boca em −0,44R) já fala em R.
+  // Referência: a frente do crânio aqui está medida em 0,97R, então
+  // uma ponta em 1,19R avança um quarto de raio além do plano do
+  // rosto, que é o que um nariz faz.
+  const noseProfile: readonly (readonly [number, number, number, number])[] = [
+    // Abaixo da base o campo mergulha para dentro do crânio: é isso
+    // que faz o nariz terminar sem degrau em cima do lábio (−0,44R).
+    [-0.41, 0.15, 0.02, 0.78],
+    [-0.375, 0.19, 0.055, 0.82],
+    [-0.33, 0.215, 0.11, 0.86],
+    // Asas: o ponto mais largo.
+    [-0.278, 0.235, 0.17, 0.93],
+    // Ponta.
+    [-0.193, 0.175, 0.22, 0.97],
+    // Supraponta: o degrau que separa a ponta do dorso, e que é o que
+    // faz um nariz parecer um nariz em vez de um cone.
+    [-0.091, 0.12, 0.17, 0.945],
+    [0.045, 0.098, 0.135, 0.875],
+    // Raiz, logo acima da linha dos olhos. A frente aqui (0,88R) já
+    // está atrás do crânio (0,97R), então a união suave não levanta
+    // nada e o dorso se dissolve na testa por conta própria.
+    [0.17, 0.085, 0.1, 0.78],
   ];
-  b.loft(subdivideProfile(toStations(nose), Math.max(2, detail.steps - 1)), {
-    segments: Math.max(10, Math.round(detail.segments * 0.7)),
-    capTop: R * 0.02,
-    capBottom: R * 0.03,
-    capRings: 1,
-  });
+  const noseLow = cy + noseProfile[0][0] * R;
+  const noseHigh = cy + noseProfile[noseProfile.length - 1][0] * R;
+  const noseHeight = (x: number, y: number): number => {
+    if (y < noseLow || y > noseHigh) return -Infinity;
+    let k = 0;
+    while (k < noseProfile.length - 2 && y > cy + noseProfile[k + 1][0] * R) k += 1;
+    const [y0, rx0, rz0, z0] = noseProfile[k];
+    const [y1, rx1, rz1, z1] = noseProfile[k + 1];
+    const raw = (y - (cy + y0 * R)) / Math.max(1e-6, (y1 - y0) * R);
+    // Suavizado entre estações: interpolar reto deixaria uma faixa
+    // facetada por estação, que a luz especular denuncia na hora.
+    const t = raw * raw * (3 - 2 * raw);
+    const rx = (rx0 + (rx1 - rx0) * t) * R;
+    const u = Math.abs(x) / rx;
+    if (u >= 1) return -Infinity;
+    const rz = (rz0 + (rz1 - rz0) * t) * R;
+    const z = (z0 + (z1 - z0) * t) * R;
+    // Superelipse em vez de círculo: deixa o dorso com topo mais chato
+    // e as laterais mais verticais, que é o corte de um nariz.
+    return z + rz * Math.pow(1 - Math.pow(u, 2.8), 1 / 2.8);
+  };
+  const noseCenter: readonly [number, number, number] = [0, cy - 0.02, R * 0.88];
+  // Alvo de aresta fixo em R·0,07: o rosto chega refinado ao mesmo
+  // ponto nos quatro níveis, partindo de malhas bem diferentes.
+  b.refine(noseCenter, R * 0.5, R * 0.05, 4);
+  // A largura da união decide se o nariz lê como nariz. Em R·0,05 ela
+  // era do tamanho da própria ponta (R·0,19) e dissolvia o traço num
+  // morro; R·0,018 mantém a continuidade na primeira derivada e ainda
+  // deixa a asa e o dorso com contorno.
+  b.sculptFront(noseCenter, R * 0.5, noseHeight, R * 0.018);
   for (const side of [-1, 1]) {
-    // Narina: um sulco por baixo da asa, não um furo. Furo de
-    // verdade exigiria abrir a malha, e a esta distância de câmera
-    // não se ganharia nada com isso.
-    b.feature([side * R * 0.115, cy - 0.062, noseZ + R * 0.01], [R * 0.055, R * 0.03, R * 0.1], -R * 0.028, [0, -1, 0.3]);
-    // Columela/filtro: enche o vão entre a base do nariz e o lábio,
-    // escondendo a borda da tampa da varredura, que sem isso aparece
-    // como um degrau reto sobre a boca.
-    b.feature([side * R * 0.05, cy - 0.072, R * 0.92], [R * 0.07, R * 0.035, R * 0.14], R * 0.022, [0, 0, 1]);
+    // Narina: um sulco por baixo da asa, não um furo. Furo de verdade
+    // exigiria abrir a malha e, à distância de câmera do jogo, não se
+    // ganharia nada.
+    b.feature([side * R * 0.12, cy - R * 0.345, R * 1.0], [R * 0.05, R * 0.028, R * 0.09], -R * 0.022, [0, -1, 0.3]);
     // Sulco que separa a asa da bochecha.
-    b.feature([side * R * 0.235, cy - 0.052, R * 0.8], [R * 0.045, R * 0.085, R * 0.17], -R * 0.03, [0, 0, 1]);
+    b.feature([side * R * 0.26, cy - R * 0.28, R * 0.82], [R * 0.05, R * 0.1, R * 0.18], -R * 0.042, [0, 0, 1]);
+    // Filtro: a calha entre a base do nariz e o lábio. Anatomia, não
+    // mais o remendo que tapava a borda da varredura antiga.
+    b.feature([side * R * 0.05, cy - R * 0.41, R * 0.92], [R * 0.07, R * 0.035, R * 0.14], R * 0.018, [0, 0, 1]);
   }
   // Arco da sobrancelha.
   b.feature([0, cy + 0.058, R * 0.82], [R * 0.75, R * 0.1, R * 0.4], R * 0.045, [0, 0, 1]);

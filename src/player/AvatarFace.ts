@@ -81,8 +81,13 @@ interface FacePose {
 // Medido na bancada em WebGL: com 1,15 e 1,0 a fenda expunha 57° do
 // globo — mais de metade da altura visível —, e o olho lia como uma
 // bola de gude pousada na cara. Um olho real mostra perto de 30°.
-const LID_OPEN = 1.32;
-const LOWER_OPEN = 1.18;
+//
+// Segunda passada, com o rosto de perto: 37° ainda deixava a esclera
+// inteira à mostra em três quartos de perfil. A fenda fechou para
+// 28°, que é a abertura de um olho em repouso — o resto do globo
+// fica onde deve ficar, atrás da pálpebra.
+const LID_OPEN = 1.4;
+const LOWER_OPEN = 1.26;
 /** Fechada, a de cima desce até encontrar a borda da de baixo. */
 const LID_SHUT = 2.14;
 
