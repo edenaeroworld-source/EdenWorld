@@ -18,6 +18,7 @@
  */
 
 import * as THREE from 'three';
+import * as aftersMorph from '../afters/AftersMorph';
 import { Avatar } from '../player/Avatar';
 import { AvatarAnimator } from '../player/AvatarAnimator';
 import { DEFAULT_APPEARANCE, type AvatarAppearance } from '../player/AvatarAppearance';
@@ -25,10 +26,11 @@ import type { BodyDetailLevel } from '../player/body/BodyRig';
 import { Environment } from '../world/Environment';
 import { CREATURE_DETAIL, buildCreature, type CreatureParts } from '../creatures/CreatureMesh';
 import { passoQuadrupede } from '../creatures/WildlifeView';
+import type { MotionState } from '../player/PlayerMotor';
 import { allSpecies } from '../creatures/Species';
 import { QUALITY_LEVELS, profileFor } from '../systems/QualitySystem';
 
-type Mode = 'corpo' | 'rosto' | 'bichos' | 'niveis' | 'elenco';
+type Mode = 'corpo' | 'rosto' | 'bichos' | 'niveis' | 'elenco' | 'bet' | 'betrampa';
 
 const canvas = document.getElementById('tela') as HTMLCanvasElement;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -108,6 +110,23 @@ const ELENCO: readonly { nome: string; aparencia: Partial<AvatarAppearance>; bus
   { nome: 'Afters no máximo', aparencia: { hairStyle: 'coque', hairColor: '#2b1d16', outfit: 'vestido', skin: '#f6c9a4' }, bust: 1, curve: 1 },
 ];
 
+/**
+ * Cena BET — os quatro estados que precisam ser comparados lado a lado.
+ *
+ * Um slider mostra um estado por vez, e comparar dois estados virando o
+ * slider é comparar de memória. Aqui os quatro aparecem no mesmo quadro,
+ * na mesma luz e no mesmo ângulo, que é a única comparação que vale.
+ */
+const BET_ESTADOS: readonly { nome: string; bust: number; curve: number }[] = [
+  { nome: 'original', bust: 0, curve: 0 },
+  { nome: 'AfterBust®', bust: 1.5, curve: 0 },
+  { nome: 'AfterCurve®', bust: 0, curve: 1.5 },
+  { nome: 'combinado', bust: 1.5, curve: 1.5 },
+];
+
+/** Rampa de intensidade: o mesmo corpo em cinco passos do mesmo canal. */
+const BET_RAMPA: readonly number[] = [0, 0.625, 1.25, 1.875, 2.5];
+
 /** Tempo de construção do último `montar`, por avatar, em ms. */
 const custos: { nome: string; ms: number; verts: number }[] = [];
 
@@ -137,6 +156,18 @@ function montar(): void {
       const avatar = novoAvatar(ui.nivel, (i - 2) * 0.82, quem.aparencia);
       if (quem.bust !== undefined || quem.curve !== undefined) avatar.setMorph(quem.bust ?? 0, quem.curve ?? 0);
     });
+  } else if (ui.modo === 'bet') {
+    BET_ESTADOS.forEach((estado, i) => {
+      const avatar = novoAvatar(ui.nivel, (i - 1.5) * 0.85);
+      avatar.setMorph(estado.bust, estado.curve);
+    });
+  } else if (ui.modo === 'betrampa') {
+    // A rampa usa os dois canais juntos: o que se quer ver aqui é a
+    // progressão, e progressão de um canal só esconde a interação.
+    BET_RAMPA.forEach((valor, i) => {
+      const avatar = novoAvatar(ui.nivel, (i - 2) * 0.82);
+      avatar.setMorph(valor, valor);
+    });
   } else if (ui.modo === 'bichos') {
     const porMovimento = new Map<string, ReturnType<typeof allSpecies>[number]>();
     for (const sp of allSpecies()) if (!porMovimento.has(sp.movement)) porMovimento.set(sp.movement, sp);
@@ -159,13 +190,20 @@ function montar(): void {
   aplicarMorph();
 }
 
+/** Cenas em que cada avatar tem a própria silhueta, e os sliders não mandam. */
+function morphPorAvatar(): boolean {
+  return ui.modo === 'bet' || ui.modo === 'betrampa' || ui.modo === 'elenco';
+}
+
 function aplicarMorph(): void {
+  if (morphPorAvatar()) return;
   for (const a of avatars) a.setMorph(ui.bust, ui.curve);
 }
 
 function enquadrar(): void {
   const rosto = ui.modo === 'rosto';
-  const largo = ui.modo === 'niveis' || ui.modo === 'bichos' || ui.modo === 'elenco';
+  const largo =
+    ui.modo === 'niveis' || ui.modo === 'bichos' || ui.modo === 'elenco' || ui.modo === 'bet' || ui.modo === 'betrampa';
   // O alvo do rosto fica na linha do nariz, não na dos olhos: era por
   // isso que a boca e o queixo saíam fora do quadro.
   const alvo = new THREE.Vector3(0, rosto ? 1.56 : 0.95, 0);
@@ -179,7 +217,9 @@ function enquadrar(): void {
   if (largo) alvo.x -= 0.85 * zoom;
   // O elenco são cinco corpos lado a lado: precisa de mais recuo que
   // os quatro níveis, senão o das pontas sai do quadro.
-  const dist = (rosto ? 0.95 : ui.modo === 'elenco' ? 7.4 : ui.modo === 'niveis' ? 6.9 : largo ? 6.2 : 3.6) * zoom;
+  const dist =
+    (rosto ? 0.95 : ui.modo === 'elenco' || ui.modo === 'betrampa' ? 7.4 : ui.modo === 'niveis' || ui.modo === 'bet' ? 6.9 : largo ? 6.2 : 3.6) *
+    zoom;
   alvo.add(alvoOff);
   camera.position.set(alvo.x + Math.sin(angle) * dist, alvo.y + (rosto ? 0.04 : 0.35) * zoom, alvo.z + Math.cos(angle) * dist);
   camera.lookAt(alvo);
@@ -200,7 +240,13 @@ let elapsed = 0;
 /** Janela de quadros para medir FPS: média móvel sobre 1 s. */
 const fpsJanela: number[] = [];
 let fps = 0;
-const motion = { state: 'idle' as const, speed: 0, stridePhase: 0, verticalSpeed: 0, elapsed: 0 };
+const motion: {
+  state: MotionState;
+  speed: number;
+  stridePhase: number;
+  verticalSpeed: number;
+  elapsed: number;
+} = { state: 'idle', speed: 0, stridePhase: 0, verticalSpeed: 0, elapsed: 0 };
 
 function quadro(): void {
   const now = performance.now();
@@ -220,6 +266,15 @@ function quadro(): void {
   if (ui.andando) {
     // O ciclo de caminhada de verdade, a mesma função que o jogo usa.
     for (const parts of creatures) if (parts.knees.length > 0) passoQuadrupede(parts, elapsed, 1.2, true);
+    // E o avatar anda de verdade também: o BET precisa ser visto em
+    // movimento, porque é com o tronco girando e a perna subindo que
+    // uma deformação mal costurada se denuncia.
+    motion.state = 'walk';
+    motion.speed = 1.6;
+    motion.stridePhase = (motion.stridePhase + dt * 1.6 * 1.9) % (Math.PI * 2);
+  } else {
+    motion.state = 'idle';
+    motion.speed = 0;
   }
   if (ui.girar) angle += dt * 0.5;
 
@@ -287,6 +342,13 @@ const dbg = gl.getExtension('WEBGL_debug_renderer_info');
 // Alça de depuração: a bancada existe para ser cutucada de fora (o
 // capturador automatizado liga e desliga termos para isolar causa).
 (window as unknown as { eden: unknown }).eden = {
+  // `morph` é para sondagem: a deformação BET mora no shader, então um
+  // raycast normal acerta a malha parada. Com isto dá para projetar o
+  // vértice já deslocado e descobrir o que aparece num pixel.
+  morph: aftersMorph,
+  // `three` é para sondagem: sem ele um raycast de dentro da página
+  // precisaria refazer a matemática da câmera à mão.
+  three: THREE,
   scene,
   renderer,
   camera,

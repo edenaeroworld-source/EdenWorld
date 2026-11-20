@@ -122,8 +122,11 @@ describe('Afters 2.0 · limites de intensidade', () => {
     const full = silhouetteHalfWidth(Zone.Bust, radius, BUST_BAND.center, MAX_INTENSITY, 0);
     expect(neutral).toBeCloseTo(radius, 6);
     expect(full).toBeGreaterThan(neutral);
-    // 250% × ganho lateral 0,30 ⇒ 1,75× de largura: visível, ainda estilizado.
-    expect(full / neutral).toBeCloseTo(1 + BUST_BAND.gainX * MAX_INTENSITY, 5);
+    // A largura não segue mais uma fórmula fechada, e é de propósito: o
+    // crescimento agora é a soma da banda de sustentação com dois lobos,
+    // e o quanto cada ponto anda depende de onde ele está. O que um
+    // teste pode afirmar é a faixa — cresce de verdade, não explode.
+    expect(full / neutral).toBeGreaterThan(1.1);
     expect(full / neutral).toBeLessThan(2);
   });
 
@@ -705,7 +708,7 @@ describe('Afters 2.0 · malha do avatar', () => {
       expect(attribute.count).toBe(mesh.geometry.getAttribute('position').count);
       for (let i = 0; i < attribute.count; i += 1) {
         const zone = attribute.getX(i);
-        expect([Zone.None, Zone.Bust, Zone.Curve, Zone.Thigh]).toContain(Math.round(zone));
+        expect([Zone.None, Zone.Bust, Zone.Curve, Zone.Thigh, Zone.Arm]).toContain(Math.round(zone));
         seen.add(Math.round(zone));
         total += 1;
         if (zone > 0) zoned += 1;
@@ -717,7 +720,7 @@ describe('Afters 2.0 · malha do avatar', () => {
     expect(zoned).toBeGreaterThan(0);
     expect(zoned).toBeLessThan(total);
     // As quatro zonas existem no corpo: nenhuma ficou órfã na reescrita.
-    expect([...seen].sort()).toEqual([Zone.None, Zone.Bust, Zone.Curve, Zone.Thigh].sort());
+    expect([...seen].sort()).toEqual([Zone.None, Zone.Bust, Zone.Curve, Zone.Thigh, Zone.Arm].sort());
     avatar.dispose();
   });
 
@@ -818,7 +821,12 @@ describe('Afters 2.0 · paridade TypeScript ↔ GLSL', () => {
     expect(front.z).toBeGreaterThan(0.1);
     expect(Math.abs(back.z)).toBeGreaterThan(0.1);
     expect(front.z - 0.1).toBeGreaterThan(Math.abs(back.z) - 0.1);
-    expect(front.y).toBe(BUST_BAND.center);
+    // O vértice **desce**: o volume do peito é empurrado a partir de uma
+    // âncora acima dele, então ele cresce caindo. Na silhueta de antes,
+    // escala radial pura, y nunca se movia — e era por isso que o peito
+    // parecia inflar em vez de pesar. A queda é pequena e para baixo.
+    expect(front.y).toBeLessThan(BUST_BAND.center);
+    expect(BUST_BAND.center - front.y).toBeLessThan(0.03);
   });
 });
 

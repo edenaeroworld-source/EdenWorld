@@ -584,27 +584,27 @@ function buildArm(b: SurfaceBuilder, side: 1 | -1, ctx: ArmCtx): void {
     // O topo do deltoide nasce **dentro** do trapézio, puxado para o
     // eixo do corpo; é o que fecha a axila. Daí para baixo o perfil
     // volta ao eixo do osso.
-    { y: shoulderY + 0.028, rx: r * 0.66, rz: r * 0.68, x: x - side * 0.032, color: upperArmColor, bone: Bone.Torso },
-    { y: shoulderY + 0.004, rx: r * 0.98, rz: r * 0.98, x: x - side * 0.014, color: upperArmColor, bone: Bone.Torso },
-    { y: shoulderY - 0.032, rx: r * 1.07, rz: r * 1.03, x, color: upperArmColor, bone: armBone },
-    { y: shoulderY - 0.085, rx: r * 0.95, rz: r * 0.95, x, color: upperArmColor, bone: armBone },
-    { y: (shoulderY + elbowY) * 0.5, rx: r * 0.87, rz: r * 0.88, x, color: midArmColor, bone: armBone },
-    { y: elbowY + 0.07, rx: r * 0.79, rz: r * 0.81, x, color: midArmColor, bone: armBone },
+    { y: shoulderY + 0.028, rx: r * 0.66, rz: r * 0.68, x: x - side * 0.032, color: upperArmColor, bone: Bone.Torso, zone: MorphZone.Arm },
+    { y: shoulderY + 0.004, rx: r * 0.98, rz: r * 0.98, x: x - side * 0.014, color: upperArmColor, bone: Bone.Torso, zone: MorphZone.Arm },
+    { y: shoulderY - 0.032, rx: r * 1.07, rz: r * 1.03, x, color: upperArmColor, bone: armBone, zone: MorphZone.Arm },
+    { y: shoulderY - 0.085, rx: r * 0.95, rz: r * 0.95, x, color: upperArmColor, bone: armBone, zone: MorphZone.Arm },
+    { y: (shoulderY + elbowY) * 0.5, rx: r * 0.87, rz: r * 0.88, x, color: midArmColor, bone: armBone, zone: MorphZone.Arm },
+    { y: elbowY + 0.07, rx: r * 0.79, rz: r * 0.81, x, color: midArmColor, bone: armBone, zone: MorphZone.Arm },
     // A rampa do cotovelo: cinco anéis dividindo o peso entre os dois
     // ossos. Quanto mais larga a rampa, mais a dobra vira curva — e é
     // aqui, não na contagem de polígonos, que mora a diferença entre
     // carne e dobradiça.
-    { y: elbowY + 0.035, rx: r * 0.77, rz: r * 0.79, x, color: midArmColor, bone: armBone, bone2: foreBone, blend: 0.18 },
-    { y: elbowY, rx: r * 0.76, rz: r * 0.78, x, color: lowerArmColor, bone: armBone, bone2: foreBone, blend: 0.5 },
-    { y: elbowY - 0.035, rx: r * 0.78, rz: r * 0.8, x, color: lowerArmColor, bone: armBone, bone2: foreBone, blend: 0.82 },
-    { y: elbowY - 0.07, rx: r * 0.8, rz: r * 0.82, x, color: lowerArmColor, bone: foreBone },
-    { y: elbowY - 0.13, rx: r * 0.68, rz: r * 0.7, x, color: lowerArmColor, bone: foreBone },
-    { y: wristY + 0.015, rx: m.armWrist * 1.02, rz: m.armWrist * 1.06, x, color: skin, bone: foreBone },
+    { y: elbowY + 0.035, rx: r * 0.77, rz: r * 0.79, x, color: midArmColor, bone: armBone, bone2: foreBone, zone: MorphZone.Arm, blend: 0.18 },
+    { y: elbowY, rx: r * 0.76, rz: r * 0.78, x, color: lowerArmColor, bone: armBone, bone2: foreBone, zone: MorphZone.Arm, blend: 0.5 },
+    { y: elbowY - 0.035, rx: r * 0.78, rz: r * 0.8, x, color: lowerArmColor, bone: armBone, bone2: foreBone, zone: MorphZone.Arm, blend: 0.82 },
+    { y: elbowY - 0.07, rx: r * 0.8, rz: r * 0.82, x, color: lowerArmColor, bone: foreBone, zone: MorphZone.Arm },
+    { y: elbowY - 0.13, rx: r * 0.68, rz: r * 0.7, x, color: lowerArmColor, bone: foreBone, zone: MorphZone.Arm },
+    { y: wristY + 0.015, rx: m.armWrist * 1.02, rz: m.armWrist * 1.06, x, color: skin, bone: foreBone, zone: MorphZone.Arm },
     // A mão: fina de lado, larga de frente, como uma mão parada ao lado do corpo.
-    { y: wristY - 0.025, rx: m.armWrist * 0.92, rz: m.armWrist * 1.38, x, color: skin, bone: foreBone },
-    { y: wristY - 0.065, rx: m.armWrist * 0.88, rz: m.armWrist * 1.52, x, color: skin, bone: foreBone },
-    { y: wristY - 0.105, rx: m.armWrist * 0.78, rz: m.armWrist * 1.4, x, color: skin, bone: foreBone },
-    { y: wristY - 0.135, rx: m.armWrist * 0.6, rz: m.armWrist * 1.05, x, color: skin, bone: foreBone },
+    { y: wristY - 0.025, rx: m.armWrist * 0.92, rz: m.armWrist * 1.38, x, color: skin, bone: foreBone, zone: MorphZone.Arm },
+    { y: wristY - 0.065, rx: m.armWrist * 0.88, rz: m.armWrist * 1.52, x, color: skin, bone: foreBone, zone: MorphZone.Arm },
+    { y: wristY - 0.105, rx: m.armWrist * 0.78, rz: m.armWrist * 1.4, x, color: skin, bone: foreBone, zone: MorphZone.Arm },
+    { y: wristY - 0.135, rx: m.armWrist * 0.6, rz: m.armWrist * 1.05, x, color: skin, bone: foreBone, zone: MorphZone.Arm },
   ];
 
   b.loft(subdivideProfile(toStations(withFinish(control, skin)), detail.steps), {
@@ -633,11 +633,11 @@ function buildArm(b: SurfaceBuilder, side: 1 | -1, ctx: ArmCtx): void {
 
   if (longSleeves) {
     const cuff = new THREE.TorusGeometry(m.armWrist * 1.16, 0.011, 5, Math.max(10, detail.segments));
-    b.addGeometry(cuff, { color: accent, skin: { bone: foreBone } }, new THREE.Matrix4().makeRotationX(Math.PI / 2).setPosition(x, wristY + 0.03, 0));
+    b.addGeometry(cuff, { color: accent, skin: { bone: foreBone }, zone: MorphZone.Arm }, new THREE.Matrix4().makeRotationX(Math.PI / 2).setPosition(x, wristY + 0.03, 0));
   }
   if (shortSleeve) {
     const hem = new THREE.TorusGeometry(r * 0.94, 0.009, 5, Math.max(10, detail.segments));
-    b.addGeometry(hem, { color: shade(top, -0.14), skin: { bone: armBone } }, new THREE.Matrix4().makeRotationX(Math.PI / 2).setPosition(x, (shoulderY + elbowY) * 0.5, 0));
+    b.addGeometry(hem, { color: shade(top, -0.14), skin: { bone: armBone }, zone: MorphZone.Arm }, new THREE.Matrix4().makeRotationX(Math.PI / 2).setPosition(x, (shoulderY + elbowY) * 0.5, 0));
   }
 }
 
@@ -759,10 +759,10 @@ function buildFingers(
     // Leve curvatura para a frente, como uma mão relaxada.
     const curl = 0.1;
     const control: Ctl[] = [
-      { y: palmY, rx: r * 1.1, rz: r * 1.12, x, z: fz, color: skin, bone: foreBone },
-      { y: palmY - len * 0.36, rx: r, rz: r * 1.02, x, z: fz + len * curl * 0.4, color: skin, bone: foreBone },
-      { y: palmY - len * 0.68, rx: r * 0.92, rz: r * 0.94, x, z: fz + len * curl, color: skin, bone: foreBone },
-      { y: palmY - len, rx: r * 0.72, rz: r * 0.74, x, z: fz + len * curl * 1.5, color: skin, bone: foreBone },
+      { y: palmY, rx: r * 1.1, rz: r * 1.12, x, z: fz, color: skin, bone: foreBone, zone: MorphZone.Arm },
+      { y: palmY - len * 0.36, rx: r, rz: r * 1.02, x, z: fz + len * curl * 0.4, color: skin, bone: foreBone, zone: MorphZone.Arm },
+      { y: palmY - len * 0.68, rx: r * 0.92, rz: r * 0.94, x, z: fz + len * curl, color: skin, bone: foreBone, zone: MorphZone.Arm },
+      { y: palmY - len, rx: r * 0.72, rz: r * 0.74, x, z: fz + len * curl * 1.5, color: skin, bone: foreBone, zone: MorphZone.Arm },
     ];
     b.loft(subdivideProfile(toStations(control), 2), {
       segments,
@@ -777,10 +777,10 @@ function buildFingers(
   // e aponta para a frente em vez de para baixo.
   const tr = w * 0.36;
   const thumb: Ctl[] = [
-    { y: wristY - 0.028, rx: tr * 1.05, rz: tr * 1.05, x: x - side * w * 0.2, z: w * 0.55, color: skin, bone: foreBone },
-    { y: wristY - 0.052, rx: tr * 0.98, rz: tr, x: x - side * w * 0.34, z: w * 0.95, color: skin, bone: foreBone },
-    { y: wristY - 0.076, rx: tr * 0.84, rz: tr * 0.86, x: x - side * w * 0.42, z: w * 1.3, color: skin, bone: foreBone },
-    { y: wristY - 0.094, rx: tr * 0.62, rz: tr * 0.64, x: x - side * w * 0.46, z: w * 1.5, color: skin, bone: foreBone },
+    { y: wristY - 0.028, rx: tr * 1.05, rz: tr * 1.05, x: x - side * w * 0.2, z: w * 0.55, color: skin, bone: foreBone, zone: MorphZone.Arm },
+    { y: wristY - 0.052, rx: tr * 0.98, rz: tr, x: x - side * w * 0.34, z: w * 0.95, color: skin, bone: foreBone, zone: MorphZone.Arm },
+    { y: wristY - 0.076, rx: tr * 0.84, rz: tr * 0.86, x: x - side * w * 0.42, z: w * 1.3, color: skin, bone: foreBone, zone: MorphZone.Arm },
+    { y: wristY - 0.094, rx: tr * 0.62, rz: tr * 0.64, x: x - side * w * 0.46, z: w * 1.5, color: skin, bone: foreBone, zone: MorphZone.Arm },
   ];
   b.loft(subdivideProfile(toStations(thumb), 2), {
     segments,
