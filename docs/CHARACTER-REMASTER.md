@@ -176,28 +176,53 @@ Os bichos também não tinham nível de detalhe nenhum: todos nasciam com
 a mesma contagem de gomos. Agora seguem o mesmo perfil de qualidade
 dos personagens, via `CREATURE_DETAIL`.
 
+## A bancada de WebGL, e os dois erros que ela achou
+
+A lista abaixo dizia "nada disto foi visto rodando". Agora foi:
+`lab.html` monta a cena com as peças reais do jogo — `Avatar`,
+`Environment` (relógio, atmosfera, céu, sol, névoa e o PMREM dos
+reflexos) e o mesmo mapeamento de tons. Uma bancada que iluminasse
+diferente do jogo não validaria nada. Ela não entra no build: o Vite
+só compila `index.html`.
+
+O primeiro quadro em WebGL mostrou a pele esverdeada, e nenhum dos
+dois motivos aparecia no rasterizador, que é um sombreador difuso sem
+PBR.
+
+**A oclusão estava no albedo.** Oclusão ambiente mede quanta luz do
+céu chega a um ponto; não tem nada a dizer sobre o sol, que vem de
+uma direção só e ou bate ou não bate. Multiplicá-la na cor apagava as
+duas juntas. Agora vai num atributo próprio e entra onde o Three.js
+aplicaria um `aoMap`, sobre a parcela indireta.
+
+**O ambiente estava sendo contado duas vezes.** A cena tem luz
+hemisférica *e* um PMREM do próprio céu. Para o avatar é o mesmo
+ambiente somado duas vezes, e a segunda vem tingida de verde porque a
+captura inclui o chão. O queixo saía 158/162/134 — verde acima do
+vermelho, numa pele cujo albedo tem o vermelho 58% acima do verde. A
+parcela difusa ficou com a luz hemisférica; ao mapa sobrou o reflexo
+especular, que é o que dá o molhado do olho.
+
+O método vale mais que o resultado: desligar um termo por vez na cena
+viva e medir o pixel. Cuidado com dois enganos que custaram tempo —
+trocar a cor da luz hemisférica de fora não faz nada (o `Environment`
+reescreve a cor todo quadro), e uma impressão a olho ("está verde")
+pode ser desaturação, não matiz.
+
 ## O que não está pronto
 
 Ser honesto sobre isto é mais útil que a lista do que foi feito.
 
-- **O nariz é fraco.** Lê como um montinho vago, sem dorso definido
-  nem asas. Os olhos e a boca foram refeitos; o nariz não.
-- **As pernas dos bichos são cilindros sem articulação.** O tronco
-  melhorou muito mais que os membros.
 - **Dedos só em `ultra`.** Em `alta` a mão continua uma pá. É
   deliberado (custa um quinto), mas é uma pá.
-- **O olho ainda é um pouco saliente.** Tentei assentar o globo mais
-  fundo na órbita e o resultado ficou vesgo, porque a íris acompanha a
-  superfície do globo; foi revertido. A órbita precisa de uma
-  depressão real na pele, não de empurrar a bola para trás.
+- **A base do nariz ainda mostra uma borda.** A varredura do nariz é
+  uma superfície separada que atravessa a do crânio; o filtro
+  disfarça o encontro, não o resolve. A solução de verdade seria
+  costurar as duas malhas.
 - **As expressões faciais e a animação de corpo não foram tocadas.**
   Os seis morphs continuam os que já existiam.
-- **Nada disto foi visto rodando.** Não há WebGL neste ambiente: toda
-  a verificação visual foi feita com o rasterizador de
-  `tests/helpers/raster.ts`, que é um sombreador difuso simples. Ele
-  mostra geometria e cor de vértice com fidelidade — foi assim que a
-  boca em anel, as mãos sem dedos e a sobrancelha dentro do cabelo
-  apareceram — mas **não mostra PBR**: rugosidade, brilho de tecido,
-  verniz e reflexo do mapa de ambiente não passam por ele. Esses
-  valores estão justificados fisicamente e verificados por tipo e por
-  compilação, não por imagem.
+- **O pé dos bichos é uma cápsula.** Tem orientação e assenta no
+  chão, mas não tem dedo nem casco; de perto, é um pé genérico.
+- **A validação é por imagem parada.** A bancada gira o modelo e eu
+  conferi poses de repouso, mas o ciclo de caminhada dos bichos foi
+  verificado pela matemática da fase, não quadro a quadro em vídeo.
