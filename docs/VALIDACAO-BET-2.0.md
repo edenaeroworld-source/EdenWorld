@@ -30,36 +30,76 @@ faz o volume *nascer do corpo* em vez de inchar para fora — é por isso que
 aparece sulco entre os dois lobos e não um barril.
 
 Zonas (atributo `aZone`, por vértice): `0` nenhuma · `1` busto · `2` quadril ·
-`3` coxa · `4` braço.
+`3` coxa. **Não há zona de braço** — ver abaixo.
 
-### A zona do braço
+### O braço — correção do PR #25
 
-O braço **não engorda**. Ele sai do caminho.
+**O que eu tinha feito, e por que estava errado.** Para impedir que a saia
+atravessasse a mão, eu deslocava o vértice do braço lateralmente em função da
+altura dele. Isso não é mover um membro: é cisalhá-lo. Medido, com o quadril
+em 250%:
 
-Um corpo mais largo afasta os braços; se o braço ficar parado, o tecido do
-quadril atravessa a mão. A folga é calculada a partir do quanto o próprio
-quadril alargou naquela altura — não é uma constante escolhida a olho:
+| altura | x em 0% | x em 250% | deslocamento |
+|---|---|---|---|
+| ombro `0.43` | 0.187 | 0.187 | 0 mm |
+| cotovelo `0.16` | 0.200 | 0.200 | **0 mm** |
+| quadril `0.00` | 0.200 | 0.283 | 83 mm |
+| punho `−0.07` | 0.200 | 0.291 | **92 mm** |
+| dedos `−0.22` | 0.200 | 0.255 | **55 mm** ← volta atrás |
 
+Cotovelo parado, punho 92 mm para fora e dedos voltando para 55 mm: um **S** no
+antebraço, com **55 mm** de mudança nas distâncias internas do braço. É
+exatamente o arqueamento que aparecia nas capturas.
+
+**A causa-raiz, que só apareceu ao olhar o esqueleto.** O projeto **já tinha** o
+mecanismo certo para isso, em `Avatar.updateRig()`, descrito lá como
+*"deslocamento de junta, não deformação"*: a junta do ombro se afasta conforme
+o AfterBust® (`SHOULDER_SPREAD = 0.034`, ou 85 mm em 250%), e a da perna
+conforme o AfterCurve® (`LEG_SPREAD`). Minha compensação no shader estava
+**duplicando** esse trabalho — e, pior, duplicando de um jeito que entorta.
+
+O buraco real era outro: **o AfterCurve® não estava ligado ao ombro**. O quadril
+alargava e o braço não saía do caminho.
+
+**A correção.** Removi inteiramente a zona de braço do campo de deformação — o
+shader não toca mais em nenhum vértice de braço — e liguei o AfterCurve® ao
+mesmo deslocamento de junta que o AfterBust® já usava:
+
+```ts
+const volume = Math.max(bust * SHOULDER_SPREAD, curve * CURVE_SHOULDER_SPREAD);
 ```
-folga = meia_largura_de_referência × ganho_da_banda(y) × rampa(y)
-rampa = smoothstep(ombro 0.43 → cotovelo 0.16)
-```
 
-A rampa vale **exatamente zero** do ombro para cima. O braço é uma ilha de
-malha que encosta no tronco sem costurar nele: 8 mm de deslocamento no
-deltoide já abririam vão visível — isso foi medido e corrigido durante o
-trabalho. É translação pura, sem girar normal e sem mudar `y` nem `z`.
+É `max`, não soma: o braço precisa contornar o **mais largo** dos dois volumes,
+não a soma deles — somar é o que põe o personagem em cruz quando as duas
+intensidades sobem juntas.
 
-Afastamento medido (mm), corpo padrão:
+**Resultado medido** (vestido, `ultra`, com skinning real):
 
-| altura | 100% | 250% |
+| busto | quadril | x máx do braço | invasão mão/tecido |
+|---|---|---|---|
+| 0% | 0% | 0.266 | −78 mm *(herdado do Character 2.0)* |
+| 250% | 0% | 0.351 | **+7 mm (livre)** |
+| 0% | 250% | 0.351 | **−57 mm** *(era −142 mm)* |
+| 250% | 250% | 0.351 | **−57 mm** |
+
+E a anatomia, que é o ponto:
+
+| | membro (úmero → dedos) | deltoide |
 |---|---|---|
-| ombro `0.43` | 0.0 | 0.0 |
-| cotovelo `0.16` | 0.0 | ~0.1 |
-| quadril `0.00` | 30.6 | 76.6 |
-| punho `−0.07` | 36.7 | 91.7 |
+| busto 250% *(comportamento que já existia)* | **0,000 mm** | 74,2 mm |
+| quadril 250% *(caminho novo)* | **0,000 mm** | 74,3 mm |
+| ambos 250% | **0,000 mm** | 74,3 mm |
 
----
+O membro é **rigorosamente rígido**: 4 972 vértices, nenhuma distância interna
+muda. Cotovelo, antebraço e mão mantêm forma, tamanho e orientação. A única
+parte que cede são os 264 vértices do deltoide, que se misturam ao tronco pelos
+pesos de skinning — e cedem **o mesmo tanto que já cediam** pelo caminho do
+busto, que é comportamento de produção desde antes deste trabalho.
+
+**Esqueleto × shader.** Os 19 ossos ficam **exatamente onde estavam** quando os
+uniformes `uBust`/`uCurve` mudam: o campo de deformação é só shader. Quem move
+o braço é o reposicionamento de junta, que é rígido por construção. São dois
+mecanismos distintos e agora não se sobrepõem mais.
 
 ## 2. Roupa
 
@@ -74,7 +114,7 @@ geometria, sem troca de material, sem draw call novo.
 
 ## 3. Continuidade, simetria e identidade — o que os testes garantem
 
-`tests/unit/bet-geometria.test.ts` (34 testes) e `tests/unit/afters-body.test.ts`
+`tests/unit/bet-geometria.test.ts` (31 testes) e `tests/unit/afters-body.test.ts`
 (57 testes). Os que importam:
 
 - **Dois lobos, não um barril** — a linha dos mamilos avança >1,15× o esterno.
@@ -88,6 +128,12 @@ geometria, sem troca de material, sem draw call novo.
 - **Costura**: vértices coincidentes continuam coincidentes depois da deformação
   completa — abertura **< 0,5 mm**.
 - **Paridade TS↔GLSL** das constantes e da fórmula do lobo.
+- **O braço é rígido**: nenhuma distância interna do membro muda em nenhuma
+  combinação de intensidade (tolerância 1e−6 m). Este teste é o que impede o
+  defeito do antebraço em S de voltar.
+- **O campo não toca no braço**: `aZone` só contém 0, 1, 2 e 3.
+- **Busto e quadril não somam** no ombro, e o ombro volta exatamente ao lugar
+  quando o BET desliga.
 
 ### Curvatura da superfície — número honesto
 
@@ -126,13 +172,15 @@ O orçamento da `baixa` continua respeitado: o teste que o protege
 
 | arquivo | o que mostra |
 |---|---|
-| `estados.png` | original · só AfterBust · só AfterCurve · os dois juntos |
-| `rampa.png` | 0 → 62,5 → 125 → 187,5 → 250%, progressão suave |
-| `niveis.png` | os quatro níveis com os dois canais em 250% |
-| `costas.png` | quadril de costas em 250% |
-| `ombro.png` | peito, axila e mãos de perto em 250% |
-| `andando.png` | em movimento, ciclo de caminhada, 250% |
-| `roupas-casual.png`, `roupas-esportivo.png` | outras roupas em 250% |
+| `matriz.png` | a matriz de intensidade: 0 · 25 · 50 · 75 · 100 · 150 · 200 · 250% |
+| `estados.png` | original · só AfterBust® · só AfterCurve® · os dois juntos |
+| `isolado-busto.png` | AfterBust® 250% com AfterCurve® em 0 |
+| `isolado-curva.png` | AfterCurve® 250% com AfterBust® em 0 |
+| `ombro.png` | ombro, axila, antebraços e mãos de perto, ambos em 250% |
+| `niveis.png` | os quatro níveis de qualidade, ambos em 250% |
+| `costas.png` | quadril de costas, AfterCurve® 250% |
+| `andando.png` | em movimento, ciclo de caminhada, ambos em 250% |
+| `roupas-casual.png`, `roupas-esportivo.png` | outras roupas, ambos em 250% |
 
 Todas saíram com `ERROS: nenhum` — a ferramenta de captura falha de propósito
 quando a página registra erro, porque um PNG de shader quebrado se parece com
@@ -142,45 +190,48 @@ um PNG bom.
 
 ## 6. O que **não** está resolvido
 
-**1. O antebraço raspa a saia (parcialmente resolvido).**
-Medido, espaço de objeto, `ultra`, vestido, pior altura:
+**1. A saia ainda engole a mão — mas não por causa do BET.**
 
 | situação | invasão mão/tecido |
 |---|---|
-| BET desligado (herdado do Character 2.0) | **−78 mm** |
-| 250% **sem** a folga de braço | **−142 mm** |
-| 250% **com** a folga de braço | **−90 mm** |
+| BET desligado | **−78 mm** |
+| AfterCurve® 250% | **−57 mm** |
+| AfterBust® 250% | **+7 mm (livre)** |
 
-A folga devolveu **52 dos 64 mm** que o BET acrescentava (81%). Os 78 mm
-restantes **são anteriores ao BET** e aparecem com os dois canais em 0%: a saia
-é mais larga do que a linha em que os braços pendem. Em 250% sobra um retalho
-de pele visível no quadril direito — sondado por projeção, é o antebraço em
-`y −0,095…−0,022`, `x 0,254…0,306`, com o tecido em ~0,290: ele emerge cerca de
-16 mm.
+A invasão **diminui** quando o BET sobe. Os −78 mm de origem são do Character
+2.0: a saia é mais larga do que a linha em que os braços pendem, com o BET
+desligado. Não empurrei o braço mais para fora para esconder isso — seria
+exatamente a "posição artificial" que não se deve forçar.
 
-Não empurrei o braço mais para fora para esconder isso. Seria disfarçar uma
-interseção herdada às custas de uma pose errada, e o número honesto é o de
-cima: o BET hoje contribui com 12 mm dos 90 mm.
+**2. Na caminhada, aparece um retalho de pele sobre a saia em 250%.**
+Visível em `andando.png`. Sondando por osso os vértices daquele pedaço da tela,
+há antebraço (266), coxa (177) e saia misturados ali. Tentei quantificar com um
+critério radial na pose congelada e ele devolveu **zero nos dois casos (0% e
+250%)**, o que não bate com a imagem: **a medição está errada, não o defeito**.
+Fica registrado como defeito aberto e **não quantificado**. A saia é rígida,
+presa ao quadril, e não simula — membros em balanço a atravessam.
 
-**2. `tests/unit/coracao-roseiral.test.ts` falha — e não é deste trabalho.**
+**3. A calça facetada em 250%.** Em `roupas-casual.png` o quadril da calça
+mostra facetas: a peça tem poucos anéis naquela altura. O campo está correto; a
+malha da roupa é que é grossa ali.
+
+**4. O deltoide estica 74 mm em 250%.** É o custo do reposicionamento de junta,
+e é **idêntico ao que o AfterBust® já fazia** antes deste trabalho. Não é novo,
+mas também não é bonito: num futuro passe de rig, os pesos do ombro merecem
+atenção.
+
+**5. `tests/unit/coracao-roseiral.test.ts` falha — e não é deste trabalho.**
 Reproduzi a falha **com as minhas mudanças guardadas** (`git stash`), na árvore
-base: falha igual, três execuções seguidas, sem variação. É um defeito
-pré-existente no `main`, não instabilidade. Não mexi nele porque está fora do
-escopo do BET.
+base: falha igual, três execuções seguidas, sem variação. É defeito
+pré-existente no `main`. Não mexi nele e não o mascarei.
 
-**3. A calça facetada em 250%.** Em `roupas-casual.png` o quadril da calça mostra
-facetas: a peça tem poucos anéis naquela altura. O campo está correto; a malha
-da roupa é que é grossa ali.
-
-**4. Não medido:** FPS em GPU real (aqui só há SwiftShader), e o comportamento
-com os seis gestos faciais, que continuam intocados.
-
----
+**6. Não medido:** FPS em GPU real (aqui só há SwiftShader) e os seis gestos
+faciais, que continuam intocados.
 
 ## 7. Portão
 
 ```
 npx tsc --noEmit   → limpo
-npx vitest run     → 1 080 passando · 11 pulados · 1 falhando (o pré-existente acima)
-npm run build      → ok em 599 ms · index 730,73 kB (241,40 kB gz)
+npx vitest run     → 1 077 passando · 11 pulados · 1 falhando (o pré-existente acima)
+npm run build      → ok em 627 ms
 ```

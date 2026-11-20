@@ -708,7 +708,7 @@ describe('Afters 2.0 · malha do avatar', () => {
       expect(attribute.count).toBe(mesh.geometry.getAttribute('position').count);
       for (let i = 0; i < attribute.count; i += 1) {
         const zone = attribute.getX(i);
-        expect([Zone.None, Zone.Bust, Zone.Curve, Zone.Thigh, Zone.Arm]).toContain(Math.round(zone));
+        expect([Zone.None, Zone.Bust, Zone.Curve, Zone.Thigh]).toContain(Math.round(zone));
         seen.add(Math.round(zone));
         total += 1;
         if (zone > 0) zoned += 1;
@@ -720,7 +720,7 @@ describe('Afters 2.0 · malha do avatar', () => {
     expect(zoned).toBeGreaterThan(0);
     expect(zoned).toBeLessThan(total);
     // As quatro zonas existem no corpo: nenhuma ficou órfã na reescrita.
-    expect([...seen].sort()).toEqual([Zone.None, Zone.Bust, Zone.Curve, Zone.Thigh, Zone.Arm].sort());
+    expect([...seen].sort()).toEqual([Zone.None, Zone.Bust, Zone.Curve, Zone.Thigh].sort());
     avatar.dispose();
   });
 

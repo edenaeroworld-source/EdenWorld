@@ -25,6 +25,18 @@ export type { BodyProportions } from './body/BodyProportions';
 const SHOULDER_SPREAD = 0.034;
 /** Quanto a perna abre por unidade de AfterCurve® (0–2.5). */
 const LEG_SPREAD = 0.022;
+/**
+ * Quanto o ombro abre por unidade de AfterCurve® (0–2.5).
+ *
+ * O quadril largo também pede braço mais afastado, pelo mesmo motivo que
+ * o busto pede: senão o tecido da saia passa por fora da mão. Medido com
+ * vestido em `ultra`: sem isto, o AfterCurve® sozinho em 250% enfiava a
+ * mão 142 mm para dentro do tecido.
+ *
+ * É o mesmo valor do busto porque o problema é o mesmo — e os dois não
+ * se somam, veja `updateRig`.
+ */
+const CURVE_SHOULDER_SPREAD = 0.034;
 /** Quanto o braço afasta do corpo na gestação plena: contorna o ventre. */
 const GESTATION_SHOULDER_SPREAD = 0.04;
 /**
@@ -498,7 +510,11 @@ export class Avatar {
    * largo — por Afters ou por gestação.
    */
   private updateRig(): void {
-    const shoulder = this.metrics.shoulderX + this.bustUniform.value * SHOULDER_SPREAD + this.gestationUniform.value * GESTATION_SHOULDER_SPREAD;
+    // Busto e quadril não somam: o braço precisa contornar o mais largo
+    // dos dois, não a soma deles. Somar punha o braço em cruz quando as
+    // duas intensidades subiam juntas.
+    const volume = Math.max(this.bustUniform.value * SHOULDER_SPREAD, this.curveUniform.value * CURVE_SHOULDER_SPREAD);
+    const shoulder = this.metrics.shoulderX + volume + this.gestationUniform.value * GESTATION_SHOULDER_SPREAD;
     this.bones[Bone.ArmL].position.x = shoulder;
     this.bones[Bone.ArmR].position.x = -shoulder;
     const leg = this.metrics.legX + this.curveUniform.value * LEG_SPREAD;

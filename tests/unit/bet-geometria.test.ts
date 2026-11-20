@@ -12,12 +12,9 @@ import {
   displaceNormal,
   displaceVertex,
   lobeWeight,
-  armClearance,
-  ARM_SHOULDER_Y,
-  ARM_ELBOW_Y,
-  ARM_WRIST_Y,
 } from '../../src/afters/AftersMorph';
 import { Avatar } from '../../src/player/Avatar';
+import { Bone } from '../../src/player/body/BodyRig';
 import { DEFAULT_APPEARANCE } from '../../src/player/AvatarAppearance';
 
 /**
@@ -475,90 +472,118 @@ describe('BET 2.0 · paridade dos lobos entre TypeScript e GLSL', () => {
 });
 
 /**
- * A folga do braço.
+ * O braço.
  *
- * O braço não engorda com o BET: ele sai do caminho. A medida que
- * motivou isto está no relatório — com o quadril em 250%, a saia passava
- * 73 mm por fora da linha da mão, e o tecido atravessava os dedos.
+ * O braço não é deformado pelo BET: ele é **reposicionado pelo
+ * esqueleto**, que é o mecanismo que o projeto já usava para o busto
+ * ("deslocamento de junta, não deformação", em `Avatar.updateRig`).
+ *
+ * Houve uma tentativa de resolver isto no shader, deslocando o vértice
+ * conforme a altura. Entortava: 0 mm no cotovelo, 92 mm no punho e
+ * 55 mm nos dedos — um S no antebraço. Estes testes existem para que a
+ * anatomia do membro nunca mais dependa do campo de deformação.
  */
-describe('folga do braço', () => {
-  it('não mexe no braço quando o BET está desligado', () => {
-    for (const y of [0.49, 0.3, 0.0, -0.07, -0.2]) {
-      expect(armClearance({ x: 0.2, y, z: 0 }, 0, 0)).toBe(0);
+describe('o braço anda pelo esqueleto, não pelo campo', () => {
+  const pesoDoBraco = (geometria: THREE.BufferGeometry, i: number): number => {
+    const si = geometria.getAttribute('skinIndex');
+    const sw = geometria.getAttribute('skinWeight');
+    let peso = 0;
+    const idx = [si.getX(i), si.getY(i), si.getZ(i), si.getW(i)];
+    const val = [sw.getX(i), sw.getY(i), sw.getZ(i), sw.getW(i)];
+    for (let k = 0; k < 4; k += 1) {
+      if (idx[k] === Bone.ArmL || idx[k] === Bone.ForeL) peso += val[k];
     }
-    const parado = displaceVertex({ x: 0.2, y: -0.07, z: 0 }, Zone.Arm, 0, 0);
-    expect(parado).toEqual({ x: 0.2, y: -0.07, z: 0 });
+    return peso;
+  };
+
+  it('o campo de deformação não toca em vértice nenhum do braço', () => {
+    // Nenhuma zona de braço: o que move o braço é o osso.
+    const avatar = new Avatar();
+    const corpo = avatar.root.getObjectByName('corpo') as THREE.SkinnedMesh;
+    const zonas = corpo.geometry.getAttribute('aZone');
+    const vistas = new Set<number>();
+    for (let i = 0; i < zonas.count; i += 1) vistas.add(Math.round(zonas.getX(i)));
+    expect([...vistas].sort()).toEqual([Zone.None, Zone.Bust, Zone.Curve, Zone.Thigh].sort());
+    avatar.dispose();
   });
 
-  it('deixa o ombro e o cotovelo quietos', () => {
-    // Os dois primeiros anéis do braço pertencem ao osso do tronco e
-    // fecham a axila. Se andarem, abrem a costura que existem para fechar.
-    expect(armClearance({ x: 0.2, y: ARM_SHOULDER_Y, z: 0 }, 2.5, 2.5)).toBe(0);
-    expect(armClearance({ x: 0.2, y: ARM_SHOULDER_Y + 0.05, z: 0 }, 2.5, 2.5)).toBe(0);
-    // No cotovelo a rampa já está inteira, mas o quadril ainda não
-    // alargou nada àquela altura, então o braço mal se move.
-    expect(armClearance({ x: 0.2, y: ARM_ELBOW_Y, z: 0 }, 2.5, 2.5)).toBeLessThan(0.01);
-  });
-
-  it('afasta o punho na medida em que o quadril alarga', () => {
-    const punho = armClearance({ x: 0.2, y: ARM_WRIST_Y, z: 0 }, 0, 2.5);
-    // O quadril ganha gainX da própria meia-largura; o braço anda o mesmo
-    // tanto, senão a folga que existia vira colisão.
-    expect(punho).toBeGreaterThan(0.05);
-    expect(punho).toBeLessThan(0.12);
-  });
-
-  it('cresce junto com a intensidade, sem salto', () => {
-    let anterior = -1;
-    for (const i of [0, 0.5, 1, 1.5, 2, 2.5]) {
-      const f = armClearance({ x: 0.2, y: -0.07, z: 0 }, 0, i);
-      expect(f).toBeGreaterThanOrEqual(anterior);
-      anterior = f;
+  it('o membro inteiro é rígido: nenhuma distância interna muda', () => {
+    // Esta é a garantia de anatomia — úmero, cotovelo, antebraço e mão.
+    const avatar = new Avatar();
+    avatar.setDetail('alta');
+    const malha = avatar.root.getObjectByName('corpo') as THREE.SkinnedMesh;
+    const posicao = malha.geometry.getAttribute('position');
+    const membro: number[] = [];
+    for (let i = 0; i < posicao.count; i += 1) {
+      if (pesoDoBraco(malha.geometry, i) > 0.999) membro.push(i);
     }
-  });
+    expect(membro.length).toBeGreaterThan(300);
 
-  it('é simétrica nos dois braços', () => {
-    for (const y of [0.2, 0, -0.07, -0.2]) {
-      const dir = displaceVertex({ x: 0.21, y, z: 0.01 }, Zone.Arm, 1.4, 2.1);
-      const esq = displaceVertex({ x: -0.21, y, z: 0.01 }, Zone.Arm, 1.4, 2.1);
-      expect(esq.x).toBeCloseTo(-dir.x, 12);
-      expect(esq.y).toBeCloseTo(dir.y, 12);
-      expect(esq.z).toBeCloseTo(dir.z, 12);
-    }
-  });
-
-  it('é translação pura: não muda y, z, nem a normal', () => {
-    const p = { x: 0.2, y: -0.07, z: 0.03 };
-    const d = displaceVertex(p, Zone.Arm, 2.5, 2.5);
-    expect(d.y).toBe(p.y);
-    expect(d.z).toBe(p.z);
-    expect(Math.abs(d.x)).toBeGreaterThan(Math.abs(p.x));
-    const n = { x: 0, y: 0.6, z: 0.8 };
-    expect(displaceNormal(p, n, Zone.Arm, 2.5, 2.5)).toEqual(n);
-  });
-
-  it('é contínua ao longo do braço', () => {
-    // Passo pela metade: num campo contínuo a diferença cai junto.
-    const dif = (h: number) => {
-      let pior = 0;
-      for (let y = -0.25; y < 0.5; y += h) {
-        const a = armClearance({ x: 0.2, y, z: 0 }, 2.5, 2.5);
-        const b = armClearance({ x: 0.2, y: y + h, z: 0 }, 2.5, 2.5);
-        pior = Math.max(pior, Math.abs(b - a));
-      }
-      return pior;
+    const foto = (bust: number, curve: number): THREE.Vector3[] => {
+      avatar.setMorph(bust, curve);
+      avatar.root.updateMatrixWorld(true);
+      malha.skeleton.update();
+      return membro.map((i) => {
+        const v = new THREE.Vector3(posicao.getX(i), posicao.getY(i), posicao.getZ(i));
+        malha.applyBoneTransform(i, v);
+        return v;
+      });
     };
-    const razao = dif(0.002) / dif(0.004);
-    expect(razao).toBeGreaterThan(0.4);
-    expect(razao).toBeLessThan(0.6);
+    const parado = foto(0, 0);
+    for (const [bust, curve] of [[2.5, 0], [0, 2.5], [2.5, 2.5]]) {
+      const movido = foto(bust, curve);
+      let pior = 0;
+      for (let i = 0; i < membro.length; i += 37) {
+        for (let j = i + 1; j < membro.length; j += 53) {
+          pior = Math.max(pior, Math.abs(parado[i].distanceTo(parado[j]) - movido[i].distanceTo(movido[j])));
+        }
+      }
+      expect(pior, `bust ${bust} curve ${curve}`).toBeLessThan(1e-6);
+    }
+    avatar.dispose();
   });
 
-  it('o GLSL declara a mesma folga que o TypeScript', () => {
-    const glsl = aftersMorphGLSL();
-    expect(glsl).toContain('edenArmClearance');
-    expect(glsl).toContain(ARM_SHOULDER_Y.toFixed(5));
-    expect(glsl).toContain(ARM_ELBOW_Y.toFixed(5));
-    // A zona 4 precisa ser despachada antes das bandas.
-    expect(glsl).toContain('floor(aZone + 0.5) == 4.0');
+  it('o AfterCurve® afasta a junta do ombro, como o AfterBust® já fazia', () => {
+    const avatar = new Avatar();
+    const ombro = () => {
+      avatar.root.updateMatrixWorld(true);
+      return avatar.root.getObjectByName('braco-e')!.position.x;
+    };
+    avatar.setMorph(0, 0);
+    const parado = ombro();
+    avatar.setMorph(2.5, 0);
+    const porBusto = ombro();
+    avatar.setMorph(0, 2.5);
+    const porQuadril = ombro();
+    expect(porBusto).toBeGreaterThan(parado);
+    // Sem isto, a saia em 250% passava 142 mm por fora da mão.
+    expect(porQuadril).toBeGreaterThan(parado);
+    expect(porQuadril).toBeCloseTo(porBusto, 6);
+    avatar.dispose();
+  });
+
+  it('busto e quadril não somam: o braço contorna o mais largo, não os dois', () => {
+    const avatar = new Avatar();
+    const ombro = (bust: number, curve: number) => {
+      avatar.setMorph(bust, curve);
+      avatar.root.updateMatrixWorld(true);
+      return avatar.root.getObjectByName('braco-e')!.position.x;
+    };
+    const so = ombro(2.5, 0);
+    const juntos = ombro(2.5, 2.5);
+    expect(juntos).toBeCloseTo(so, 6);
+    avatar.dispose();
+  });
+
+  it('volta exatamente ao lugar quando o BET desliga', () => {
+    const avatar = new Avatar();
+    const ombro = (bust: number, curve: number) => {
+      avatar.setMorph(bust, curve);
+      return avatar.root.getObjectByName('braco-e')!.position.x;
+    };
+    const original = ombro(0, 0);
+    ombro(2.5, 2.5);
+    expect(ombro(0, 0)).toBe(original);
+    avatar.dispose();
   });
 });

@@ -125,7 +125,9 @@ const BET_ESTADOS: readonly { nome: string; bust: number; curve: number }[] = [
 ];
 
 /** Rampa de intensidade: o mesmo corpo em cinco passos do mesmo canal. */
-const BET_RAMPA: readonly number[] = [0, 0.625, 1.25, 1.875, 2.5];
+// A matriz de intensidade pedida na validação: 0, 25, 50, 75, 100, 150,
+// 200 e 250%, os dois canais juntos.
+const BET_RAMPA: readonly number[] = [0, 0.25, 0.5, 0.75, 1, 1.5, 2, 2.5];
 
 /** Tempo de construção do último `montar`, por avatar, em ms. */
 const custos: { nome: string; ms: number; verts: number }[] = [];
@@ -165,7 +167,7 @@ function montar(): void {
     // A rampa usa os dois canais juntos: o que se quer ver aqui é a
     // progressão, e progressão de um canal só esconde a interação.
     BET_RAMPA.forEach((valor, i) => {
-      const avatar = novoAvatar(ui.nivel, (i - 2) * 0.82);
+      const avatar = novoAvatar(ui.nivel, (i - (BET_RAMPA.length - 1) / 2) * 0.78);
       avatar.setMorph(valor, valor);
     });
   } else if (ui.modo === 'bichos') {
@@ -218,7 +220,7 @@ function enquadrar(): void {
   // O elenco são cinco corpos lado a lado: precisa de mais recuo que
   // os quatro níveis, senão o das pontas sai do quadro.
   const dist =
-    (rosto ? 0.95 : ui.modo === 'elenco' || ui.modo === 'betrampa' ? 7.4 : ui.modo === 'niveis' || ui.modo === 'bet' ? 6.9 : largo ? 6.2 : 3.6) *
+    (rosto ? 0.95 : ui.modo === 'betrampa' ? 10.2 : ui.modo === 'elenco' ? 7.4 : ui.modo === 'niveis' || ui.modo === 'bet' ? 6.9 : largo ? 6.2 : 3.6) *
     zoom;
   alvo.add(alvoOff);
   camera.position.set(alvo.x + Math.sin(angle) * dist, alvo.y + (rosto ? 0.04 : 0.35) * zoom, alvo.z + Math.cos(angle) * dist);

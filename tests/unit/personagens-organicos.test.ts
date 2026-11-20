@@ -127,13 +127,11 @@ describe('Marco N · a malha', () => {
     }
   });
 
-  it('tem as cinco zonas de deformação representadas', () => {
+  it('tem as quatro zonas de deformação representadas', () => {
     const zones = new Set<number>();
     const attribute = bodyOf(new Avatar()).geometry.getAttribute('aZone');
     for (let i = 0; i < attribute.count; i += 1) zones.add(attribute.getX(i));
-    // 4 é o braço, que não engorda: ele se afasta para o tecido do
-    // quadril não atravessar a mão.
-    expect([...zones].sort()).toEqual([0, 1, 2, 3, 4]);
+    expect([...zones].sort()).toEqual([0, 1, 2, 3]);
   });
 });
 

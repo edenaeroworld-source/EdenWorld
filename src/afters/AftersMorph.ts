@@ -53,19 +53,6 @@ export const Zone = {
   Curve: 2,
   /** Coxa — AfterCurve® atenuado, só no topo. */
   Thigh: 3,
-  /**
-   * Braço, antebraço e mão — não engordam, mas **saem do caminho**.
-   *
-   * O braço pendurado tem 12 mm de folga da saia num corpo padrão. Com
-   * isso, qualquer alargamento de quadril que se veja enfia o tecido na
-   * mão: em 250% a saia passava 73 mm por fora da linha dos dedos,
-   * medido. Não é uma folga que dê para recuperar reduzindo o ganho —
-   * caberia no máximo 2% de alargamento, que ninguém veria.
-   *
-   * Um corpo mais largo afasta os braços. É o que esta zona faz, e só
-   * isso: deslocamento lateral, sem mudar o volume do braço.
-   */
-  Arm: 4,
 } as const;
 
 export type ZoneId = (typeof Zone)[keyof typeof Zone];
@@ -361,52 +348,7 @@ export function lobeOffset(lobe: BetLobe, position: Vec3, side: number, intensit
 }
 
 /* ========================================================================
- * 3. Folga do braço
- * ===================================================================== */
-
-/**
- * Alturas do braço no corpo padrão, em espaço de objeto (metros).
- *
- * O braço é autorado no espaço do quadril, sem origem de junta própria,
- * então estas alturas são absolutas. Seguem a mesma convenção dos
- * centros de banda, que também são números fixos de um corpo padrão.
- */
-export const ARM_SHOULDER_Y = 0.43;
-export const ARM_ELBOW_Y = 0.16;
-export const ARM_WRIST_Y = -0.07;
-
-/**
- * Meia-largura de referência do tecido na altura da mão.
- *
- * É o raio da saia ali no corpo padrão. Serve para converter o ganho
- * lateral da banda — que é uma fração — em metros de afastamento.
- */
-export const ARM_REFERENCE_HALF_WIDTH = 0.221;
-
-/**
- * Quanto o braço se afasta, em metros, para uma dada intensidade.
- *
- * A conta é a largura que o corpo ganhou naquela altura, não um número
- * inventado: se o quadril abriu 4 cm, o braço sai 4 cm. Assim a folga
- * que existia continua existindo, em vez de virar uma disputa entre
- * dois números ajustados à mão.
- *
- * A rampa vale 0 do ombro para cima e 1 do cotovelo para baixo, com as
- * duas alturas medidas do esqueleto. O ombro tem de ficar exatamente
- * parado: o braço é uma ilha de malha que encosta no tronco sem costurar
- * nele, então 8 mm no deltoide já abririam um vão visível. Entre as duas
- * alturas o braço abre como quem afasta o cotovelo do corpo.
- */
-export function armClearance(position: Vec3, bust: number, curve: number): number {
-  const rampa = smoothstep(ARM_SHOULDER_Y, ARM_ELBOW_Y, position.y);
-  if (rampa <= 0) return 0;
-  const doQuadril = CURVE_BAND.gainX * bandWeight(CURVE_BAND, position.y) * curve;
-  const doPeito = BUST_BAND.gainX * bandWeight(BUST_BAND, position.y - 0.06) * bust;
-  return ARM_REFERENCE_HALF_WIDTH * Math.max(doQuadril, doPeito) * rampa;
-}
-
-/* ========================================================================
- * 4. O campo completo
+ * 3. O campo completo
  * ===================================================================== */
 
 /**
@@ -426,12 +368,6 @@ export function armClearance(position: Vec3, bust: number, curve: number): numbe
  * @param curve intensidade do AfterCurve® (0–2.5)
  */
 export function displaceVertex(position: Vec3, zone: number, bust: number, curve: number): Vec3 {
-  if (Math.round(zone) === Zone.Arm) {
-    if (bust <= 0 && curve <= 0) return { ...position };
-    const folga = armClearance(position, bust, curve);
-    if (folga <= 0) return { ...position };
-    return { x: position.x + Math.sign(position.x) * folga, y: position.y, z: position.z };
-  }
   const entry = bandForZone(zone);
   if (!entry) return { ...position };
   const intensity = entry.channel === 'bust' ? bust : curve;
@@ -469,11 +405,6 @@ export const NORMAL_EPSILON = 0.005;
  * de entrada, então o caminho sem Afters não muda nada.
  */
 export function displaceNormal(position: Vec3, normal: Vec3, zone: number, bust: number, curve: number): Vec3 {
-  // O braço é transladado, e translação não gira normal. A rampa inclina
-  // de leve a superfície ao longo de y, o que as diferenças centrais
-  // pegariam, mas o efeito é de centésimo de grau — não vale quatro
-  // avaliações do campo por vértice do braço.
-  if (Math.round(zone) === Zone.Arm) return { ...normal };
   const entry = bandForZone(zone);
   if (!entry) return { ...normal };
   const intensity = entry.channel === 'bust' ? bust : curve;
@@ -681,24 +612,7 @@ vec3 edenAftersDisplace(EdenBand band, EdenLobe lobe, bool hasLobe, float intens
 }
 
 // Folga do braço: o membro não engorda, ele sai do caminho do tecido.
-vec3 edenArmClearance(vec3 pos) {
-  float rampa = smoothstep(${f(ARM_SHOULDER_Y)}, ${f(ARM_ELBOW_Y)}, pos.y);
-  if (rampa <= 0.0) return pos;
-  EdenBand quadril;
-${glslBand('  quadril', CURVE_BAND)}
-  EdenBand peito;
-${glslBand('  peito', BUST_BAND)}
-  float doQuadril = quadril.gainX * edenBandWeight(quadril, pos.y) * uCurve;
-  float doPeito = peito.gainX * edenBandWeight(peito, pos.y - 0.06) * uBust;
-  float folga = ${f(ARM_REFERENCE_HALF_WIDTH)} * max(doQuadril, doPeito) * rampa;
-  return vec3(pos.x + sign(pos.x) * folga, pos.y, pos.z);
-}
-
 vec3 edenAftersPosition(vec3 pos) {
-  if (floor(aZone + 0.5) == 4.0) {
-    if (uBust <= 0.0 && uCurve <= 0.0) return pos;
-    return edenArmClearance(pos);
-  }
   EdenBand band;
   EdenLobe lobe;
   bool hasLobe;
@@ -711,7 +625,6 @@ vec3 edenAftersPosition(vec3 pos) {
 // avaliações: nenhum jacobiano escrito à mão para sair de sincronia com
 // a forma quando alguém ajustar um ganho.
 vec3 edenAftersNormal(vec3 pos, vec3 nrm) {
-  if (floor(aZone + 0.5) == 4.0) return nrm;
   EdenBand band;
   EdenLobe lobe;
   bool hasLobe;
