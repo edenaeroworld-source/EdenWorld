@@ -23,7 +23,7 @@ import { Zone as MorphZone } from '../../afters/AftersMorph';
 import { TAU } from '../../utils/math';
 import type { AvatarAppearance } from '../AvatarAppearance';
 import type { BodyProportions } from './BodyProportions';
-import { Bone, type BodyDetail, type BodyMetrics, HEAD_CENTER, SKIRT_BREAK_Y, SKIRT_FOLLOW_WALK, SKIRT_HEM_QUADRANTS, SKIRT_QUADRANTS, morphOrigins } from './BodyRig';
+import { Bone, type BodyDetail, type BodyMetrics, FACE, HEAD_CENTER, SKIRT_BREAK_Y, SKIRT_FOLLOW_WALK, SKIRT_HEM_QUADRANTS, SKIRT_QUADRANTS, morphOrigins } from './BodyRig';
 import { type FollowSpec, type SkinBinding, type Station, SurfaceBuilder, subdivideProfile } from './BodySurface';
 
 type Hex = THREE.ColorRepresentation;
@@ -724,18 +724,27 @@ function buildHead(b: SurfaceBuilder, a: AvatarAppearance, p: BodyProportions, m
     capRings: 2,
   });
 
-  const eyeY = cy + 0.022;
-  const eyeX = R * 0.37;
-  const eyeZ = R * 0.78;
+  const eyeY = cy + FACE.eyeY * R;
+  const eyeX = FACE.eyeX * R;
+  const eyeZ = FACE.eyeZ * R;
 
   // Órbitas: a superfície afunda onde o olho vai sentar. Sem isto o
   // olho fica pousado na bochecha, que é a cara de boneco de feira.
+  // Fundas o bastante para o globo entrar — antes a cova era rasa e o
+  // olho ficava proeminente, de boneco assustado.
   for (const side of [-1, 1]) {
-    b.feature([side * eyeX, eyeY, eyeZ], [R * 0.3, R * 0.2, R * 0.3], -R * 0.1, [0, 0, 1]);
+    b.feature([side * eyeX, eyeY, eyeZ + R * 0.1], [R * 0.26, R * 0.19, R * 0.3], -R * 0.19, [0, 0, 1]);
+    // Canto interno, mais fundo: é o que dá a forma de amêndoa.
+    b.feature([side * (eyeX - R * 0.17), eyeY - R * 0.02, eyeZ + R * 0.12], [R * 0.1, R * 0.1, R * 0.2], -R * 0.07, [0, 0, 1]);
   }
-  // Nariz: puxado da testa para baixo, estreito, com a ponta curta.
-  b.feature([0, cy + 0.012, R * 0.9], [R * 0.17, R * 0.3, R * 0.4], R * 0.17, [0, 0, 1]);
-  b.feature([0, cy - 0.022, R * 0.92], [R * 0.2, R * 0.12, R * 0.35], R * 0.07, [0, 0, 1]);
+  // Nariz: dorso descendo da glabela, ponta curta, asas de cada lado.
+  b.feature([0, cy + 0.012, R * 0.9], [R * 0.14, R * 0.3, R * 0.4], R * 0.17, [0, 0, 1]);
+  b.feature([0, cy - 0.028, R * 0.92], [R * 0.16, R * 0.1, R * 0.32], R * 0.1, [0, 0, 1]);
+  for (const side of [-1, 1]) {
+    // Asa do nariz, e a dobra que a separa da bochecha.
+    b.feature([side * R * 0.17, cy - 0.042, R * 0.86], [R * 0.09, R * 0.07, R * 0.2], R * 0.05, [0, 0, 1]);
+    b.feature([side * R * 0.26, cy - 0.05, R * 0.82], [R * 0.05, R * 0.09, R * 0.18], -R * 0.035, [0, 0, 1]);
+  }
   // Arco da sobrancelha.
   b.feature([0, cy + 0.058, R * 0.82], [R * 0.75, R * 0.1, R * 0.4], R * 0.045, [0, 0, 1]);
   // Queixo e maçãs do rosto.
@@ -743,8 +752,23 @@ function buildHead(b: SurfaceBuilder, a: AvatarAppearance, p: BodyProportions, m
   for (const side of [-1, 1]) {
     b.feature([side * R * 0.62, cy - 0.045, R * 0.6], [R * 0.3, R * 0.22, R * 0.35], R * 0.05);
   }
-  // Lábio superior, um degrau raso.
-  b.feature([0, cy - 0.072, R * 0.82], [R * 0.3, R * 0.07, R * 0.3], R * 0.035, [0, 0, 1]);
+
+  // Boca: o volume dos lábios vem da própria pele, e não de uma peça
+  // colada. O arco vermelho que havia antes era um anel pousado na
+  // bochecha; o que faz um lábio é o degrau à volta dele.
+  const my = cy + FACE.mouthY * R;
+  const mz = FACE.mouthZ * R;
+  // Filtro: o sulco entre o nariz e o lábio de cima.
+  b.feature([0, my + R * 0.16, mz + R * 0.1], [R * 0.06, R * 0.08, R * 0.2], -R * 0.03, [0, 0, 1]);
+  // Lábio superior e inferior, com a linha da boca afundada entre eles.
+  b.feature([0, my + R * 0.055, mz + R * 0.06], [R * 0.28, R * 0.055, R * 0.22], R * 0.055, [0, 0, 1]);
+  b.feature([0, my - R * 0.075, mz + R * 0.06], [R * 0.26, R * 0.07, R * 0.22], R * 0.06, [0, 0, 1]);
+  b.feature([0, my - R * 0.01, mz + R * 0.09], [R * 0.3, R * 0.025, R * 0.2], -R * 0.035, [0, 0, 1]);
+  // Sulco sob o lábio de baixo, e os cantos da boca.
+  b.feature([0, my - R * 0.17, mz + R * 0.04], [R * 0.16, R * 0.05, R * 0.2], -R * 0.025, [0, 0, 1]);
+  for (const side of [-1, 1]) {
+    b.feature([side * FACE.mouthHalf * R, my - R * 0.01, mz], [R * 0.06, R * 0.07, R * 0.18], -R * 0.03, [0, 0, 1]);
+  }
 
   // Orelhas: varredura própria, rente ao crânio, achatada em x.
   for (const side of [-1, 1]) {
@@ -758,20 +782,58 @@ function buildHead(b: SurfaceBuilder, a: AvatarAppearance, p: BodyProportions, m
     b.loft(subdivideProfile(toStations(ear), 2), { segments: Math.max(8, Math.round(detail.segments * 0.6)), capTop: R * 0.03, capBottom: R * 0.03, capRings: 1 });
   }
 
-  // Olhos: esclera, íris e pupila, assentados na órbita.
-  const eyeRings = detail.segments >= 14 ? 7 : 5;
+  // Olhos: um globo esférico de verdade, com íris e pupila assentadas
+  // na superfície dele. Antes a esclera era mais alta que larga
+  // (0,17 × 0,20) e a íris ocupava dois terços da sua largura — um
+  // olho que nenhuma pálpebra conseguiria fechar. Agora o globo é
+  // redondo, entra na órbita, e quem define a abertura é a pálpebra,
+  // que vem de `AvatarFace`.
+  const eyeRings = detail.segments >= 30 ? 11 : detail.segments >= 14 ? 8 : 5;
+  const ball = FACE.eyeBall * R;
   for (const side of [-1, 1]) {
     const ex = side * eyeX;
-    b.ball([ex, eyeY, eyeZ - R * 0.07], [R * 0.17, R * 0.2, R * 0.15], { color: 0xfdfdff, skin: { bone: Bone.Head } }, eyeRings);
-    b.ball([ex, eyeY - R * 0.01, eyeZ + R * 0.04], [R * 0.11, R * 0.13, R * 0.07], { color: a.eyeColor, skin: { bone: Bone.Head } }, eyeRings);
-    b.ball([ex, eyeY - R * 0.015, eyeZ + R * 0.08], [R * 0.055, R * 0.065, R * 0.04], { color: 0x14161c, skin: { bone: Bone.Head } }, 5);
-    b.ball([ex + R * 0.05, eyeY + R * 0.07, eyeZ + R * 0.08], [R * 0.032, R * 0.032, R * 0.025], { color: 0xffffff, skin: { bone: Bone.Head } }, 4);
+    // Olhar levemente convergente, como o de quem olha para a frente.
+    const toe = -side * R * 0.006;
+    b.ball([ex, eyeY, eyeZ], [ball, ball, ball * 0.94], { color: 0xf6f4f2, skin: { bone: Bone.Head } }, eyeRings);
+    b.ball(
+      [ex + toe, eyeY, eyeZ + ball * 0.74],
+      [FACE.iris * R, FACE.iris * R, ball * 0.3],
+      { color: a.eyeColor, skin: { bone: Bone.Head } },
+      eyeRings,
+    );
+    b.ball(
+      [ex + toe, eyeY, eyeZ + ball * 0.9],
+      [FACE.pupil * R, FACE.pupil * R, ball * 0.16],
+      { color: 0x0d0f14, skin: { bone: Bone.Head } },
+      Math.max(5, eyeRings - 3),
+    );
+    // Brilho pequeno, no alto e para dentro — onde o céu bate.
+    b.ball(
+      [ex + toe - side * R * 0.022, eyeY + R * 0.03, eyeZ + ball * 0.93],
+      [FACE.spark * R, FACE.spark * R, ball * 0.1],
+      { color: 0xffffff, skin: { bone: Bone.Head } },
+      4,
+    );
   }
 
-  // Um toque de cor nas maçãs, que é metade da identidade Frutiger Aero.
-  const blush = new THREE.Color(skin).lerp(new THREE.Color(0xff8fa8), 0.34).getHex();
+  // Um toque de cor nas maçãs, que é metade da identidade Frutiger Aero
+  // — mas pintado, não colado. Eram duas bolas achatadas, e de perfil
+  // apareciam como abas rosa saindo da bochecha.
+  const blush = new THREE.Color(skin).lerp(new THREE.Color(0xff8fa8), 0.5).getHex();
   for (const side of [-1, 1]) {
-    b.ball([side * R * 0.66, cy - 0.055, R * 0.66], [R * 0.17, R * 0.1, R * 0.05], { color: blush, skin: { bone: Bone.Head } }, 5);
+    b.paint([side * R * 0.62, cy - 0.08, R * 0.62], [R * 0.3, R * 0.19, R * 0.3], blush, 0.5);
+  }
+  // Pálpebra e canto do olho um tom abaixo: é sombra própria, e é o
+  // que tira o ar de bola pousada no rosto.
+  const socket = new THREE.Color(skin).lerp(new THREE.Color(0x6b4433), 0.3).getHex();
+  for (const side of [-1, 1]) {
+    b.paint([side * eyeX, eyeY + R * 0.11, eyeZ + R * 0.16], [R * 0.21, R * 0.1, R * 0.2], socket, 0.5);
+    b.paint([side * (eyeX - R * 0.16), eyeY, eyeZ + R * 0.16], [R * 0.08, R * 0.1, R * 0.18], socket, 0.45);
+  }
+  // Sombra sob o lábio e nas asas do nariz, pelo mesmo motivo.
+  b.paint([0, my - R * 0.15, mz + R * 0.12], [R * 0.18, R * 0.06, R * 0.16], socket, 0.3);
+  for (const side of [-1, 1]) {
+    b.paint([side * R * 0.25, cy - 0.052, R * 0.8], [R * 0.07, R * 0.1, R * 0.16], socket, 0.35);
   }
 
   buildHair(b, a, m, detail, cy, R);

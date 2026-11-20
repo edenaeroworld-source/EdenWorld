@@ -123,6 +123,55 @@ export const NECK_Y = 0.48;
 export const LEG_X = 0.095;
 /** Raio da cabeça de referência. */
 export const HEAD_R = 0.176;
+
+/**
+ * Âncoras do rosto, em múltiplos do raio da cabeça e com origem no
+ * centro dela.
+ *
+ * Existem porque o rosto é montado em dois lugares: `buildHead` escava
+ * a órbita e assenta o globo ocular na malha do corpo, e `AvatarFace`
+ * põe por cima as peças que se mexem — pálpebras, sobrancelhas,
+ * lábios. Enquanto cada um tinha os seus próprios números, as peças
+ * não se encontravam: a pálpebra ficava em `y = 0,222` e o topo do
+ * globo em `0,217`, ou seja, ela nunca cobriu olho nenhum. Era uma
+ * almofada pousada acima do olho, e é isso que a imagem mostrava.
+ *
+ * Com as medidas num lugar só, a pálpebra é uma calota concêntrica ao
+ * globo: ela gira em torno do centro do olho, como a de verdade.
+ */
+export const FACE = Object.freeze({
+  /**
+   * Medidas tiradas do cânone do rosto, em frações da **largura** da
+   * cabeça (que vale `2R`), e não escolhidas a olho:
+   *
+   *  · a abertura do olho mede 21% da largura da cabeça;
+   *  · a íris, 45% dessa abertura;
+   *  · a distância entre os cantos internos é a largura de um olho;
+   *  · a boca mede 33% da largura da cabeça;
+   *  · os olhos ficam a 48% da altura, do alto para baixo.
+   *
+   * Conferidas contra um rosto de referência antes de entrarem aqui.
+   * A versão anterior tinha o globo com 13% da largura — olhos de
+   * boneco, pequenos demais para a pálpebra ter o que cobrir.
+   */
+  eyeX: 0.38,
+  eyeY: 0.12,
+  eyeZ: 0.695,
+  /** Raio do globo: 19% da largura da cabeça em diâmetro. */
+  eyeBall: 0.19,
+  iris: 0.082,
+  pupil: 0.033,
+  spark: 0.015,
+  /**
+   * Onde a **pele** está, na frente do rosto — não onde o globo está.
+   * A distinção custou caro: ancoradas no centro do olho, a boca e as
+   * sobrancelhas ficavam três centímetros dentro da cabeça.
+   */
+  browZ: 0.89,
+  mouthY: -0.44,
+  mouthZ: 0.93,
+  mouthHalf: 0.3,
+});
 /**
  * Altura do centro da cabeça sobre a junta do pescoço.
  *
@@ -414,9 +463,25 @@ export interface BodyDetail {
   headRings: number;
 }
 
-export const BODY_DETAIL: Readonly<Record<'alta' | 'media' | 'baixa', BodyDetail>> = Object.freeze({
-  alta: { segments: 20, steps: 4, headRings: 14 },
-  media: { segments: 14, steps: 3, headRings: 11 },
+/**
+ * Quatro densidades, de perto para longe.
+ *
+ * O desenho da cabeça sempre teve órbita, dorso de nariz, arco da
+ * sobrancelha, maçãs e degrau do lábio — `buildHead` escava todos com
+ * `feature()`. O que faltava era **resolução para expressá-los**: com
+ * catorze anéis de crânio, uma órbita de `R·0,3` de raio cai sobre um
+ * anel e meio, e um anel e meio não faz uma órbita, faz um amassado.
+ * Era por isso que o rosto parecia um boneco apesar de a anatomia
+ * estar escrita no código.
+ *
+ * `ultra` é o nível novo, para quem está perto e tem máquina: aí o
+ * rosto tem anel onde precisa de anel. Os outros três continuam
+ * existindo e continuam servindo ao LOD de `NpcSystem`.
+ */
+export const BODY_DETAIL: Readonly<Record<'ultra' | 'alta' | 'media' | 'baixa', BodyDetail>> = Object.freeze({
+  ultra: { segments: 44, steps: 7, headRings: 30 },
+  alta: { segments: 30, steps: 5, headRings: 21 },
+  media: { segments: 18, steps: 3, headRings: 13 },
   baixa: { segments: 10, steps: 2, headRings: 8 },
 });
 

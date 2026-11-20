@@ -404,6 +404,42 @@ export class SurfaceBuilder {
     }
   }
 
+  /**
+   * Tinge os vértices dentro de uma região elipsoidal.
+   *
+   * O irmão de `feature`: aquele empurra a superfície, este pinta a
+   * que já existe. Serve para o que é cor e não é forma — o rubor das
+   * maçãs, o vermelho dos lábios, a sombra de uma dobra. Antes, o
+   * rubor eram duas bolas achatadas coladas na bochecha, e elas
+   * furavam a silhueta: de perfil, apareciam duas abas rosa saindo do
+   * rosto. Cor não precisa de geometria.
+   *
+   * @param amount 0 não muda nada, 1 substitui a cor no centro.
+   */
+  paint(
+    center: readonly [number, number, number],
+    radius: readonly [number, number, number],
+    color: THREE.ColorRepresentation,
+    amount: number,
+    falloff = 1.4,
+  ): void {
+    const [cx, cy, cz] = center;
+    const [rx, ry, rz] = radius;
+    const tone = new THREE.Color(color);
+    for (let i = 0, c = 0; i < this.position.length; i += 3, c += 3) {
+      const dx = (this.position[i] - cx) / rx;
+      const dy = (this.position[i + 1] - cy) / ry;
+      const dz = (this.position[i + 2] - cz) / rz;
+      const d2 = dx * dx + dy * dy + dz * dz;
+      if (d2 > 9) continue;
+      const w = Math.exp(-d2 * falloff) * amount;
+      if (w < 0.002) continue;
+      this.color[c] += (tone.r - this.color[c]) * w;
+      this.color[c + 1] += (tone.g - this.color[c + 1]) * w;
+      this.color[c + 2] += (tone.b - this.color[c + 2]) * w;
+    }
+  }
+
   /** Fecha a malha: normais médias, limites, atributos de pele e morph. */
   build(): THREE.BufferGeometry {
     const geometry = new THREE.BufferGeometry();

@@ -21,6 +21,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Zone as MorphZone } from '../afters/AftersMorph';
 import { clamp01, createRng, damp, type Rng } from '../utils/math';
 import type { AvatarAppearance } from './AvatarAppearance';
+import { FACE } from './body/BodyRig';
 import { EXPRESSION_WEIGHTS, type Expression, FACE_MORPHS, type FaceMorph } from './Expressions';
 
 export type { Expression, FaceMorph } from './Expressions';
@@ -32,66 +33,99 @@ export { EXPRESSIONS, EXPRESSION_WEIGHTS, FACE_MORPHS, isExpression } from './Ex
 
 /** Centro da cabeça no espaço local da malha da cabeça. */
 const HEAD_Y = 0.16;
-const EYE_X = 0.064;
-/**
- * A pálpebra vive à frente do olho inteiro (a pupila está em z = 0.167):
- * assim, quando desce, ela cobre — e não atravessa — o globo ocular.
- */
-const LID_Z = 0.172;
+/** Raio da cabeça nesse mesmo espaço (`HEAD_R`, antes da escala). */
+const R = 0.176;
 
+const EYE_X = FACE.eyeX * R;
+const EYE_Y = HEAD_Y + FACE.eyeY * R;
+const EYE_Z = FACE.eyeZ * R;
+/** Raio do globo. A pálpebra é uma calota um fio maior, concêntrica. */
+const BALL = FACE.eyeBall * R;
+const LID_R = BALL * 1.035;
+
+const MOUTH_Y = HEAD_Y + FACE.mouthY * R;
+/** A pele dos lábios fica um fio à frente do volume que o crânio dá. */
+const MOUTH_Z = FACE.mouthZ * R + R * 0.035;
+const BROW_Z = FACE.browZ * R;
+const MOUTH_HALF = FACE.mouthHalf * R;
+
+/**
+ * Uma pose do rosto.
+ *
+ * As grandezas são anatômicas, não coordenadas soltas: a pálpebra é
+ * **quanto do globo ela cobre**, em radianos a partir do polo; a boca
+ * é o quanto abre e o quanto os cantos sobem. Foi o que permitiu
+ * descrever seis expressões sem repetir posição nenhuma à mão — e é o
+ * que impede uma expressão nova de descolar a pálpebra do olho.
+ */
 interface FacePose {
-  /** Deslocamento e giro das sobrancelhas (lado −1 = direita do avatar). */
-  brow: (side: number) => { x: number; y: number; z: number; rz: number };
-  /** Pálpebras. */
-  lid: (side: number) => { x: number; y: number; z: number; sy: number };
-  /** Boca: posição, escala e giro (giro 0 = arco para baixo). */
-  mouth: { y: number; z: number; sx: number; sy: number; rz: number };
+  /** Sobrancelha: altura acima do olho e inclinação. */
+  brow: (side: number) => { lift: number; tilt: number };
+  /** Pálpebras: quanto cada uma desce sobre o globo, em radianos. */
+  lid: (side: number) => { upper: number; lower: number };
+  /** Boca: abertura, largura, e quanto os cantos sobem (+) ou descem (−). */
+  mouth: { open: number; wide: number; corner: number };
 }
+
+/**
+ * Quanto cada pálpebra cobre do globo, em radianos a partir do polo.
+ *
+ * Com o globo de raio `BALL`, a borda da pálpebra de cima fica a
+ * `BALL·cos(cover)` do centro do olho. Os valores saem daí: a abertura
+ * tem de medir cerca de 0,18·R de altura, que é o que o cânone pede
+ * para uma cabeça desta largura. A de cima cobre mais que a de baixo,
+ * como num rosto real.
+ */
+const LID_OPEN = 1.15;
+const LOWER_OPEN = 1.0;
+/** Fechada, a de cima desce até encontrar a borda da de baixo. */
+const LID_SHUT = 2.14;
 
 /** Rosto em repouso: é ele que define a contagem e a ordem dos vértices. */
 const NEUTRAL: FacePose = {
-  brow: (side) => ({ x: side * EYE_X, y: HEAD_Y + 0.078, z: 0.162, rz: side * -0.12 }),
-  lid: (side) => ({ x: side * EYE_X, y: HEAD_Y + 0.062, z: LID_Z, sy: 1 }),
-  mouth: { y: HEAD_Y - 0.05, z: 0.164, sx: 1, sy: 1, rz: Math.PI },
+  brow: () => ({ lift: 0, tilt: 0 }),
+  lid: () => ({ upper: LID_OPEN, lower: LOWER_OPEN }),
+  mouth: { open: 0.1, wide: 1, corner: 0.18 },
 };
 
 /** Cada alvo de morph é o mesmo rosto em outra posição. */
 const MORPH_POSES: Readonly<Record<FaceMorph, FacePose>> = {
-  // Sorriso aberto: boca maior, sobrancelhas relaxadas.
+  // Sorriso: cantos bem para cima e pálpebras um pouco mais fechadas —
+  // um sorriso que não chega aos olhos não parece um sorriso.
   sorriso: {
-    brow: (side) => ({ x: side * EYE_X, y: HEAD_Y + 0.086, z: 0.162, rz: side * -0.22 }),
-    lid: (side) => ({ x: side * EYE_X, y: HEAD_Y + 0.058, z: LID_Z, sy: 1.2 }),
-    mouth: { y: HEAD_Y - 0.054, z: 0.164, sx: 1.3, sy: 1.5, rz: Math.PI },
+    brow: () => ({ lift: 0.1, tilt: -0.08 }),
+    lid: () => ({ upper: LID_OPEN + 0.22, lower: LOWER_OPEN + 0.16 }),
+    mouth: { open: 0.3, wide: 1.16, corner: 0.75 },
   },
-  // Tristeza: canto da boca para baixo e pontas internas da sobrancelha para cima.
+  // Tristeza: cantos para baixo e pontas internas da sobrancelha para cima.
   triste: {
-    brow: (side) => ({ x: side * (EYE_X - 0.004), y: HEAD_Y + 0.072, z: 0.162, rz: side * 0.32 }),
-    lid: (side) => ({ x: side * EYE_X, y: HEAD_Y + 0.054, z: LID_Z, sy: 1.3 }),
-    mouth: { y: HEAD_Y - 0.044, z: 0.164, sx: 0.95, sy: 0.9, rz: 0 },
+    brow: (side) => ({ lift: -0.06, tilt: side * 0.3 }),
+    lid: () => ({ upper: LID_OPEN + 0.3, lower: LOWER_OPEN }),
+    mouth: { open: 0.08, wide: 0.92, corner: -0.5 },
   },
   // Surpresa: olhos arregalados, sobrancelhas no alto, boca aberta.
   surpresa: {
-    brow: (side) => ({ x: side * EYE_X, y: HEAD_Y + 0.098, z: 0.162, rz: side * -0.04 }),
-    lid: (side) => ({ x: side * EYE_X, y: HEAD_Y + 0.072, z: LID_Z, sy: 0.8 }),
-    mouth: { y: HEAD_Y - 0.064, z: 0.164, sx: 0.84, sy: 2.3, rz: Math.PI },
+    brow: () => ({ lift: 0.3, tilt: -0.02 }),
+    lid: () => ({ upper: LID_OPEN - 0.3, lower: LOWER_OPEN - 0.18 }),
+    mouth: { open: 1.15, wide: 0.86, corner: 0.05 },
   },
   // Curiosidade: uma sobrancelha sobe, boca pequena de lado.
   curiosa: {
-    brow: (side) => ({ x: side * EYE_X, y: HEAD_Y + (side > 0 ? 0.095 : 0.074), z: 0.162, rz: side * -0.26 }),
-    lid: (side) => ({ x: side * EYE_X, y: HEAD_Y + (side > 0 ? 0.068 : 0.058), z: LID_Z, sy: 1 }),
-    mouth: { y: HEAD_Y - 0.048, z: 0.164, sx: 0.78, sy: 0.85, rz: Math.PI },
+    brow: (side) => ({ lift: side > 0 ? 0.26 : -0.04, tilt: side * -0.16 }),
+    lid: (side) => ({ upper: side > 0 ? LID_OPEN - 0.12 : LID_OPEN + 0.12, lower: LOWER_OPEN }),
+    mouth: { open: 0.14, wide: 0.88, corner: 0.3 },
   },
   // Fala: boca aberta no meio do caminho (a sincronia labial oscila este alvo).
   fala: {
-    brow: (side) => ({ x: side * EYE_X, y: HEAD_Y + 0.08, z: 0.162, rz: side * -0.12 }),
-    lid: (side) => ({ x: side * EYE_X, y: HEAD_Y + 0.062, z: LID_Z, sy: 1 }),
-    mouth: { y: HEAD_Y - 0.058, z: 0.164, sx: 0.92, sy: 1.95, rz: Math.PI },
+    brow: () => ({ lift: 0.04, tilt: 0 }),
+    lid: () => ({ upper: LID_OPEN, lower: LOWER_OPEN }),
+    mouth: { open: 0.95, wide: 0.94, corner: 0.2 },
   },
-  // Piscada: só as pálpebras descem.
+  // Piscada: só as pálpebras se encontram.
   piscada: {
-    brow: (side) => ({ x: side * EYE_X, y: HEAD_Y + 0.074, z: 0.162, rz: side * -0.12 }),
-    lid: (side) => ({ x: side * EYE_X, y: HEAD_Y + 0.024, z: LID_Z, sy: 2.9 }),
-    mouth: { y: HEAD_Y - 0.05, z: 0.164, sx: 1, sy: 1, rz: Math.PI },
+    brow: () => ({ lift: -0.02, tilt: 0 }),
+    lid: () => ({ upper: LID_SHUT, lower: 1.48 }),
+    mouth: { open: 0.1, wide: 1, corner: 0.18 },
   },
 };
 
@@ -111,31 +145,133 @@ function tinted(geometry: THREE.BufferGeometry, color: THREE.ColorRepresentation
   return flat;
 }
 
-/** Monta as cinco peças do rosto em uma pose. A ordem nunca muda. */
-function buildPose(pose: FacePose, colors: { brow: number; skin: number; mouth: number }): THREE.BufferGeometry {
+/**
+ * A pálpebra: uma calota sobre o globo cuja borda **desce até o
+ * equador nos cantos**.
+ *
+ * Duas calotas concêntricas comuns nunca fecham a amêndoa. Para se
+ * tocarem, a de cima e a de baixo teriam de somar 180° de cobertura —
+ * e aí o olho estaria fechado. Era por isso que, por mais que se
+ * cobrisse em cima e embaixo, o olho continuava um círculo branco com
+ * uma fatia cortada: os cantos ficavam escancarados.
+ *
+ * A borda daqui não tem ângulo constante. Ela vale `cover` na frente,
+ * no meio do olho, e vai a 90° nos extremos de x — onde a pálpebra de
+ * cima encontra exatamente a de baixo. O resultado é a fenda em forma
+ * de amêndoa, que é o que faz um olho parecer um olho.
+ *
+ * A contagem de vértices não depende de `cover`, só dos segmentos, e é
+ * isso que deixa a abertura virar alvo de morph: a pálpebra gira sobre
+ * o globo, como a de verdade, em vez de subir e descer na frente dele.
+ */
+const LID_SEGMENTS = 16;
+const LID_RINGS = 4;
+
+function lidCap(cover: number, radius: number, flip: boolean): THREE.BufferGeometry {
+  const span = Math.min(Math.PI / 2, Math.max(0.04, cover));
+  const position: number[] = [];
+  const index: number[] = [];
+  for (let r = 0; r <= LID_RINGS; r += 1) {
+    for (let k = 0; k <= LID_SEGMENTS; k += 1) {
+      const u = k / LID_SEGMENTS;
+      const phi = u * Math.PI * 2;
+      // Borda: `span` na frente e atrás, 90° nos cantos de x.
+      const edge = Math.PI / 2 - (Math.PI / 2 - span) * Math.abs(Math.sin(phi));
+      const theta = edge * (r / LID_RINGS);
+      const s = Math.sin(theta);
+      const y = Math.cos(theta) * radius;
+      position.push(s * Math.cos(phi) * radius, flip ? -y : y, s * Math.sin(phi) * radius);
+    }
+  }
+  const row = LID_SEGMENTS + 1;
+  for (let r = 0; r < LID_RINGS; r += 1) {
+    for (let k = 0; k < LID_SEGMENTS; k += 1) {
+      const a = r * row + k;
+      const b = a + row;
+      // A ordem se inverte na pálpebra de baixo, senão ela fica do avesso.
+      if (flip) index.push(a, a + 1, b, a + 1, b + 1, b);
+      else index.push(a, b, a + 1, a + 1, b, b + 1);
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(position, 3));
+  geometry.setIndex(index);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+/** Monta as peças móveis do rosto em uma pose. A ordem nunca muda. */
+function buildPose(pose: FacePose, colors: { brow: number; skin: number; lip: number; lash: number }): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = [];
 
+  // --- sobrancelhas: um arco que segue o osso, não uma barra reta ---
   for (const side of [1, -1]) {
-    const brow = pose.brow(side);
-    const geometry = new THREE.BoxGeometry(0.046, 0.008, 0.008);
-    geometry.applyMatrix4(new THREE.Matrix4().makeRotationZ(brow.rz));
-    geometry.translate(brow.x, brow.y, brow.z);
+    const { lift, tilt } = pose.brow(side);
+    const geometry = new THREE.TorusGeometry(R * 0.2, R * 0.022, 6, 12, 1.5);
+    geometry.scale(1, 0.52, 0.5);
+    geometry.applyMatrix4(new THREE.Matrix4().makeRotationZ(Math.PI / 2 - 0.75 + tilt * side));
+    geometry.applyMatrix4(new THREE.Matrix4().makeRotationY(side * -0.35));
+    geometry.translate(side * EYE_X, EYE_Y + R * 0.3 + lift * R * 0.5, BROW_Z);
     parts.push(tinted(geometry, colors.brow));
   }
 
+  // --- pálpebras: calotas concêntricas ao globo ---
   for (const side of [1, -1]) {
-    const lid = pose.lid(side);
-    const geometry = new THREE.SphereGeometry(0.032, 8, 6);
-    geometry.scale(1, 0.45 * lid.sy, 0.42);
-    geometry.translate(lid.x, lid.y, lid.z);
-    parts.push(tinted(geometry, colors.skin));
+    const { upper, lower } = pose.lid(side);
+    for (const [cover, flip] of [
+      [upper, false],
+      [lower, true],
+    ] as const) {
+      const cap = lidCap(cover, LID_R, flip);
+      // Um fio mais larga que o globo, para a borda não brigar com ele.
+      cap.scale(1.04, 1, 1);
+      cap.translate(side * EYE_X, EYE_Y, EYE_Z);
+      parts.push(tinted(cap, colors.skin));
+    }
+    // Linha de cílios: a borda da pálpebra de cima, escura e fina. É o
+    // que faz o olho ter contorno em vez de ser uma bola na cara.
+    const { upper: u } = pose.lid(side);
+    const lash = lidCap(u, LID_R * 1.045, false);
+    // Só a faixa de baixo da calota: a borda, que é onde ficam os cílios.
+    const lashEdge = new THREE.BufferGeometry();
+    const src = lash.getAttribute('position') as THREE.BufferAttribute;
+    const row = LID_SEGMENTS + 1;
+    const keep: number[] = [];
+    const idx: number[] = [];
+    for (let r = LID_RINGS - 1; r <= LID_RINGS; r += 1) {
+      for (let k = 0; k <= LID_SEGMENTS; k += 1) {
+        const i = r * row + k;
+        keep.push(src.getX(i), src.getY(i) * 1.0, src.getZ(i));
+      }
+    }
+    for (let k = 0; k < LID_SEGMENTS; k += 1) idx.push(k, k + row, k + 1, k + 1, k + row, k + row + 1);
+    lashEdge.setAttribute('position', new THREE.Float32BufferAttribute(keep, 3));
+    lashEdge.setIndex(idx);
+    lashEdge.computeVertexNormals();
+    lashEdge.translate(side * EYE_X, EYE_Y, EYE_Z);
+    lash.dispose();
+    parts.push(tinted(lashEdge, colors.lash));
   }
 
-  const mouth = new THREE.TorusGeometry(0.028, 0.006, 4, 10, Math.PI);
-  mouth.scale(pose.mouth.sx, pose.mouth.sy, 1);
-  mouth.applyMatrix4(new THREE.Matrix4().makeRotationZ(pose.mouth.rz));
-  mouth.translate(0, pose.mouth.y, pose.mouth.z);
-  parts.push(tinted(mouth, colors.mouth));
+  // --- boca: dois lábios e o vão escuro entre eles ---
+  const { open, wide, corner } = pose.mouth;
+  const gap = open * R * 0.075;
+  for (const [sign, thick, fill] of [
+    [1, 0.034, colors.lip],
+    [-1, 0.046, colors.lip],
+  ] as const) {
+    // Cada lábio é um arco: curvado para cima nos cantos quando sorri.
+    const lip = new THREE.TorusGeometry(MOUTH_HALF * wide, R * thick, 5, 16, Math.PI);
+    lip.scale(1, 0.46 + corner * 0.42 * sign, 0.5);
+    if (sign > 0) lip.applyMatrix4(new THREE.Matrix4().makeRotationZ(Math.PI));
+    lip.translate(0, MOUTH_Y + sign * gap + R * 0.012 * sign, MOUTH_Z);
+    parts.push(tinted(lip, fill));
+  }
+  // O vão: só aparece quando os lábios se afastam.
+  const inner = new THREE.SphereGeometry(1, 12, 6);
+  inner.scale(MOUTH_HALF * wide * 0.92, Math.max(R * 0.004, gap * 1.05), R * 0.05);
+  inner.translate(0, MOUTH_Y, MOUTH_Z - R * 0.02);
+  parts.push(tinted(inner, 0x4a1f26));
 
   const merged = mergeGeometries(parts, false) ?? new THREE.BufferGeometry();
   for (const part of parts) part.dispose();
@@ -149,8 +285,18 @@ function buildPose(pose: FacePose, colors: { brow: number; skin: number; mouth: 
  * função que os constrói, só com outras posições.
  */
 export function buildFaceGeometry(appearance: AvatarAppearance): THREE.BufferGeometry {
-  const browColor = new THREE.Color(appearance.hairStyle === 'careca' ? 0x5a3a22 : appearance.hairColor).lerp(new THREE.Color(0x000000), 0.25).getHex();
-  const colors = { brow: browColor, skin: new THREE.Color(appearance.skin).getHex(), mouth: 0xb8475a };
+  const hair = new THREE.Color(appearance.hairStyle === 'careca' ? 0x5a3a22 : appearance.hairColor);
+  const browColor = hair.clone().lerp(new THREE.Color(0x000000), 0.25).getHex();
+  // A pálpebra é pele, e um tom abaixo: ela está sempre em sombra
+  // própria, sob o arco da sobrancelha.
+  const skin = new THREE.Color(appearance.skin);
+  const colors = {
+    brow: browColor,
+    skin: skin.clone().lerp(new THREE.Color(0x000000), 0.07).getHex(),
+    // Lábio: a própria pele puxada para o vermelho, não um batom chapado.
+    lip: skin.clone().lerp(new THREE.Color(0xc2566a), 0.52).getHex(),
+    lash: hair.clone().lerp(new THREE.Color(0x000000), 0.55).getHex(),
+  };
 
   const base = buildPose(NEUTRAL, colors);
   const count = base.getAttribute('position').count;
