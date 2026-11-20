@@ -912,9 +912,24 @@ function buildHead(b: SurfaceBuilder, a: AvatarAppearance, p: BodyProportions, m
     return z + rz * Math.pow(1 - Math.pow(u, 2.8), 1 / 2.8);
   };
   const noseCenter: readonly [number, number, number] = [0, cy - 0.02, R * 0.88];
-  // Alvo de aresta fixo em R·0,07: o rosto chega refinado ao mesmo
-  // ponto nos quatro níveis, partindo de malhas bem diferentes.
-  b.refine(noseCenter, R * 0.5, R * 0.05, 4);
+  // O alvo de aresta acompanha o nível, e não é fixo.
+  //
+  // A primeira versão usava R·0,05 nos quatro níveis, com o argumento
+  // de que assim o rosto chegava refinado ao mesmo ponto partindo de
+  // malhas diferentes. Como meta de aparência fazia sentido; como
+  // orçamento, não: em `baixa` o nariz passava a concentrar 21% dos
+  // vértices do corpo inteiro e estourava o teto de malha do nível —
+  // um quinto do personagem gasto num traço que, a 55 m de distância
+  // de detalhe, ninguém vê. O teste `a malha baixa é mais leve que o
+  // avatar antigo inteiro` pegou exatamente isso.
+  //
+  // Agora o alvo é uma fração do próprio anel do nível: o nariz fica
+  // sempre umas três vezes mais fino que o corpo ao redor, e nunca
+  // mais fino que R·0,05, que é o que `ultra` precisa para ter asa e
+  // dorso. Quem roda em aparelho fraco recebe um nariz grosseiro, que
+  // é o certo — é o mesmo lugar onde a mão não tem dedos.
+  const noseEdge = Math.max(R * 0.05, ((2 * Math.PI * R) / detail.segments) * 0.38);
+  b.refine(noseCenter, R * 0.5, noseEdge, 4);
   // A largura da união decide se o nariz lê como nariz. Em R·0,05 ela
   // era do tamanho da própria ponta (R·0,19) e dissolvia o traço num
   // morro; R·0,018 mantém a continuidade na primeira derivada e ainda

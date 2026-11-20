@@ -134,7 +134,7 @@ function montar(): void {
     QUALITY_LEVELS.forEach((nivel, i) => novoAvatar(nivel as BodyDetailLevel, (i - 1.5) * 0.85));
   } else if (ui.modo === 'elenco') {
     ELENCO.forEach((quem, i) => {
-      const avatar = novoAvatar(ui.nivel, (i - 1.25) * 0.9, quem.aparencia);
+      const avatar = novoAvatar(ui.nivel, (i - 2) * 0.82, quem.aparencia);
       if (quem.bust !== undefined || quem.curve !== undefined) avatar.setMorph(quem.bust ?? 0, quem.curve ?? 0);
     });
   } else if (ui.modo === 'bichos') {
@@ -169,7 +169,17 @@ function enquadrar(): void {
   // O alvo do rosto fica na linha do nariz, não na dos olhos: era por
   // isso que a boca e o queixo saíam fora do quadro.
   const alvo = new THREE.Vector3(0, rosto ? 1.56 : 0.95, 0);
-  const dist = (rosto ? 0.95 : largo ? 6.2 : 3.6) * zoom;
+  // O painel come os 280 px da esquerda da tela. Nas cenas largas o
+  // primeiro personagem caía atrás dele, o que não é um defeito do
+  // modelo mas estragava a captura — e uma captura de validação que
+  // esconde um dos sujeitos não valida esse sujeito. Em vez de mexer
+  // no espaçamento de cada cena, o alvo da câmera anda para a
+  // esquerda: o grupo inteiro desliza para a direita, para dentro da
+  // área livre, e o espaçamento continua dizendo respeito só à cena.
+  if (largo) alvo.x -= 0.85 * zoom;
+  // O elenco são cinco corpos lado a lado: precisa de mais recuo que
+  // os quatro níveis, senão o das pontas sai do quadro.
+  const dist = (rosto ? 0.95 : ui.modo === 'elenco' ? 7.4 : ui.modo === 'niveis' ? 6.9 : largo ? 6.2 : 3.6) * zoom;
   alvo.add(alvoOff);
   camera.position.set(alvo.x + Math.sin(angle) * dist, alvo.y + (rosto ? 0.04 : 0.35) * zoom, alvo.z + Math.cos(angle) * dist);
   camera.lookAt(alvo);
@@ -282,6 +292,7 @@ const dbg = gl.getExtension('WEBGL_debug_renderer_info');
   camera,
   environment,
   avatars,
+  criaturas: creatures,
   ui,
   montar,
   /** Trava a câmera num ângulo exato — comparar dois renders exige o mesmo enquadramento. */

@@ -459,7 +459,7 @@ export class SurfaceBuilder {
    * coplanares. O peso 0,75 é o usual — a projeção inteira exagera a
    * barriga em arestas muito abertas.
    */
-  private midpoint(a: number, b: number, normal?: Float32Array): number {
+  private midpoint(a: number, b: number, normal?: number[]): number {
     const id = this.position.length / 3;
     let bulge: readonly [number, number, number] = [0, 0, 0];
     if (normal) {
@@ -479,6 +479,14 @@ export class SurfaceBuilder {
         sz += mz - d * nz;
       }
       bulge = [(sx / 2 - mx) * 0.75, (sy / 2 - my) * 0.75, (sz / 2 - mz) * 0.75];
+      // O vértice novo herda a normal interpolada dos extremos, para
+      // que o nível seguinte tenha de onde estimar a curvatura sem
+      // varrer a malha inteira de novo.
+      const nx = normal[a * 3] + normal[b * 3];
+      const ny = normal[a * 3 + 1] + normal[b * 3 + 1];
+      const nz = normal[a * 3 + 2] + normal[b * 3 + 2];
+      const len = Math.hypot(nx, ny, nz) || 1;
+      normal.push(nx / len, ny / len, nz / len);
     }
     for (let k = 0; k < 3; k += 1) {
       this.position.push((this.position[a * 3 + k] + this.position[b * 3 + k]) / 2 + bulge[k]);
@@ -543,11 +551,23 @@ export class SurfaceBuilder {
       return dx * dx + dy * dy + dz * dz > target2;
     };
 
+    // Calculadas **uma vez**, da malha original. É o que a tesselação
+    // de Phong pede — a curvatura a reproduzir é a que a superfície de
+    // partida insinua, não a que o nível anterior já acrescentou — e
+    // de quebra evita varrer a malha inteira a cada nível, que era o
+    // grosso do custo: com quatro níveis, quatro passagens de normais
+    // sobre 62 mil triângulos para refinar um palmo de rosto.
+    const normal = Array.from(this.vertexNormals());
+
     for (let level = 0; level < maxLevels; level += 1) {
-      // Recalculadas a cada nível: a curvatura que o nível anterior
-      // acrescentou precisa valer para o próximo.
-      const normal = this.vertexNormals();
       const stride = this.position.length / 3;
+      // Quem está na bola, decidido uma vez por vértice. Sem isto, a
+      // pergunta era refeita seis vezes por triângulo — duas por
+      // aresta — sobre os 62 mil triângulos do corpo, para refinar um
+      // palmo de rosto. O resto do corpo agora sai do caminho com uma
+      // consulta a um byte.
+      const dentro = new Uint8Array(stride);
+      for (let v = 0; v < stride; v += 1) dentro[v] = inside(v) ? 1 : 0;
       const cache = new Map<number, number>();
       // Uma aresta entre dois acabamentos (ou dois ossos) diferentes
       // nunca se parte. O vértice do meio teria de herdar categoria de
@@ -567,7 +587,7 @@ export class SurfaceBuilder {
         return true;
       };
       const splits = (a: number, b: number): boolean =>
-        inside(a) && inside(b) && samePart(a, b) && tooLong(a, b);
+        dentro[a] === 1 && dentro[b] === 1 && samePart(a, b) && tooLong(a, b);
       const cut = (a: number, b: number): number => {
         const key = a < b ? a * stride + b : b * stride + a;
         const found = cache.get(key);
@@ -583,6 +603,12 @@ export class SurfaceBuilder {
         const i0 = src[t];
         const i1 = src[t + 1];
         const i2 = src[t + 2];
+        // Longe da bola não há o que perguntar: é o caso de quase
+        // todo o corpo.
+        if (dentro[i0] === 0 && dentro[i1] === 0 && dentro[i2] === 0) {
+          this.index.push(i0, i1, i2);
+          continue;
+        }
         const s0 = splits(i0, i1);
         const s1 = splits(i1, i2);
         const s2 = splits(i2, i0);
