@@ -440,6 +440,122 @@ export class SurfaceBuilder {
     }
   }
 
+  /**
+   * Oclusão ambiente assada na cor dos vértices.
+   *
+   * É o que mais separa um modelo cru de um acabado, e o que as
+   * referências de qualidade têm e este rosto não tinha: sombra nas
+   * órbitas, sob o queixo, na dobra do pescoço, embaixo do lábio,
+   * entre as pernas, por baixo da saia. Sem isso cada superfície
+   * recebe a mesma luz do céu e o rosto fica chapado, por mais
+   * anatomia que tenha.
+   *
+   * O método é o de nuvem de pontos: para cada vértice, os vizinhos
+   * que estão **à frente da sua normal** o ocludem, tanto mais quanto
+   * mais perto. Numa dobra, o vértice tem vizinhos dos dois lados
+   * dentro do hemisfério e escurece; numa superfície aberta, quase
+   * nenhum.
+   *
+   * Uma grade espacial evita o custo quadrático: com 37 mil vértices,
+   * comparar todos contra todos seriam 1,4 bilhão de pares. Dividido
+   * em células do tamanho do raio, cada vértice só olha as 27 células
+   * à sua volta.
+   */
+  occlude(radius: number, strength: number, floor = 0.45): void {
+    const count = this.position.length / 3;
+    if (count === 0 || radius <= 0) return;
+
+    // Normais por vértice — as mesmas que `build()` calcularia.
+    const normal = new Float32Array(this.position.length);
+    const ax = new THREE.Vector3();
+    const bx = new THREE.Vector3();
+    const cx = new THREE.Vector3();
+    const e1 = new THREE.Vector3();
+    const e2 = new THREE.Vector3();
+    const face = new THREE.Vector3();
+    for (let t = 0; t < this.index.length; t += 3) {
+      const ia = this.index[t] * 3;
+      const ib = this.index[t + 1] * 3;
+      const ic = this.index[t + 2] * 3;
+      ax.fromArray(this.position, ia);
+      bx.fromArray(this.position, ib);
+      cx.fromArray(this.position, ic);
+      face.copy(e1.subVectors(bx, ax)).cross(e2.subVectors(cx, ax));
+      for (const i of [ia, ib, ic]) {
+        normal[i] += face.x;
+        normal[i + 1] += face.y;
+        normal[i + 2] += face.z;
+      }
+    }
+
+    // Grade espacial, uma célula por raio.
+    const cell = radius;
+    const grid = new Map<number, number[]>();
+    const key = (x: number, y: number, z: number): number =>
+      (Math.floor(x / cell) * 73856093) ^ (Math.floor(y / cell) * 19349663) ^ (Math.floor(z / cell) * 83492791);
+    for (let v = 0; v < count; v += 1) {
+      const i = v * 3;
+      const k = key(this.position[i], this.position[i + 1], this.position[i + 2]);
+      const bucket = grid.get(k);
+      if (bucket) bucket.push(v);
+      else grid.set(k, [v]);
+    }
+
+    const r2 = radius * radius;
+    for (let v = 0; v < count; v += 1) {
+      const i = v * 3;
+      const px = this.position[i];
+      const py = this.position[i + 1];
+      const pz = this.position[i + 2];
+      let nx = normal[i];
+      let ny = normal[i + 1];
+      let nz = normal[i + 2];
+      const len = Math.hypot(nx, ny, nz);
+      if (len < 1e-9) continue;
+      nx /= len;
+      ny /= len;
+      nz /= len;
+
+      let sum = 0;
+      let seen = 0;
+      const cxi = Math.floor(px / cell);
+      const cyi = Math.floor(py / cell);
+      const czi = Math.floor(pz / cell);
+      for (let gx = -1; gx <= 1; gx += 1) {
+        for (let gy = -1; gy <= 1; gy += 1) {
+          for (let gz = -1; gz <= 1; gz += 1) {
+            const bucket = grid.get(
+              ((cxi + gx) * 73856093) ^ ((cyi + gy) * 19349663) ^ ((czi + gz) * 83492791),
+            );
+            if (!bucket) continue;
+            for (const w of bucket) {
+              if (w === v) continue;
+              const j = w * 3;
+              const dx = this.position[j] - px;
+              const dy = this.position[j + 1] - py;
+              const dz = this.position[j + 2] - pz;
+              const d2 = dx * dx + dy * dy + dz * dz;
+              if (d2 > r2 || d2 < 1e-12) continue;
+              seen += 1;
+              const d = Math.sqrt(d2);
+              // Só ocludem os vizinhos à frente da normal.
+              const facing = (dx * nx + dy * ny + dz * nz) / d;
+              if (facing <= 0) continue;
+              sum += facing * (1 - d / radius);
+            }
+          }
+        }
+      }
+      // Normalizado pela vizinhança: assim a malha densa e a esparsa
+      // recebem a mesma sombra, e o LOD não muda a cor do personagem.
+      if (seen === 0) continue;
+      const ao = Math.max(floor, 1 - (sum / seen) * strength);
+      this.color[i] *= ao;
+      this.color[i + 1] *= ao;
+      this.color[i + 2] *= ao;
+    }
+  }
+
   /** Fecha a malha: normais médias, limites, atributos de pele e morph. */
   build(): THREE.BufferGeometry {
     const geometry = new THREE.BufferGeometry();

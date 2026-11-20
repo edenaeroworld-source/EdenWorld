@@ -110,6 +110,12 @@ export function buildBodyGeometry(a: AvatarAppearance, p: BodyProportions, m: Bo
   const skirtStart = b.vertexCount;
   if (dress) buildSkirt(b, m, detail, top, origins);
 
+  // A oclusão é a última coisa antes de fechar a malha: ela precisa do
+  // corpo inteiro montado para saber o que esconde o quê. É daqui que
+  // sai a sombra na órbita, sob o queixo, na dobra do pescoço, entre
+  // as pernas e por baixo da saia.
+  if (detail.occlusion > 0) b.occlude(m.headR * 0.55, 2.4 * detail.occlusion, 0.38);
+
   const geometry = b.build();
   geometry.userData.parts = dress ? { saia: [skirtStart, b.vertexCount] } : {};
   return geometry;
@@ -586,6 +592,12 @@ function buildArm(b: SurfaceBuilder, side: 1 | -1, ctx: ArmCtx): void {
     capRings: 2,
   });
 
+  // Dedos. A mão era uma pá — larga de frente, fina de lado, e sem
+  // nada na ponta. De longe não faz diferença; de perto é a primeira
+  // coisa que denuncia um modelo cru, porque a mão é a parte do corpo
+  // que o olho mais conhece depois do rosto.
+  if (detail.segments >= 26) buildFingers(b, side, x, wristY, m, skin, detail, foreBone);
+
   // O polegar, puxado da própria palma.
   b.feature([x - side * m.armWrist * 0.7, wristY - 0.052, m.armWrist * 0.5], [0.028, 0.034, 0.03], 0.016, [-side * 0.8, -0.2, 0.55]);
   // Dois sulcos rasos entre os dedos.
@@ -681,6 +693,78 @@ function buildLeg(b: SurfaceBuilder, side: 1 | -1, ctx: LegCtx): void {
 }
 
 /* -------------------------------- cabeça --------------------------------- */
+
+/**
+ * Os quatro dedos e o polegar.
+ *
+ * Cada dedo é uma varredura curta com três falanges sugeridas pelo
+ * perfil — grossa na base, um estreitamento no meio, arredondada na
+ * ponta. Eles saem da borda da palma, que é larga em z e fina em x,
+ * então se espalham em z e apontam para baixo.
+ *
+ * Só nos níveis densos: `baixa` e `media` continuam com a pá de
+ * antes, que a essa distância é indistinguível e custa um quinto.
+ */
+function buildFingers(
+  b: SurfaceBuilder,
+  side: number,
+  x: number,
+  wristY: number,
+  m: BodyMetrics,
+  skin: THREE.ColorRepresentation,
+  detail: BodyDetail,
+  foreBone: number,
+): void {
+  const w = m.armWrist;
+  const palmY = wristY - 0.1;
+  const segments = Math.max(6, Math.round(detail.segments * 0.34));
+
+  // Comprimento relativo: indicador, médio, anelar, mínimo.
+  const plan: readonly { z: number; length: number; thick: number }[] = [
+    { z: 0.82, length: 0.9, thick: 0.95 },
+    { z: 0.3, length: 1, thick: 1 },
+    { z: -0.26, length: 0.94, thick: 0.95 },
+    { z: -0.76, length: 0.78, thick: 0.84 },
+  ];
+
+  for (const finger of plan) {
+    const fz = finger.z * w * 1.12;
+    const r = w * 0.3 * finger.thick;
+    const len = 0.062 * finger.length;
+    // Leve curvatura para a frente, como uma mão relaxada.
+    const curl = 0.1;
+    const control: Ctl[] = [
+      { y: palmY, rx: r * 1.1, rz: r * 1.12, x, z: fz, color: skin, bone: foreBone },
+      { y: palmY - len * 0.36, rx: r, rz: r * 1.02, x, z: fz + len * curl * 0.4, color: skin, bone: foreBone },
+      { y: palmY - len * 0.68, rx: r * 0.92, rz: r * 0.94, x, z: fz + len * curl, color: skin, bone: foreBone },
+      { y: palmY - len, rx: r * 0.72, rz: r * 0.74, x, z: fz + len * curl * 1.5, color: skin, bone: foreBone },
+    ];
+    b.loft(subdivideProfile(toStations(control), 2), {
+      segments,
+      descending: true,
+      capTop: r * 0.3,
+      capBottom: r * 0.7,
+      capRings: 2,
+    });
+  }
+
+  // Polegar: sai do lado de dentro da palma, mais alto e mais grosso,
+  // e aponta para a frente em vez de para baixo.
+  const tr = w * 0.36;
+  const thumb: Ctl[] = [
+    { y: wristY - 0.028, rx: tr * 1.05, rz: tr * 1.05, x: x - side * w * 0.2, z: w * 0.55, color: skin, bone: foreBone },
+    { y: wristY - 0.052, rx: tr * 0.98, rz: tr, x: x - side * w * 0.34, z: w * 0.95, color: skin, bone: foreBone },
+    { y: wristY - 0.076, rx: tr * 0.84, rz: tr * 0.86, x: x - side * w * 0.42, z: w * 1.3, color: skin, bone: foreBone },
+    { y: wristY - 0.094, rx: tr * 0.62, rz: tr * 0.64, x: x - side * w * 0.46, z: w * 1.5, color: skin, bone: foreBone },
+  ];
+  b.loft(subdivideProfile(toStations(thumb), 2), {
+    segments,
+    descending: true,
+    capTop: tr * 0.3,
+    capBottom: tr * 0.7,
+    capRings: 2,
+  });
+}
 
 /**
  * Crânio, maxilar, nariz, orelhas e olhos.
@@ -859,7 +943,7 @@ function buildHair(b: SurfaceBuilder, a: AvatarAppearance, m: BodyMetrics, detai
 
   // Calota: cobre da nuca ao alto, deixando a testa livre na frente.
   const cap: Ctl[] = [
-    { y: cy + 0.02, rx: R * 1.0 * gap, rz: R * 0.5, rzBack: R * 1.02 * gap, color: hair, bone: Bone.Head },
+    { y: cy + 0.055, rx: R * 1.0 * gap, rz: R * 0.42, rzBack: R * 1.02 * gap, color: hair, bone: Bone.Head },
     { y: cy + 0.062, rx: R * 1.01 * gap, rz: R * 0.86 * gap, rzBack: R * 1.04 * gap, color: hair, bone: Bone.Head },
     { y: cy + 0.1, rx: R * 0.96 * gap, rz: R * 0.92 * gap, rzBack: R * 1.02 * gap, color: hair, bone: Bone.Head },
     { y: cy + 0.142, rx: R * 0.83 * gap, rz: R * 0.78 * gap, rzBack: R * 0.89 * gap, color: hair, bone: Bone.Head },
@@ -867,8 +951,12 @@ function buildHair(b: SurfaceBuilder, a: AvatarAppearance, m: BodyMetrics, detai
   ];
   b.loft(subdivideProfile(toStations(cap), detail.steps), { segments, capTop: R * 0.3, capRings: 2 });
 
-  // Franja: uma aba que desce sobre a testa, na própria casca.
-  b.feature([0, cy + 0.075, R * 0.95], [R * 0.9, R * 0.08, R * 0.5], R * 0.08, [0, -0.35, 1]);
+  // Franja: uma aba que desce sobre a testa, na própria casca. Ela
+  // existe de propósito e faz parte do penteado — mas descia até a
+  // altura dos olhos, e um rosto sem testa não tem onde pôr a
+  // sobrancelha. Agora para no terço de cima, como uma franja de
+  // verdade.
+  b.feature([0, cy + 0.125, R * 0.95], [R * 0.9, R * 0.085, R * 0.5], R * 0.075, [0, -0.3, 1]);
 
   switch (a.hairStyle) {
     case 'longo': {

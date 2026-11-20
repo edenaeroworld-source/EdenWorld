@@ -47,6 +47,8 @@ const MOUTH_Y = HEAD_Y + FACE.mouthY * R;
 /** A pele dos lábios fica um fio à frente do volume que o crânio dá. */
 const MOUTH_Z = FACE.mouthZ * R + R * 0.035;
 const BROW_Z = FACE.browZ * R;
+/** Altura do arco acima do centro do olho, em raios de cabeça. */
+const BROW_LIFT = 0.285;
 const MOUTH_HALF = FACE.mouthHalf * R;
 
 /**
@@ -201,17 +203,21 @@ function lidCap(cover: number, radius: number, flip: boolean): THREE.BufferGeome
 }
 
 /** Monta as peças móveis do rosto em uma pose. A ordem nunca muda. */
-function buildPose(pose: FacePose, colors: { brow: number; skin: number; lip: number; lash: number }): THREE.BufferGeometry {
+function buildPose(pose: FacePose, colors: { brow: number; skin: number; lip: number; lipTop: number; lash: number }): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = [];
 
   // --- sobrancelhas: um arco que segue o osso, não uma barra reta ---
   for (const side of [1, -1]) {
     const { lift, tilt } = pose.brow(side);
-    const geometry = new THREE.TorusGeometry(R * 0.2, R * 0.022, 6, 12, 1.5);
-    geometry.scale(1, 0.52, 0.5);
-    geometry.applyMatrix4(new THREE.Matrix4().makeRotationZ(Math.PI / 2 - 0.75 + tilt * side));
-    geometry.applyMatrix4(new THREE.Matrix4().makeRotationY(side * -0.35));
-    geometry.translate(side * EYE_X, EYE_Y + R * 0.3 + lift * R * 0.5, BROW_Z);
+    // O arco é um pedaço de toro, e o centro do toro **não** é o
+    // centro do arco: ele fica a um raio de distância. Sem descontar
+    // isso, a sobrancelha subia R·0,2 a mais e ia parar no cabelo.
+    const arc = R * 0.185;
+    const geometry = new THREE.TorusGeometry(arc, R * 0.02, 6, 14, 1.7);
+    geometry.scale(1, 0.46, 0.5);
+    geometry.applyMatrix4(new THREE.Matrix4().makeRotationZ(Math.PI / 2 - 0.85 + tilt * side));
+    geometry.applyMatrix4(new THREE.Matrix4().makeRotationY(side * -0.3));
+    geometry.translate(side * EYE_X, EYE_Y + BROW_LIFT * R + lift * R * 0.4 - arc * 0.46, BROW_Z);
     parts.push(tinted(geometry, colors.brow));
   }
 
@@ -253,25 +259,40 @@ function buildPose(pose: FacePose, colors: { brow: number; skin: number; lip: nu
     parts.push(tinted(lashEdge, colors.lash));
   }
 
-  // --- boca: dois lábios e o vão escuro entre eles ---
+  // --- boca: dois lábios cheios, não um anel ---
+  //
+  // Eram dois arcos de toro, um por cima do outro, e juntos fechavam
+  // uma elipse: de longe parecia uma boca desenhada com caneta. Um
+  // lábio não é um contorno, é um volume — e o de baixo é mais cheio
+  // que o de cima, o que basta para a boca deixar de ser simétrica e
+  // passar a parecer carne.
   const { open, wide, corner } = pose.mouth;
-  const gap = open * R * 0.075;
-  for (const [sign, thick, fill] of [
-    [1, 0.034, colors.lip],
-    [-1, 0.046, colors.lip],
+  const gap = open * R * 0.07;
+  const half = MOUTH_HALF * wide;
+  for (const [sign, tall, deep, tint] of [
+    [1, 0.042, 0.042, colors.lipTop],
+    [-1, 0.058, 0.05, colors.lip],
   ] as const) {
-    // Cada lábio é um arco: curvado para cima nos cantos quando sorri.
-    const lip = new THREE.TorusGeometry(MOUTH_HALF * wide, R * thick, 5, 16, Math.PI);
-    lip.scale(1, 0.46 + corner * 0.42 * sign, 0.5);
-    if (sign > 0) lip.applyMatrix4(new THREE.Matrix4().makeRotationZ(Math.PI));
-    lip.translate(0, MOUTH_Y + sign * gap + R * 0.012 * sign, MOUTH_Z);
-    parts.push(tinted(lip, fill));
+    const lip = new THREE.SphereGeometry(1, 18, 7);
+    lip.scale(half, R * tall, R * deep);
+    // Curva os cantos: para cima quando sorri, para baixo quando não.
+    // O arco de cima é côncavo e o de baixo convexo, como numa boca.
+    const pos = lip.getAttribute('position') as THREE.BufferAttribute;
+    for (let i = 0; i < pos.count; i += 1) {
+      const t = pos.getX(i) / half;
+      pos.setY(i, pos.getY(i) + t * t * R * (0.05 * corner - 0.012) * sign);
+      // Afina nas pontas: o lábio morre no canto, não termina cortado.
+      pos.setZ(i, pos.getZ(i) * (1 - 0.55 * t * t));
+    }
+    lip.computeVertexNormals();
+    lip.translate(0, MOUTH_Y + sign * gap + sign * R * 0.026, MOUTH_Z);
+    parts.push(tinted(lip, tint));
   }
   // O vão: só aparece quando os lábios se afastam.
-  const inner = new THREE.SphereGeometry(1, 12, 6);
-  inner.scale(MOUTH_HALF * wide * 0.92, Math.max(R * 0.004, gap * 1.05), R * 0.05);
-  inner.translate(0, MOUTH_Y, MOUTH_Z - R * 0.02);
-  parts.push(tinted(inner, 0x4a1f26));
+  const inner = new THREE.SphereGeometry(1, 14, 6);
+  inner.scale(half * 0.88, Math.max(R * 0.003, gap * 1.1), R * 0.045);
+  inner.translate(0, MOUTH_Y + R * 0.004, MOUTH_Z - R * 0.022);
+  parts.push(tinted(inner, 0x47202a));
 
   const merged = mergeGeometries(parts, false) ?? new THREE.BufferGeometry();
   for (const part of parts) part.dispose();
@@ -294,7 +315,9 @@ export function buildFaceGeometry(appearance: AvatarAppearance): THREE.BufferGeo
     brow: browColor,
     skin: skin.clone().lerp(new THREE.Color(0x000000), 0.07).getHex(),
     // Lábio: a própria pele puxada para o vermelho, não um batom chapado.
-    lip: skin.clone().lerp(new THREE.Color(0xc2566a), 0.52).getHex(),
+    lip: skin.clone().lerp(new THREE.Color(0xc2566a), 0.5).getHex(),
+    // O de cima fica na sombra do próprio volume: um tom abaixo.
+    lipTop: skin.clone().lerp(new THREE.Color(0xa8465a), 0.56).getHex(),
     lash: hair.clone().lerp(new THREE.Color(0x000000), 0.55).getHex(),
   };
 

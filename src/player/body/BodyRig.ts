@@ -461,6 +461,13 @@ export interface BodyDetail {
   steps: number;
   /** Anéis do crânio. */
   headRings: number;
+  /**
+   * Força da oclusão ambiente assada na cor dos vértices. `0` desliga.
+   *
+   * Custa tempo de montagem, não de quadro — por isso quem está longe,
+   * e vai ser remontado com frequência pelo LOD, recebe menos ou nada.
+   */
+  occlusion: number;
 }
 
 /**
@@ -479,10 +486,10 @@ export interface BodyDetail {
  * existindo e continuam servindo ao LOD de `NpcSystem`.
  */
 export const BODY_DETAIL: Readonly<Record<'ultra' | 'alta' | 'media' | 'baixa', BodyDetail>> = Object.freeze({
-  ultra: { segments: 44, steps: 7, headRings: 30 },
-  alta: { segments: 30, steps: 5, headRings: 21 },
-  media: { segments: 18, steps: 3, headRings: 13 },
-  baixa: { segments: 10, steps: 2, headRings: 8 },
+  ultra: { segments: 44, steps: 7, headRings: 30, occlusion: 1 },
+  alta: { segments: 30, steps: 5, headRings: 21, occlusion: 0.85 },
+  media: { segments: 18, steps: 3, headRings: 13, occlusion: 0.6 },
+  baixa: { segments: 10, steps: 2, headRings: 8, occlusion: 0 },
 });
 
 export type BodyDetailLevel = keyof typeof BODY_DETAIL;
