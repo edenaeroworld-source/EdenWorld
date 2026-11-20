@@ -31,7 +31,7 @@ import type { MotionState } from '../player/PlayerMotor';
 import { allSpecies } from '../creatures/Species';
 import { QUALITY_LEVELS, profileFor } from '../systems/QualitySystem';
 
-type Mode = 'corpo' | 'rosto' | 'bichos' | 'niveis' | 'elenco' | 'bet' | 'betrampa' | 'luma';
+type Mode = 'corpo' | 'rosto' | 'bichos' | 'niveis' | 'elenco' | 'bet' | 'betrampa' | 'deusa';
 
 const canvas = document.getElementById('tela') as HTMLCanvasElement;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -69,6 +69,8 @@ scene.add(criaturas);
 
 const ui = {
   modo: 'corpo' as Mode,
+  /** Qual deusa a cena `deusa` monta. */
+  deusa: 'luma',
   andando: false,
   nivel: 'ultra' as BodyDetailLevel,
   roupa: 'vestido' as AvatarAppearance['outfit'],
@@ -171,14 +173,15 @@ function montar(): void {
       const avatar = novoAvatar(ui.nivel, (i - (BET_RAMPA.length - 1) / 2) * 0.78);
       avatar.setMorph(valor, valor);
     });
-  } else if (ui.modo === 'luma') {
-    // A Luma como o jogo a monta: aparência do panteão e os Afters dela.
-    // Três distâncias porque identidade se julga no rosto, mas silhueta
-    // se julga de corpo inteiro.
-    const luma = getCharacter('luma');
-    if (luma) {
-      const avatar = novoAvatar(ui.nivel, 0, luma.appearance);
-      if (luma.afters) avatar.setMorph(luma.afters.bust, luma.afters.curve);
+  } else if (ui.modo === 'deusa') {
+    // A deusa escolhida como o jogo a monta: aparência do panteão e os
+    // Afters dela. A cena nasceu para a Luma e foi generalizada no
+    // marco da Suki — toda remasterização seguinte entra aqui em vez
+    // de ganhar um modo próprio.
+    const ficha = getCharacter(ui.deusa);
+    if (ficha) {
+      const avatar = novoAvatar(ui.nivel, 0, ficha.appearance);
+      if (ficha.afters) avatar.setMorph(ficha.afters.bust, ficha.afters.curve);
     }
   } else if (ui.modo === 'bichos') {
     const porMovimento = new Map<string, ReturnType<typeof allSpecies>[number]>();
@@ -204,7 +207,7 @@ function montar(): void {
 
 /** Cenas em que cada avatar tem a própria silhueta, e os sliders não mandam. */
 function morphPorAvatar(): boolean {
-  return ui.modo === 'bet' || ui.modo === 'betrampa' || ui.modo === 'elenco' || ui.modo === 'luma';
+  return ui.modo === 'bet' || ui.modo === 'betrampa' || ui.modo === 'elenco' || ui.modo === 'deusa';
 }
 
 function aplicarMorph(): void {
@@ -313,6 +316,10 @@ function ligar(id: string, fn: (valor: string) => void): void {
 
 ligar('modo', (v) => {
   ui.modo = v as Mode;
+  montar();
+});
+ligar('deusa', (v) => {
+  ui.deusa = v;
   montar();
 });
 ligar('nivel', (v) => {

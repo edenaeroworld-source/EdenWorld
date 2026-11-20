@@ -6,12 +6,13 @@ import { type Rng, clamp, pick } from '../utils/math';
  * valores desconhecidos são substituídos pelo padrão em `sanitizeAppearance`.
  */
 
-export const HAIR_STYLES = ['curto', 'longo', 'ondulado', 'rabo', 'coque', 'cacheado', 'espetado', 'careca'] as const;
+export const HAIR_STYLES = ['curto', 'longo', 'ondulado', 'cascata', 'rabo', 'coque', 'cacheado', 'espetado', 'careca'] as const;
 export type HairStyle = (typeof HAIR_STYLES)[number];
 export const HAIR_LABELS: Record<HairStyle, string> = {
   curto: 'Curto',
   longo: 'Longo',
   ondulado: 'Longo ondulado',
+  cascata: 'Cascata',
   rabo: 'Rabo de cavalo',
   coque: 'Coque',
   cacheado: 'Cacheado',
@@ -19,7 +20,17 @@ export const HAIR_LABELS: Record<HairStyle, string> = {
   careca: 'Sem cabelo',
 };
 
-export const OUTFITS = ['casual', 'aero', 'vestido', 'esportivo', 'praia', 'aurora'] as const;
+/**
+ * O que um habitante qualquer pode ter na cabeça.
+ *
+ * A Cascata não é só um cabelo comprido: ela traz o diadema da
+ * Suki-Chan junto, porque a ficha tem um campo de acessório só e o
+ * dela está ocupado pelos óculos. Sorteá-la para a praça poria
+ * coroa em meia dúzia de passantes.
+ */
+export const CITIZEN_HAIR_STYLES = HAIR_STYLES.filter((h) => h !== 'cascata');
+
+export const OUTFITS = ['casual', 'aero', 'vestido', 'esportivo', 'praia', 'aurora', 'docente'] as const;
 export type Outfit = (typeof OUTFITS)[number];
 /**
  * O que um habitante qualquer pode vestir.
@@ -27,8 +38,10 @@ export type Outfit = (typeof OUTFITS)[number];
  * O Manto Aurora é de vidro líquido e existe para uma pessoa só: se
  * entrasse no sorteio, cinquenta e quatro habitantes apareceriam de
  * traje divino na praça — e o que é de uma deixaria de ser dela.
+ *
+ * O Vestido Docente é da Suki-Chan pela mesma razão.
  */
-export const CITIZEN_OUTFITS = OUTFITS.filter((o) => o !== 'aurora');
+export const CITIZEN_OUTFITS = OUTFITS.filter((o) => o !== 'aurora' && o !== 'docente');
 export const OUTFIT_LABELS: Record<Outfit, string> = {
   casual: 'Casual',
   aero: 'Traje Aero',
@@ -36,9 +49,10 @@ export const OUTFIT_LABELS: Record<Outfit, string> = {
   esportivo: 'Esportivo',
   praia: 'Praia',
   aurora: 'Manto Aurora',
+  docente: 'Vestido Docente',
 };
 
-export const ACCESSORIES = ['nenhum', 'oculos', 'fones', 'chapeu', 'flor', 'cristal', 'aureola'] as const;
+export const ACCESSORIES = ['nenhum', 'oculos', 'fones', 'chapeu', 'flor', 'cristal', 'aureola', 'lentes'] as const;
 export type Accessory = (typeof ACCESSORIES)[number];
 export const ACCESSORY_LABELS: Record<Accessory, string> = {
   nenhum: 'Nenhum',
@@ -48,7 +62,18 @@ export const ACCESSORY_LABELS: Record<Accessory, string> = {
   flor: 'Flor',
   cristal: 'Brincos de cristal',
   aureola: 'Auréola',
+  lentes: 'Óculos de lente de vidro',
 };
+
+/**
+ * O que um habitante qualquer pode usar no rosto.
+ *
+ * As lentes de vidro são as da Suki-Chan. O acessório `oculos`
+ * comum continua inteiro e disponível para todo mundo — a lente
+ * vazada é dela, e mexer no acessório compartilhado mudaria o rosto
+ * de quem nunca pediu.
+ */
+export const CITIZEN_ACCESSORIES = ACCESSORIES.filter((a) => a !== 'lentes');
 
 export const SKIN_TONES = ['#ffe0c8', '#f6c9a4', '#e8ab82', '#cf8f63', '#a96c45', '#7d4a2c', '#5a3320', '#f3d2c1'] as const;
 export const HAIR_COLORS = ['#2b1d16', '#5a3a22', '#8a5a2b', '#d9a441', '#f3e3a6', '#c0392b', '#ff8fc0', '#7fd6ff', '#9a7bff', '#a855f7', '#f4f6fb'] as const;
@@ -127,14 +152,14 @@ export function sanitizeAppearance(raw: unknown): AvatarAppearance {
 export function randomAppearance(rng: Rng): AvatarAppearance {
   return {
     skin: pick(rng, SKIN_TONES),
-    hairStyle: pick(rng, HAIR_STYLES),
+    hairStyle: pick(rng, CITIZEN_HAIR_STYLES),
     hairColor: pick(rng, HAIR_COLORS),
     eyeColor: pick(rng, EYE_COLORS),
     outfit: pick(rng, CITIZEN_OUTFITS),
     topColor: pick(rng, CLOTH_COLORS),
     bottomColor: pick(rng, CLOTH_COLORS),
     shoeColor: pick(rng, CLOTH_COLORS),
-    accessory: pick(rng, ACCESSORIES),
+    accessory: pick(rng, CITIZEN_ACCESSORIES),
     height: Math.round((0.94 + rng() * 0.12) * 100) / 100,
   };
 }
