@@ -468,7 +468,7 @@ const SUKI: EdenCharacter = {
     'Antes de entrar no panteão, dava aula de biologia. Continua explicando tudo com exemplos de planta, bicho e célula.',
   ],
   place: inFrontOf('estufa-celeste'),
-  appearance: look('#f6c9a4', 'coque', '#2b1d16', '#2f9a66', 'casual', '#f3ead6', '#24e08a', '#ffffff', 'oculos', 0.97),
+  appearance: look('#e8ab82', 'cascata', '#1a1a22', '#3b2a20', 'docente', '#e23c8f', '#b02a73', '#f4f6fb', 'lentes', 0.97),
   aura: 0x7df0b5,
   contact: {
     handle: '@sukichan',
