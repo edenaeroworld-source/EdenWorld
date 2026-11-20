@@ -158,6 +158,16 @@ export const Finish = Object.freeze({
   Shine: 5,
   /** Vidro líquido: o traje Aero da Luma — liso, envernizado, iridescente. */
   Glass: 6,
+  /**
+   * Holograma: o véu e os anéis da Nexara — vidro que **emite** luz.
+   *
+   * É o único acabamento com emissão própria. A diferença entre ele e
+   * o vidro líquido não é a rugosidade, é a fonte: o vidro devolve a
+   * luz que recebe e escurece na sombra, como tudo o mais; o
+   * holograma acende com a própria cor e continua visível de noite,
+   * que é o que separa uma projeção de uma peça de roupa.
+   */
+  Holo: 7,
 } as const);
 
 export type FinishId = (typeof Finish)[keyof typeof Finish];

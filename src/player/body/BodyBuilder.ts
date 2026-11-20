@@ -33,6 +33,19 @@ function shade(color: Hex, amount: number): number {
   return c.lerp(new THREE.Color(amount >= 0 ? 0xffffff : 0x000000), Math.abs(amount)).getHex();
 }
 
+/**
+ * Mistura duas cores — o degradê que `shade` não sabe fazer.
+ *
+ * `shade` só anda na direção do branco ou do preto, e isso bastou
+ * enquanto os degradês eram de **valor**: a ponta clara da Cascata, a
+ * lapela do decote. O cabelo da Nexara é um degradê de **matiz**,
+ * de branco a lavanda, e para esse não há como clarear nem escurecer
+ * — um cabelo que já nasce quase branco não tem para onde clarear.
+ */
+function tint(color: Hex, target: Hex, amount: number): number {
+  return new THREE.Color(color).lerp(new THREE.Color(target), amount).getHex();
+}
+
 /** Atalho para um ponto de controle. */
 interface Ctl {
   y: number;
@@ -66,9 +79,9 @@ interface Ctl {
  * cor da roupa para cada anel; isto só traduz essa escolha, em vez de
  * repetir o acabamento em trinta estações à mão.
  */
-function withFinish(control: Ctl[], skin: Hex, shoe?: Hex): Ctl[] {
+function withFinish(control: Ctl[], skin: Hex, shoe?: Hex, cloth: FinishId = Finish.Cloth): Ctl[] {
   for (const c of control) {
-    c.finish = c.color === skin ? Finish.Skin : shoe !== undefined && c.color === shoe ? Finish.Rubber : Finish.Cloth;
+    c.finish = c.color === skin ? Finish.Skin : shoe !== undefined && c.color === shoe ? Finish.Rubber : cloth;
   }
   return control;
 }
@@ -125,19 +138,36 @@ export function buildBodyGeometry(a: AvatarAppearance, p: BodyProportions, m: Bo
   // **é** a manga três-quartos — a tabela de cores do braço já
   // sabia descrevê-la, faltava alguém pedir.
   const docente = outfit === 'docente';
-  const longSleeves = outfit === 'aero' || aurora;
+  // O Traje Rede, da Nexara: macacão branco de gola alta, ombreiras
+  // de vidro e um véu holográfico curto. Veste o corpo inteiro —
+  // manga comprida e perna comprida —, que é o que faz um macacão
+  // ser um macacão e não um conjunto.
+  const rede = outfit === 'rede';
+  const longSleeves = outfit === 'aero' || aurora || rede;
   const bareArms = outfit === 'esportivo' || outfit === 'vestido';
-  const longPants = outfit === 'casual' || outfit === 'aero';
+  const longPants = outfit === 'casual' || outfit === 'aero' || rede;
   const bareLegs = outfit === 'vestido' || docente;
   const dress = outfit === 'vestido' || aurora || docente;
-  const cloth: FinishId = aurora ? Finish.Glass : Finish.Cloth;
+  // Dois acabamentos, e a diferença entre eles é deliberada.
+  //
+  // `cloth` é o que vale para o que se **acrescenta** por cima do
+  // corpo — a gola, a faixa, a saia. `suit` é o que as varreduras do
+  // tronco, dos braços e das pernas pintam onde há pano.
+  //
+  // Eles divergem no Manto Aurora, e divergem de propósito: o manto
+  // é de vidro líquido na saia e na gola desde a remasterização da
+  // Luma, e o corpo dele é pano. Mudar isso agora mudaria a Luma,
+  // que está pronta e integrada. O Traje Rede é de vidro nos dois,
+  // porque é um macacão inteiriço e não um vestido sobre um corpo.
+  const cloth: FinishId = aurora || rede ? Finish.Glass : Finish.Cloth;
+  const suit: FinishId = rede ? Finish.Glass : Finish.Cloth;
 
   // Cada parte declara o seu acabamento antes de ser varrida.
   b.surface = cloth;
-  buildTorso(b, { m, detail, skin, top, bottom, accent, outfit, dress, origins });
+  buildTorso(b, { m, detail, skin, top, bottom, accent, outfit, dress, origins, suit });
   for (const side of [1, -1] as const) {
-    buildArm(b, side, { m, detail, skin, top, accent, longSleeves, bareArms, outfit, cloth });
-    buildLeg(b, side, { m, detail, skin, bottom, shoe, longPants, bareLegs, outfit, origins });
+    buildArm(b, side, { m, detail, skin, top, accent, longSleeves, bareArms, outfit, cloth, suit });
+    buildLeg(b, side, { m, detail, skin, bottom, shoe, longPants, bareLegs, outfit, origins, suit });
   }
   b.surface = Finish.Skin;
   buildHead(b, a, p, m, detail);
@@ -173,6 +203,8 @@ interface TorsoCtx {
   outfit: string;
   dress: boolean;
   origins: ReturnType<typeof morphOrigins>;
+  /** Acabamento do pano nas varreduras do corpo (ver `buildBodyGeometry`). */
+  suit: FinishId;
 }
 
 /**
@@ -229,7 +261,7 @@ function buildTorso(b: SurfaceBuilder, ctx: TorsoCtx): void {
     { y: m.neckY + 0.045, rx: m.neckR * 0.99, rz: m.neckR, color: skin, bone: Bone.Head },
   ];
 
-  b.loft(subdivideProfile(toStations(withFinish(control, skin)), detail.steps), {
+  b.loft(subdivideProfile(toStations(withFinish(control, skin, undefined, ctx.suit)), detail.steps), {
     segments: detail.segments,
     capBottom: 0.055,
     capRings: 2,
@@ -244,18 +276,28 @@ function buildTorso(b: SurfaceBuilder, ctx: TorsoCtx): void {
   b.feature([0, 0.285, 0.09], [0.11, 0.07, 0.07], 0.01, [0, 0, 1]);
   b.feature([0, 0.3, -0.09], [0.12, 0.06, 0.06], 0.006, [0, 0, -1]);
 
-  if (outfit === 'aurora') {
+  if (outfit === 'aurora' || outfit === 'rede') {
     // Gola alta: o manto fecha no pescoço, como na arte oficial. Sobe
     // pelo próprio pescoço, sem folga, para não flutuar quando a
     // cabeça gira — pertence ao osso da cabeça, como a gola Aero.
+    //
+    // O Traje Rede usa a mesma gola, e usa de propósito: as duas
+    // deusas têm gola alta na arte oficial, e duplicar a peça só
+    // para escrever os mesmos seis números outra vez é como nascem
+    // as divergências que ninguém revisa.
     const collar: Ctl[] = [
       { y: m.neckY - 0.03, rx: m.neckR * 1.1, rz: m.neckR * 1.1, color: top, bone: Bone.Head },
       { y: m.neckY + 0.025, rx: m.neckR * 1.14, rz: m.neckR * 1.14, color: top, bone: Bone.Head },
       { y: m.neckY + 0.07, rx: m.neckR * 1.2, rz: m.neckR * 1.2, color: shade(top, 0.3), bone: Bone.Head },
     ];
     b.loft(subdivideProfile(toStations(collar), detail.steps), { segments: Math.max(12, detail.segments) });
+  }
+  if (outfit === 'aurora') {
     // O fecho luminoso que desce do queixo ao peito.
     b.addGeometry(new THREE.BoxGeometry(0.012, 0.17, 0.008), { color: 0x9ff4ff, skin: { bone: Bone.Torso }, zone: MorphZone.Bust, origin: torso }, new THREE.Matrix4().makeTranslation(0, 0.33, 0.082));
+  }
+  if (outfit === 'rede') {
+    buildNetSuit(b, m, detail, top, bottom, accent, torso, hip);
   }
 
   if (outfit === 'aero') {
@@ -287,6 +329,99 @@ function buildTorso(b: SurfaceBuilder, ctx: TorsoCtx): void {
     b.addGeometry(belt, { color: accent, skin: { bone: Bone.Hips }, zone: MorphZone.Curve, origin: hip }, new THREE.Matrix4().makeRotationX(Math.PI / 2).setPosition(0, 0.03, 0));
   }
   void bottom;
+}
+
+/**
+ * As três peças que fazem o Traje Rede ser dela.
+ *
+ * O macacão em si sai de graça: gola alta emprestada do Manto
+ * Aurora, manga e perna compridas pelas listas que já existiam, e o
+ * acabamento de vidro líquido no lugar do pano. O que precisa de
+ * geometria é o resto.
+ *
+ *  · **As ombreiras.** Duas placas de vidro pousadas sobre o
+ *    deltoide. Pertencem ao tronco, não ao braço: é no tronco que
+ *    nasce o alto do deltoide, e uma ombreira que gira com o braço
+ *    levantado descola do ombro na hora.
+ *  · **A gema da gola.** O fecho luminoso do Manto Aurora desce do
+ *    queixo ao peito como uma barra; aqui ele é um ponto só, na
+ *    base do pescoço, como na arte oficial.
+ *  · **O véu.** Meia casca cônica pendurada dos ombros até os
+ *    quadris, aberta na frente. É a peça que exigia o acabamento
+ *    novo: um véu que apaga junto com o resto na sombra é um
+ *    pedaço de pano claro, não um holograma.
+ *
+ * O véu **não** é um anel fechado em volta do tronco, e essa foi a
+ * primeira ideia a ser descartada: a malha é opaca, e um cilindro
+ * completo esconderia o macacão inteiro por baixo de si mesmo. Meia
+ * volta e meia — 200 graus — cobre as costas e os flancos e deixa a
+ * frente livre, que é como o véu aparece na referência.
+ */
+function buildNetSuit(
+  b: SurfaceBuilder,
+  m: BodyMetrics,
+  detail: BodyDetail,
+  top: Hex,
+  bottom: Hex,
+  accent: Hex,
+  torso: readonly [number, number, number],
+  hip: readonly [number, number, number],
+): void {
+  const chest = { skin: { bone: Bone.Torso }, zone: MorphZone.Bust, origin: torso } as const;
+  const shoulderY = m.waist + m.shoulderY;
+
+  // Ombreiras: largas no eixo do corpo, fundas de frente para trás e
+  // baixas — placa, não bola. Vidro de verdade, que é o que a arte
+  // oficial mostra e o que o acabamento da Luma já sabia fazer.
+  const rings = detail.segments >= 26 ? 7 : detail.segments >= 14 ? 5 : 4;
+  for (const side of [1, -1]) {
+    // Baixa e larga: **placa**, não bola. A primeira tentativa tinha
+    // meio raio de altura e saiu como manga bufante — o ombro ficou
+    // com uma bolha em cima, que é o oposto de uma ombreira rígida.
+    b.ball(
+      [side * m.shoulderX * 0.8, shoulderY + 0.024, -0.004],
+      [m.shoulderX * 0.46, 0.03, 0.105],
+      { color: shade(top, 0.12), finish: Finish.Glass, ...chest },
+      rings,
+    );
+  }
+
+  // A gema da gola, na base do pescoço.
+  b.ball([0, 0.395, 0.088], [0.019, 0.026, 0.014], { color: accent, finish: Finish.Glass, ...chest }, 4);
+
+  // O véu holográfico — e por que ele acabou no quadril.
+  //
+  // A primeira versão pendurava dos ombros às ancas, que é o que a
+  // palavra "véu" sugere. A bancada mostrou por que isso não existe
+  // neste corpo: entre os ombros e a cintura, as costas inteiras são
+  // cabelo (a queda desce até abaixo da cintura) e os flancos
+  // inteiros são braço — medido, o braço ocupa de `x = 0,15` para
+  // fora em toda a altura do tronco. Sobra uma faixa de meio
+  // centímetro entre a borda do cabelo e a face interna do braço, e
+  // meio centímetro de véu não se vê de lugar nenhum. O que se via,
+  // na captura, era um lençol branco por cima do cabelo.
+  //
+  // E não há como resolver por transparência: o avatar inteiro é uma
+  // malha opaca com um material só. Véu opaco sobre cabelo opaco
+  // significa que um dos dois some — e não vai ser o cabelo.
+  //
+  // Então o véu desce da cintura e termina logo abaixo da anca:
+  // curto, aberto atrás — onde o cabelo passa, sem disputa — e
+  // fechado na frente e nos flancos, que é de onde se olha para ela.
+  const waistY = 0.165;
+  const hemY = -0.085;
+  const arc = (215 * Math.PI) / 180;
+  const segs = Math.max(10, Math.round(detail.segments * 0.7));
+  const veil = new THREE.CylinderGeometry(1, 1.34, waistY - hemY, segs, detail.segments >= 14 ? 2 : 1, true, -arc / 2, arc);
+  // Achatado por matriz: o quadril é uma elipse (0,158 de lado por
+  // 0,10 de frente), e uma casca circular ou enterra nos flancos ou
+  // flutua um palmo à frente da barriga.
+  const place = new THREE.Matrix4().makeScale(0.133, 1, 0.1).setPosition(0, (waistY + hemY) * 0.5, 0);
+  b.addGeometry(
+    veil,
+    { color: tint(bottom, accent, 0.58), finish: Finish.Holo, skin: { bone: Bone.Hips }, zone: MorphZone.Curve, origin: hip },
+    place,
+  );
 }
 
 /**
@@ -695,6 +830,8 @@ interface ArmCtx {
   outfit: string;
   /** `Finish.Cloth` para pano, `Finish.Glass` para o Manto Aurora. */
   cloth: FinishId;
+  /** Acabamento do pano na varredura do braço. */
+  suit: FinishId;
 }
 
 /**
@@ -752,7 +889,7 @@ function buildArm(b: SurfaceBuilder, side: 1 | -1, ctx: ArmCtx): void {
     { y: wristY - 0.135, rx: m.armWrist * 0.6, rz: m.armWrist * 1.05, x, color: skin, bone: foreBone },
   ];
 
-  b.loft(subdivideProfile(toStations(withFinish(control, skin)), detail.steps), {
+  b.loft(subdivideProfile(toStations(withFinish(control, skin, undefined, ctx.suit)), detail.steps), {
     segments: detail.segments,
     descending: true,
     capTop: 0.018,
@@ -798,6 +935,8 @@ interface LegCtx {
   bareLegs: boolean;
   outfit: string;
   origins: ReturnType<typeof morphOrigins>;
+  /** Acabamento do pano na varredura da perna. */
+  suit: FinishId;
 }
 
 /**
@@ -842,7 +981,7 @@ function buildLeg(b: SurfaceBuilder, side: 1 | -1, ctx: LegCtx): void {
     { y: ankleY - 0.05, rx: m.legAnkle * 1.18, rz: m.legAnkle * 2.5, z: 0.045, x, color: shoe, bone: shinBone },
   ];
 
-  b.loft(subdivideProfile(toStations(withFinish(control, skin, shoe)), detail.steps), {
+  b.loft(subdivideProfile(toStations(withFinish(control, skin, shoe, ctx.suit)), detail.steps), {
     segments: detail.segments,
     descending: true,
     capTop: 0.03,
@@ -1383,6 +1522,128 @@ function buildHair(b: SurfaceBuilder, a: AvatarAppearance, m: BodyMetrics, detai
       buildDiadem(b, detail, cy, R);
       break;
     }
+    case 'fluxo': {
+      // A queda da Nexara. É prima da Cascata e herda dela tudo o
+      // que a bancada ensinou — afunilamento contínuo, profundidade
+      // casada com a calota na nuca, sulcos pousados na superfície,
+      // nenhuma mecha solta. O que a separa são duas coisas, e as
+      // duas são a personagem:
+      //
+      //  · **a massa serpenteia**. O eixo da queda desliza para um
+      //    lado no meio das costas e volta na ponta, num S longo.
+      //    Cabelo que escorre, não cabelo que pendura — é a leitura
+      //    de fluxo que a deusa das redes pede, e sai de um número
+      //    por anel, sem um vértice a mais;
+      //  · **o degradê é de matiz**. Branco no couro cabeludo,
+      //    lavanda na ponta. Clarear não serviria: este cabelo já
+      //    nasce quase branco, e não há para onde clarear. É por
+      //    isso que existe `tint`.
+      //
+      // E uma decisão que não é estética: ela para **acima** da
+      // Cascata. O cabelo mais longo do Éden é o da Suki-Chan, tem
+      // um teste que afirma isso, e remasterizar uma deusa não é
+      // motivo para tomar da outra o que já era dela.
+      // O topo entra **dentro** da calota, e não encostado nela: a
+      // primeira captura mostrou uma linha de couro cabeludo onde as
+      // duas peças se encontravam na nuca. Com o cabelo quase branco
+      // qualquer fresta acende; com o preto da Suki-Chan a mesma
+      // fresta passava despercebida.
+      const topY = cy + 0.085;
+      const bottomY = cy - 0.62;
+      const rings = segments >= 26 ? 10 : segments >= 14 ? 8 : 4;
+      const tipColor = 0xc9a2ff;
+      const yOf = (t: number): number => bottomY + (topY - bottomY) * t;
+      // Largura: afunila o tempo todo, com uma onda rasa por cima —
+      // a onda tem de estar no **contorno**, senão some a três metros.
+      // A largura tem um **ressalto na altura da orelha**, e ele não é
+      // enfeite. A orelha é uma varredura à parte que chega a
+      // `1,025·R` — medido, não estimado —, e a primeira versão da
+      // queda passava ali com `0,976·R`. O resultado, na captura de
+      // costas, eram três triângulos de pele atravessando o cabelo:
+      // não uma orelha à mostra, que seria normal, mas a malha da
+      // orelha cortada ao meio pela malha do cabelo.
+      //
+      // No topo o ressalto desaparece de novo, porque ali o que
+      // manda é caber **dentro** da calota: uma queda mais larga que
+      // a calota deixa o anel de cima à mostra como um degrau.
+      const bump = (t: number): number => smoothstep(0.45, 0.85, t);
+      const rxOf = (t: number): number =>
+        R * (0.62 + 0.22 * t + 0.26 * bump(t)) * (1 - 0.26 * smoothstep(0.1, 0, t)) * (1 + 0.08 * Math.sin(t * Math.PI * 2.4 + 0.5));
+      // Fundo na nuca — a profundidade tem de passar atrás do crânio,
+      // senão sobra occipital —, e enxuto no último anel, pela mesma
+      // razão que a largura.
+      const rzBackOf = (t: number): number => R * (0.32 + 0.78 * t);
+      // O centro recua enquanto desce: no alto o cabelo está colado à
+      // calota (e tem de caber **dentro** dela), mais abaixo ele se
+      // afasta e cai pelas costas.
+      const zcOf = (t: number): number => -R * (0.3 - 0.24 * t);
+      // O S. Zero no couro cabeludo, onde o cabelo nasce centrado na
+      // cabeça, e cresce para baixo: é o único jeito de a onda não
+      // arrancar o penteado da calota.
+      // A onda só começa **abaixo do maxilar**. Enquanto o cabelo
+      // ainda está sobre o crânio ele não pode escorregar para lado
+      // nenhum: dois centímetros de desvio na altura da orelha
+      // descobriram o lado esquerdo da cabeça, e o traçado de raios
+      // apontou a falha num azimute só — assimétrica, como têm de
+      // ser as falhas de uma onda que começa cedo demais.
+      const xOf = (t: number): number =>
+        Math.sin((1 - t) * Math.PI * 1.3) * R * 0.42 * (1 - t) * (1 - smoothstep(0.35, 0.75, t));
+
+      const fall: Ctl[] = [];
+      for (let i = 0; i < rings; i += 1) {
+        const t = i / (rings - 1);
+        fall.push({
+          y: yOf(t),
+          rx: rxOf(t),
+          rz: R * 0.18,
+          rzBack: rzBackOf(t),
+          x: xOf(t),
+          z: zcOf(t),
+          color: tint(hair, tipColor, 0.8 * (1 - t) ** 1.25),
+          bone: Bone.Head,
+          bone2: Bone.Torso,
+          blend: 0.88 * (1 - smoothstep(cy - 0.55, cy - 0.1, yOf(t))),
+        });
+      }
+      b.loft(subdivideProfile(toStations(fall), detail.steps), { segments, capBottom: R * 0.07, capRings: 2 });
+
+      // O risco no alto da cabeça. Sem ele a calota é uma superfície
+      // lisa de meio metro quadrado e o penteado lê como touca —
+      // foi o que a primeira captura de frente mostrou. Um vinco
+      // raso da testa à coroa basta: é por onde o cabelo se divide.
+      if (detail.segments >= 14) b.feature([0, cy + 0.19, 0], [R * 0.09, R * 0.3, R * 0.95], -R * 0.045, [0, 1, 0]);
+
+      // Os sulcos entre as mechas, na face de trás. Cada um é posto
+      // no ponto da elipse daquela altura — incluindo o desvio do S,
+      // senão o sulco do meio das costas cava o ar ao lado do cabelo.
+      //
+      // Largos de propósito: a primeira versão tinha `0,11·R` de
+      // raio lateral, e o espaçamento entre vértices do anel, nesta
+      // malha, é maior que isso. Um sulco mais estreito que a
+      // distância entre dois vértices não afunda uma superfície —
+      // afunda **um vértice**, e o sombreamento suave apaga o que
+      // sobrou. Não apareceu nada na captura, e não tinha como
+      // aparecer.
+      if (detail.segments >= 14) {
+        for (const side of [-1, 1]) {
+          for (let i = 0; i < 3; i += 1) {
+            const az = Math.PI + side * (0.34 + i * 0.42);
+            const t = 0.32 + i * 0.17;
+            const sx = Math.sin(az);
+            const sz = Math.cos(az);
+            b.feature(
+              [xOf(t) + sx * rxOf(t), yOf(t), zcOf(t) + sz * rzBackOf(t)],
+              [R * 0.22, R * 0.4, R * 0.22],
+              -R * 0.14,
+              [sx, 0, sz],
+            );
+          }
+        }
+      }
+
+      buildOrbitRings(b, detail, cy, R);
+      break;
+    }
     case 'rabo': {
       const tail: Ctl[] = [
         { y: cy - 0.17, rx: R * 0.1, rz: R * 0.1, z: -R * 1.42, color: dark, bone: Bone.Head },
@@ -1492,6 +1753,43 @@ function buildDiadem(b: SurfaceBuilder, detail: BodyDetail, cy: number, R: numbe
         4,
       );
     }
+  }
+}
+
+/**
+ * Os dois anéis de rede da Nexara — e por que eles moram no cabelo.
+ *
+ * Mesma razão do diadema da Suki-Chan: a ficha tem **um** campo de
+ * acessório, e dois anéis orbitais não cabem nele junto com mais
+ * nada. Quem escolhe o Fluxo leva os anéis junto, e é por isso que
+ * o Fluxo está fora do sorteio dos habitantes.
+ *
+ * Eles entram na malha única, como tudo o mais: um anel orbital que
+ * fosse um objeto à parte custaria uma chamada de desenho por
+ * personagem e teria de ser reposicionado a cada quadro. Preso ao
+ * osso da cabeça, ele acompanha sem uma linha de código de
+ * animação — e a cabeça já balança sozinha quando ela anda, o que
+ * dá a oscilação de órbita de graça.
+ *
+ * Os dois são inclinados em eixos diferentes de propósito. Dois
+ * anéis paralelos lêem como um aro grosso mal desenhado; cruzados,
+ * lêem como órbita — é o mesmo truque do átomo de livro escolar, e
+ * funciona pela mesma razão.
+ */
+function buildOrbitRings(b: SurfaceBuilder, detail: BodyDetail, cy: number, R: number): void {
+  const head: SkinBinding = { bone: Bone.Head };
+  const segs = Math.max(10, Math.round(detail.segments * 0.85));
+  const baseY = cy + 0.2;
+  const orbits: readonly { r: number; tube: number; tilt: number; spin: number; y: number; color: number }[] = [
+    { r: R * 1.34, tube: R * 0.028, tilt: 0.24, spin: 0.42, y: baseY, color: 0x9fe8ff },
+    { r: R * 1.04, tube: R * 0.024, tilt: -0.33, spin: -0.5, y: baseY + R * 0.19, color: 0xc9b6ff },
+  ];
+  for (const o of orbits) {
+    const ring = new THREE.TorusGeometry(o.r, o.tube, 4, segs);
+    const place = new THREE.Matrix4()
+      .makeRotationFromEuler(new THREE.Euler(Math.PI / 2 + o.tilt, o.spin, 0, 'YXZ'))
+      .setPosition(0, o.y, 0);
+    b.addGeometry(ring, { color: o.color, finish: Finish.Holo, skin: head }, place);
   }
 }
 
