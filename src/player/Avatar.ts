@@ -28,6 +28,15 @@ export type { BodyProportions } from './body/BodyProportions';
  * corpo engordou para saber quanto a junta precisa recuar.
  */
 const ARMPIT_TORSO_Y = 0.27;
+/**
+ * Cor da auréola, quando a ficha do personagem não pede outra.
+ *
+ * É o dourado do Aérion, e é o padrão justamente para que continuar
+ * dourado não dependa de ninguém se lembrar de escrever `halo:` na
+ * ficha dele.
+ */
+export const HALO_DEFAULT = 0xfff2a8;
+
 /** Quanto a perna abre por unidade de AfterCurve® (0–2.5). */
 const LEG_SPREAD = 0.022;
 /** Quanto o braço afasta do corpo na gestação plena: contorna o ventre. */
@@ -195,7 +204,15 @@ export class Avatar {
         shader.uniforms.uGestation = this.gestationUniform;
         shader.fragmentShader = shader.fragmentShader
           .replace('#include <common>', `#include <common>\nuniform float avatarFill;\n${finishVaryingGLSL()}`)
-          .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n\ttotalEmissiveRadiance += diffuseColor.rgb * avatarFill;')
+          // A luz própria do holograma entra no caminho de emissão que
+          // já existia, somada à luz de preenchimento: um ponto só, sem
+          // passe novo e sem material novo. `edenEmissive` vale zero em
+          // todos os acabamentos anteriores, então nada que já estava
+          // em cena muda de pixel.
+          .replace(
+            '#include <emissivemap_fragment>',
+            '#include <emissivemap_fragment>\n\ttotalEmissiveRadiance += diffuseColor.rgb * ( avatarFill + edenEmissive( vFinish ) );',
+          )
           // A rugosidade e o metal passam a vir do acabamento do vértice.
           .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = edenRoughness(vFinish);')
           .replace('#include <metalnessmap_fragment>', 'float metalnessFactor = edenMetalness(vFinish);')
@@ -269,7 +286,7 @@ export class Avatar {
         .replace('#include <begin_vertex>', '#include <begin_vertex>\n\ttransformed = edenBodyPosition(transformed);');
     };
     this.depthMaterial.customProgramCacheKey = () => 'eden-avatar-organico-profundidade';
-    this.haloMaterial = new THREE.MeshBasicMaterial({ color: 0xfff2a8, toneMapped: false });
+    this.haloMaterial = new THREE.MeshBasicMaterial({ color: HALO_DEFAULT, toneMapped: false });
 
     this.faceMesh = new THREE.Mesh(new THREE.BufferGeometry(), this.material);
     this.faceMesh.name = 'rosto';
@@ -278,6 +295,7 @@ export class Avatar {
     this.face = new FaceController(seedFrom(appearance));
 
     this.halo = new THREE.Mesh(new THREE.TorusGeometry(0.13, 0.016, 8, 28), this.haloMaterial);
+    this.halo.name = 'halo';
     this.halo.rotation.x = Math.PI / 2;
     this.halo.position.set(0, 0.44, 0);
     this.halo.visible = false;
@@ -467,6 +485,18 @@ export class Avatar {
     this.bones = rig.bones;
     this.halo.visible = appearance.accessory === 'aureola';
     this.setShadows(this.shadowsOn);
+  }
+
+  /**
+   * Troca a cor da auréola.
+   *
+   * Ela nasceu dourada porque nasceu no Aérion, e a cor estava escrita
+   * no construtor. Isso bastava enquanto um personagem só a usava; não
+   * basta mais. Quem decide agora é a ficha — e quem não decide
+   * continua dourado, que é exatamente o caso do Aérion.
+   */
+  setHaloColor(color: number): void {
+    this.haloMaterial.color.set(color);
   }
 
   /**

@@ -53,6 +53,15 @@ export interface EdenCharacter {
   appearance: AvatarAppearance;
   /** Cor da aura divina (hexadecimal). */
   aura: number;
+  /**
+   * Cor da auréola, para quem usa o acessório `aureola`.
+   *
+   * Sem o campo vale o dourado do Aérion (`HALO_DEFAULT`), que é
+   * como a auréola sempre foi — a cor estava escrita no construtor
+   * do avatar, e isso bastou enquanto um personagem só a usava.
+   * Quem não declara nada continua exatamente como estava.
+   */
+  halo?: number;
   contact: CharacterContact;
   dialogue: DialogueTree;
   /** Registro adicionado ao diário ao conhecer o personagem. */
@@ -369,7 +378,7 @@ const NEXARA: EdenCharacter = {
     'Ela gosta de dizer que rede social boa é a que devolve as pessoas para a rua, não a que prende todo mundo na tela.',
   ],
   place: inFrontOf('torre-zenite'),
-  appearance: look('#e8ab82', 'longo', '#9a7bff', '#7a5cc9', 'aero', '#c9a2ff', '#4b2fa8', '#f4f6fb', 'nenhum', 1.02),
+  appearance: look('#e8ab82', 'fluxo', '#efe6ff', '#29c8ff', 'rede', '#f4f6fb', '#eceaff', '#f4f6fb', 'nenhum', 1.02),
   aura: 0xc9a2ff,
   contact: {
     handle: '@nexara',

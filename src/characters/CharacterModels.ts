@@ -22,7 +22,7 @@
  */
 
 import { PANTHEON, type EdenCharacter } from './Pantheon';
-import { Avatar } from '../player/Avatar';
+import { Avatar, HALO_DEFAULT } from '../player/Avatar';
 import type { AvatarAppearance } from '../player/AvatarAppearance';
 import { type BodyProportions, proportionsFingerprint, proportionsFor } from '../player/body/BodyProportions';
 
@@ -122,6 +122,9 @@ export function createOfficialAvatar(id: string, options: OfficialAvatarOptions 
   // Afters e vale sempre que a personagem estiver em cena. Amara é
   // Deusa da Maternidade em toda região, inclusive dentro de um prédio.
   avatar.setGestation(character.gestation ?? 0);
+  // A auréola é dourada por omissão, e é assim que o Aérion continua
+  // dourado sem precisar declarar nada.
+  avatar.setHaloColor(character.halo ?? HALO_DEFAULT);
   avatar.setShadows(options.shadows ?? true);
   return avatar;
 }

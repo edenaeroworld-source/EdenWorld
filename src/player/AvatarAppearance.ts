@@ -6,13 +6,14 @@ import { type Rng, clamp, pick } from '../utils/math';
  * valores desconhecidos são substituídos pelo padrão em `sanitizeAppearance`.
  */
 
-export const HAIR_STYLES = ['curto', 'longo', 'ondulado', 'cascata', 'rabo', 'coque', 'cacheado', 'espetado', 'careca'] as const;
+export const HAIR_STYLES = ['curto', 'longo', 'ondulado', 'cascata', 'fluxo', 'rabo', 'coque', 'cacheado', 'espetado', 'careca'] as const;
 export type HairStyle = (typeof HAIR_STYLES)[number];
 export const HAIR_LABELS: Record<HairStyle, string> = {
   curto: 'Curto',
   longo: 'Longo',
   ondulado: 'Longo ondulado',
   cascata: 'Cascata',
+  fluxo: 'Fluxo',
   rabo: 'Rabo de cavalo',
   coque: 'Coque',
   cacheado: 'Cacheado',
@@ -27,10 +28,15 @@ export const HAIR_LABELS: Record<HairStyle, string> = {
  * Suki-Chan junto, porque a ficha tem um campo de acessório só e o
  * dela está ocupado pelos óculos. Sorteá-la para a praça poria
  * coroa em meia dúzia de passantes.
+ *
+ * O Fluxo é da Nexara pela mesma razão, e por uma a mais: ele carrega
+ * os dois anéis de rede que orbitam a cabeça dela. Um habitante
+ * qualquer com anéis orbitais não é um habitante com um penteado
+ * bonito, é outra deusa.
  */
-export const CITIZEN_HAIR_STYLES = HAIR_STYLES.filter((h) => h !== 'cascata');
+export const CITIZEN_HAIR_STYLES = HAIR_STYLES.filter((h) => h !== 'cascata' && h !== 'fluxo');
 
-export const OUTFITS = ['casual', 'aero', 'vestido', 'esportivo', 'praia', 'aurora', 'docente'] as const;
+export const OUTFITS = ['casual', 'aero', 'vestido', 'esportivo', 'praia', 'aurora', 'docente', 'rede'] as const;
 export type Outfit = (typeof OUTFITS)[number];
 /**
  * O que um habitante qualquer pode vestir.
@@ -39,9 +45,12 @@ export type Outfit = (typeof OUTFITS)[number];
  * entrasse no sorteio, cinquenta e quatro habitantes apareceriam de
  * traje divino na praça — e o que é de uma deixaria de ser dela.
  *
- * O Vestido Docente é da Suki-Chan pela mesma razão.
+ * O Vestido Docente é da Suki-Chan pela mesma razão, e o Traje Rede
+ * da Nexara pela mesma razão outra vez — este com um véu que acende
+ * sozinho, o que o torna ainda mais difícil de confundir com roupa
+ * de passante.
  */
-export const CITIZEN_OUTFITS = OUTFITS.filter((o) => o !== 'aurora' && o !== 'docente');
+export const CITIZEN_OUTFITS = OUTFITS.filter((o) => o !== 'aurora' && o !== 'docente' && o !== 'rede');
 export const OUTFIT_LABELS: Record<Outfit, string> = {
   casual: 'Casual',
   aero: 'Traje Aero',
@@ -50,6 +59,7 @@ export const OUTFIT_LABELS: Record<Outfit, string> = {
   praia: 'Praia',
   aurora: 'Manto Aurora',
   docente: 'Vestido Docente',
+  rede: 'Traje Rede',
 };
 
 export const ACCESSORIES = ['nenhum', 'oculos', 'fones', 'chapeu', 'flor', 'cristal', 'aureola', 'lentes'] as const;
