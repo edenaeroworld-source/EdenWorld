@@ -78,8 +78,11 @@ interface FacePose {
  * para uma cabeça desta largura. A de cima cobre mais que a de baixo,
  * como num rosto real.
  */
-const LID_OPEN = 1.15;
-const LOWER_OPEN = 1.0;
+// Medido na bancada em WebGL: com 1,15 e 1,0 a fenda expunha 57° do
+// globo — mais de metade da altura visível —, e o olho lia como uma
+// bola de gude pousada na cara. Um olho real mostra perto de 30°.
+const LID_OPEN = 1.32;
+const LOWER_OPEN = 1.18;
 /** Fechada, a de cima desce até encontrar a borda da de baixo. */
 const LID_SHUT = 2.14;
 

@@ -842,17 +842,63 @@ function buildHead(b: SurfaceBuilder, a: AvatarAppearance, p: BodyProportions, m
   // Fundas o bastante para o globo entrar — antes a cova era rasa e o
   // olho ficava proeminente, de boneco assustado.
   for (const side of [-1, 1]) {
-    b.feature([side * eyeX, eyeY, eyeZ + R * 0.1], [R * 0.26, R * 0.19, R * 0.3], -R * 0.19, [0, 0, 1]);
+    b.feature([side * eyeX, eyeY, eyeZ + R * 0.1], [R * 0.27, R * 0.2, R * 0.3], -R * 0.225, [0, 0, 1]);
     // Canto interno, mais fundo: é o que dá a forma de amêndoa.
     b.feature([side * (eyeX - R * 0.17), eyeY - R * 0.02, eyeZ + R * 0.12], [R * 0.1, R * 0.1, R * 0.2], -R * 0.07, [0, 0, 1]);
   }
-  // Nariz: dorso descendo da glabela, ponta curta, asas de cada lado.
-  b.feature([0, cy + 0.012, R * 0.9], [R * 0.14, R * 0.3, R * 0.4], R * 0.17, [0, 0, 1]);
-  b.feature([0, cy - 0.028, R * 0.92], [R * 0.16, R * 0.1, R * 0.32], R * 0.1, [0, 0, 1]);
+  // Nariz: varredura própria, como a orelha.
+  //
+  // Antes eram quatro bolhas gaussianas somadas na casca do crânio.
+  // Uma gaussiana é um morro liso: dá para levantar massa com ela,
+  // mas não para desenhar um dorso reto, uma ponta definida e uma
+  // narina. O resultado lia como um montinho vago no meio da cara —
+  // em WebGL, com realce especular, ficava ainda mais evidente, por
+  // não haver uma só aresta onde a luz pudesse quebrar.
+  //
+  // Agora a forma é geometria de verdade, com as estações da
+  // anatomia: raiz estreita entre as sobrancelhas, dorso descendo,
+  // ponta saliente e base larga com as asas. As estações sobem em y,
+  // que é o que a varredura exige.
+  // A frente do crânio, medida, fica em 0,97R na altura do nariz. A
+  // primeira versão desta varredura chegava a 0,975R na ponta: rente
+  // à pele, e portanto invisível. Um nariz avança uns 15% do raio da
+  // cabeça além do plano do rosto — é daí que sai o 0,95R do eixo.
+  const noseZ = R * 0.95;
+  const nose: Ctl[] = [
+    // Base, onde o nariz encontra o lábio: larga e recuada.
+    { y: cy - 0.058, rx: R * 0.215, rz: R * 0.105, z: noseZ - R * 0.1, color: skin, bone: Bone.Head },
+    // Asas: o ponto mais largo, logo acima da base.
+    { y: cy - 0.049, rx: R * 0.235, rz: R * 0.15, z: noseZ - R * 0.03, color: skin, bone: Bone.Head },
+    // Ponta: o ponto mais saliente do rosto inteiro.
+    { y: cy - 0.034, rx: R * 0.175, rz: R * 0.19, z: noseZ, color: skin, bone: Bone.Head },
+    // Supraponta: o degrau que separa a ponta do dorso e é o que faz
+    // um nariz parecer um nariz em vez de um cone.
+    { y: cy - 0.016, rx: R * 0.12, rz: R * 0.145, z: noseZ - R * 0.025, color: skin, bone: Bone.Head },
+    // Dorso.
+    { y: cy + 0.008, rx: R * 0.095, rz: R * 0.12, z: noseZ - R * 0.085, color: skin, bone: Bone.Head },
+    // Raiz: a parte mais estreita e mais funda. Fica pouco acima da
+    // linha dos olhos (cy + 0,12R), não na altura da sobrancelha — na
+    // primeira tentativa ela estava em cy + 0,062 (três vezes mais
+    // alto) e o nariz lia como uma cunha comprida descendo da testa.
+    { y: cy + 0.03, rx: R * 0.085, rz: R * 0.1, z: noseZ - R * 0.17, color: skin, bone: Bone.Head },
+  ];
+  b.loft(subdivideProfile(toStations(nose), Math.max(2, detail.steps - 1)), {
+    segments: Math.max(10, Math.round(detail.segments * 0.7)),
+    capTop: R * 0.02,
+    capBottom: R * 0.03,
+    capRings: 1,
+  });
   for (const side of [-1, 1]) {
-    // Asa do nariz, e a dobra que a separa da bochecha.
-    b.feature([side * R * 0.17, cy - 0.042, R * 0.86], [R * 0.09, R * 0.07, R * 0.2], R * 0.05, [0, 0, 1]);
-    b.feature([side * R * 0.26, cy - 0.05, R * 0.82], [R * 0.05, R * 0.09, R * 0.18], -R * 0.035, [0, 0, 1]);
+    // Narina: um sulco por baixo da asa, não um furo. Furo de
+    // verdade exigiria abrir a malha, e a esta distância de câmera
+    // não se ganharia nada com isso.
+    b.feature([side * R * 0.115, cy - 0.062, noseZ + R * 0.01], [R * 0.055, R * 0.03, R * 0.1], -R * 0.028, [0, -1, 0.3]);
+    // Columela/filtro: enche o vão entre a base do nariz e o lábio,
+    // escondendo a borda da tampa da varredura, que sem isso aparece
+    // como um degrau reto sobre a boca.
+    b.feature([side * R * 0.05, cy - 0.072, R * 0.92], [R * 0.07, R * 0.035, R * 0.14], R * 0.022, [0, 0, 1]);
+    // Sulco que separa a asa da bochecha.
+    b.feature([side * R * 0.235, cy - 0.052, R * 0.8], [R * 0.045, R * 0.085, R * 0.17], -R * 0.03, [0, 0, 1]);
   }
   // Arco da sobrancelha.
   b.feature([0, cy + 0.058, R * 0.82], [R * 0.75, R * 0.1, R * 0.4], R * 0.045, [0, 0, 1]);

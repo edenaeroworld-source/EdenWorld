@@ -135,8 +135,10 @@ function aplicarMorph(): void {
 function enquadrar(): void {
   const rosto = ui.modo === 'rosto';
   const largo = ui.modo === 'niveis' || ui.modo === 'bichos';
-  const alvo = new THREE.Vector3(0, rosto ? 1.62 : 0.95, 0);
-  const dist = rosto ? 0.72 : largo ? 6.2 : 3.6;
+  // O alvo do rosto fica na linha do nariz, não na dos olhos: era por
+  // isso que a boca e o queixo saíam fora do quadro.
+  const alvo = new THREE.Vector3(0, rosto ? 1.56 : 0.95, 0);
+  const dist = rosto ? 0.95 : largo ? 6.2 : 3.6;
   camera.position.set(Math.sin(angle) * dist, alvo.y + (rosto ? 0.04 : 0.35), Math.cos(angle) * dist);
   camera.lookAt(alvo);
 }
@@ -225,7 +227,20 @@ const dbg = gl.getExtension('WEBGL_debug_renderer_info');
 
 // Alça de depuração: a bancada existe para ser cutucada de fora (o
 // capturador automatizado liga e desliga termos para isolar causa).
-(window as unknown as { eden: unknown }).eden = { scene, renderer, camera, environment, avatars, ui, montar };
+(window as unknown as { eden: unknown }).eden = {
+  scene,
+  renderer,
+  camera,
+  environment,
+  avatars,
+  ui,
+  montar,
+  /** Trava a câmera num ângulo exato — comparar dois renders exige o mesmo enquadramento. */
+  olhar(a: number) {
+    ui.girar = false;
+    angle = a;
+  },
+};
 
 montar();
 quadro();
