@@ -295,6 +295,7 @@ export class Avatar {
     this.face = new FaceController(seedFrom(appearance));
 
     this.halo = new THREE.Mesh(new THREE.TorusGeometry(0.13, 0.016, 8, 28), this.haloMaterial);
+    this.halo.name = 'halo';
     this.halo.rotation.x = Math.PI / 2;
     this.halo.position.set(0, 0.44, 0);
     this.halo.visible = false;

@@ -1548,7 +1548,11 @@ function buildHair(b: SurfaceBuilder, a: AvatarAppearance, m: BodyMetrics, detai
       // duas peças se encontravam na nuca. Com o cabelo quase branco
       // qualquer fresta acende; com o preto da Suki-Chan a mesma
       // fresta passava despercebida.
-      const topY = cy + 0.085;
+      // O topo entra fundo na calota — `0,085` deixava a borda do
+      // tubo quase na mesma altura em que a calota começa, e o
+      // traçado de raios achou dois que desciam pela fresta entre as
+      // duas peças e batiam no crânio em `y = 0,743`.
+      const topY = cy + 0.12;
       const bottomY = cy - 0.62;
       const rings = segments >= 26 ? 10 : segments >= 14 ? 8 : 4;
       const tipColor = 0xc9a2ff;
@@ -1567,12 +1571,29 @@ function buildHair(b: SurfaceBuilder, a: AvatarAppearance, m: BodyMetrics, detai
       // manda é caber **dentro** da calota: uma queda mais larga que
       // a calota deixa o anel de cima à mostra como um degrau.
       const bump = (t: number): number => smoothstep(0.45, 0.85, t);
+      // O aperto dos últimos passos é o que impede o degrau: sem ele
+      // a queda chega ao alto mais larga que a calota e o anel de
+      // cima aparece como um friso em volta da cabeça.
       const rxOf = (t: number): number =>
-        R * (0.62 + 0.22 * t + 0.26 * bump(t)) * (1 - 0.26 * smoothstep(0.1, 0, t)) * (1 + 0.08 * Math.sin(t * Math.PI * 2.4 + 0.5));
+        R *
+        (0.62 + 0.22 * t + 0.26 * bump(t)) *
+        (1 - 0.26 * smoothstep(0.1, 0, t)) *
+        (1 - 0.13 * smoothstep(0.82, 1, t)) *
+        (1 + 0.08 * Math.sin(t * Math.PI * 2.4 + 0.5));
       // Fundo na nuca — a profundidade tem de passar atrás do crânio,
-      // senão sobra occipital —, e enxuto no último anel, pela mesma
-      // razão que a largura.
-      const rzBackOf = (t: number): number => R * (0.32 + 0.78 * t);
+      // senão sobra occipital, e o occipital desta cabeça chega a
+      // `0,94·R`.
+      //
+      // A curva é de raiz, não reta, e a diferença é a silhueta de
+      // perfil. Com `0,32 + 0,78·t` a profundidade caía por igual do
+      // alto até a ponta, e o que a bancada mostrou de lado foi uma
+      // **tábua**: uma cunha reta encostada nas costas, grossa em
+      // cima, fina embaixo, sem nada que lembrasse cabelo. Cabelo
+      // longo não faz isso — ele guarda corpo na descida e só afunila
+      // de verdade perto da ponta, que é o que `t^0,8` e o
+      // estreitamento final dos últimos doze por cento descrevem.
+      const rzBackOf = (t: number): number =>
+        R * (0.42 + 0.68 * t ** 0.8) * (1 - 0.26 * smoothstep(0.12, 0, t));
       // O centro recua enquanto desce: no alto o cabelo está colado à
       // calota (e tem de caber **dentro** dela), mais abaixo ele se
       // afasta e cai pelas costas.
@@ -1586,8 +1607,12 @@ function buildHair(b: SurfaceBuilder, a: AvatarAppearance, m: BodyMetrics, detai
       // descobriram o lado esquerdo da cabeça, e o traçado de raios
       // apontou a falha num azimute só — assimétrica, como têm de
       // ser as falhas de uma onda que começa cedo demais.
+      // A amplitude é pequena de propósito. A primeira versão usava
+      // `0,42·R` e, vista de trás, não lia como fluxo: lia como uma
+      // massa torta, com o degradê de ponta escorrendo todo para um
+      // lado só. Onda de dados é ondulação, não torcicolo.
       const xOf = (t: number): number =>
-        Math.sin((1 - t) * Math.PI * 1.3) * R * 0.42 * (1 - t) * (1 - smoothstep(0.35, 0.75, t));
+        Math.sin((1 - t) * Math.PI * 1.3) * R * 0.2 * (1 - t) * (1 - smoothstep(0.35, 0.75, t));
 
       const fall: Ctl[] = [];
       for (let i = 0; i < rings; i += 1) {
@@ -1599,7 +1624,7 @@ function buildHair(b: SurfaceBuilder, a: AvatarAppearance, m: BodyMetrics, detai
           rzBack: rzBackOf(t),
           x: xOf(t),
           z: zcOf(t),
-          color: tint(hair, tipColor, 0.8 * (1 - t) ** 1.25),
+          color: tint(hair, tipColor, 0.72 * (1 - t) ** 1.7),
           bone: Bone.Head,
           bone2: Bone.Torso,
           blend: 0.88 * (1 - smoothstep(cy - 0.55, cy - 0.1, yOf(t))),
@@ -1611,32 +1636,70 @@ function buildHair(b: SurfaceBuilder, a: AvatarAppearance, m: BodyMetrics, detai
       // lisa de meio metro quadrado e o penteado lê como touca —
       // foi o que a primeira captura de frente mostrou. Um vinco
       // raso da testa à coroa basta: é por onde o cabelo se divide.
-      if (detail.segments >= 14) b.feature([0, cy + 0.19, 0], [R * 0.09, R * 0.3, R * 0.95], -R * 0.045, [0, 1, 0]);
+      if (detail.segments >= 14) b.feature([0, cy + 0.2, R * 0.1], [R * 0.1, R * 0.34, R * 1.0], -R * 0.085, [0, 1, 0]);
 
-      // Os sulcos entre as mechas, na face de trás. Cada um é posto
-      // no ponto da elipse daquela altura — incluindo o desvio do S,
-      // senão o sulco do meio das costas cava o ar ao lado do cabelo.
+      // As ranhuras entre as mechas, na face de trás.
       //
-      // Largos de propósito: a primeira versão tinha `0,11·R` de
-      // raio lateral, e o espaçamento entre vértices do anel, nesta
-      // malha, é maior que isso. Um sulco mais estreito que a
-      // distância entre dois vértices não afunda uma superfície —
-      // afunda **um vértice**, e o sombreamento suave apaga o que
-      // sobrou. Não apareceu nada na captura, e não tinha como
-      // aparecer.
+      // Houve duas versões erradas antes desta, e as duas erraram por
+      // motivos diferentes:
+      //
+      //  · a primeira usava `0,11·R` de raio lateral. O espaçamento
+      //    entre vértices vizinhos do anel, nesta malha, é de cerca de
+      //    `0,034` — maior que o sulco. Um relevo mais estreito que a
+      //    distância entre dois vértices não afunda uma superfície,
+      //    afunda **um vértice**, e o sombreamento suave apaga o resto;
+      //  · a segunda tinha largura suficiente — a bancada mediu 27% de
+      //    afundamento — e ainda assim as costas liam como um capuz de
+      //    uma peça só. O erro era de arranjo: cada sulco ficava numa
+      //    altura diferente, então **nenhuma altura tinha mais de um
+      //    sulco por lado**. Seis covinhas espalhadas pelas costas não
+      //    são mechas; mecha é um vinco que corre a queda inteira.
+      //
+      // Daí a forma atual: três canais verticais, cada um construído
+      // por uma fila de depressões sobrepostas que acompanham a elipse
+      // enquanto ela afunila, recua e serpenteia. O custo é tempo de
+      // construção — nenhum vértice a mais, nenhuma chamada de desenho
+      // a mais —, e só existe de `segments >= 14` para cima.
+      //
+      // Três, e não quatro, por conta da resolução: a face de trás tem
+      // dez vértices, um a cada dezoito graus. Um sulco precisa ser
+      // mais largo que esse passo para existir, e um sulco largo
+      // alcança quase trinta graus para cada lado. Quatro canais
+      // ficavam a vinte e oito graus um do outro, se sobrepunham e
+      // afundavam as costas inteiras — o oposto de uma mecha, que só
+      // se enxerga porque tem uma **crista** ao lado. A cinquenta
+      // graus de distância sobra cabelo cheio entre um vinco e outro.
+      // Os canais laterais ainda se abrem na descida, como mechas que
+      // se separam ao cair.
+      // Os dois últimos canais ficam quase na lateral, e existem por
+      // causa da vista de frente: ali a queda passa por fora do rosto
+      // e o emoldura: uma faixa clara, de espessura igual, dos dois
+      // lados da cara. Lisa daquele jeito ela lia como **capuz**. Um
+      // vinco de cada lado basta para virar mecha, e eles só descem
+      // até a metade — abaixo disso a moldura já não existe, é só
+      // cabelo caindo.
       if (detail.segments >= 14) {
-        for (const side of [-1, 1]) {
-          for (let i = 0; i < 3; i += 1) {
-            const az = Math.PI + side * (0.34 + i * 0.42);
-            const t = 0.32 + i * 0.17;
+        for (const base of [-1.95, -0.88, 0, 0.88, 1.95]) {
+          const lateral = Math.abs(base) > 1.5;
+          for (let t = lateral ? 0.5 : 0.1; t <= (lateral ? 0.8 : 0.86); t += 0.095) {
+            const az = Math.PI + base * (1 + 0.22 * (1 - t));
             const sx = Math.sin(az);
             const sz = Math.cos(az);
-            b.feature(
-              [xOf(t) + sx * rxOf(t), yOf(t), zcOf(t) + sz * rzBackOf(t)],
-              [R * 0.22, R * 0.4, R * 0.22],
-              -R * 0.14,
-              [sx, 0, sz],
-            );
+            {
+              // Raso nas duas pontas: no alto o cabelo tem de encostar
+              // liso na calota, embaixo a queda já é estreita e um
+              // vinco fundo a cortaria em tiras.
+              const fade = lateral
+                ? smoothstep(0.5, 0.62, t) * (1 - smoothstep(0.68, 0.82, t))
+                : smoothstep(0.06, 0.26, t) * (1 - smoothstep(0.72, 0.92, t));
+              const raio = lateral ? rxOf(t) : rzBackOf(t);
+              b.feature(
+                [xOf(t) + sx * rxOf(t), yOf(t), zcOf(t) + sz * raio],
+                [R * 0.24, R * 0.5, R * 0.24],
+                -R * (lateral ? 0.085 : 0.17) * (0.45 + 0.55 * fade),
+                [sx, 0, sz],
+              );
+            }
           }
         }
       }
@@ -1779,10 +1842,17 @@ function buildDiadem(b: SurfaceBuilder, detail: BodyDetail, cy: number, R: numbe
 function buildOrbitRings(b: SurfaceBuilder, detail: BodyDetail, cy: number, R: number): void {
   const head: SkinBinding = { bone: Bone.Head };
   const segs = Math.max(10, Math.round(detail.segments * 0.85));
-  const baseY = cy + 0.2;
+  // A altura não é escolha de gosto: o alto da cabeça está a
+  // `cy + 0,229` e a primeira versão pôs os anéis em `cy + 0,2`, ou
+  // seja, **dentro do crânio**. Com raio maior que a cabeça eles
+  // ainda apareciam, mas atravessando a calota, e o que a bancada
+  // mostrou foi um bolo de camadas em vez de uma órbita. Agora eles
+  // passam por cima, e o raio encolheu junto: um aro bem maior que a
+  // cabeça lê como chapéu, não como halo.
+  const baseY = cy + 0.245;
   const orbits: readonly { r: number; tube: number; tilt: number; spin: number; y: number; color: number }[] = [
-    { r: R * 1.34, tube: R * 0.028, tilt: 0.24, spin: 0.42, y: baseY, color: 0x9fe8ff },
-    { r: R * 1.04, tube: R * 0.024, tilt: -0.33, spin: -0.5, y: baseY + R * 0.19, color: 0xc9b6ff },
+    { r: R * 1.06, tube: R * 0.026, tilt: 0.2, spin: 0.35, y: baseY, color: 0x9fe8ff },
+    { r: R * 0.78, tube: R * 0.022, tilt: -0.42, spin: -0.6, y: baseY + R * 0.1, color: 0xc9b6ff },
   ];
   for (const o of orbits) {
     const ring = new THREE.TorusGeometry(o.r, o.tube, 4, segs);
