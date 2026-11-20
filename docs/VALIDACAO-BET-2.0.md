@@ -98,8 +98,49 @@ busto, que é comportamento de produção desde antes deste trabalho.
 
 **Esqueleto × shader.** Os 19 ossos ficam **exatamente onde estavam** quando os
 uniformes `uBust`/`uCurve` mudam: o campo de deformação é só shader. Quem move
-o braço é o reposicionamento de junta, que é rígido por construção. São dois
-mecanismos distintos e agora não se sobrepõem mais.
+o braço é o reposicionamento de junta, que é rígido por construção.
+
+### O ombro — segunda correção
+
+A correção acima consertou o membro, mas deixou um defeito na junção do ombro:
+o braço **descolava do tronco**. Medido, sobreposição braço↔tronco (positivo =
+encaixado, negativo = fenda):
+
+| altura | 0% | busto 250% | quadril 250% |
+|---|---|---|---|
+| 0.40 | +45 mm | −3 mm | −6 mm |
+| 0.35 | +41 mm | **−34 mm** | **−44 mm** |
+| 0.30 | +14 mm | **−44 mm** | **−71 mm** |
+| 0.25 | +6 mm | −57 mm | −79 mm |
+
+**Causa-raiz: uma constante calibrada para a matemática antiga.**
+`SHOULDER_SPREAD = 0.034` recuava a junta 85 mm em 250%. Esse número batia com
+o BET antigo, cuja banda de busto abria o peito em `gainX 0.2` (79 mm em 250%).
+Na reescrita o volume passou a vir dos lobos e a banda caiu para `gainX 0.055`
+— o peito passou a crescer ~22 mm, mas a junta continuou recuando 85 mm. O
+braço saía quatro vezes mais do que o corpo engordava.
+
+**Correção.** O recuo da junta deixou de ser constante e passa a ser **medido no
+próprio campo**: pergunta-se ao AfterBust® quanto ele desloca a superfície do
+tronco na altura da axila, e a junta recua exatamente isso. Se alguém retunar o
+campo amanhã, o rig acompanha sozinho.
+
+O AfterCurve® foi **desligado do ombro**: ele não alarga o corpo na altura da
+axila, então mover a junta por causa dele só abria fenda.
+
+| altura | 0% | busto 250% | quadril 250% | ambos 250% |
+|---|---|---|---|---|
+| 0.40 | +45 | **+36** | +45 | **+36** |
+| 0.35 | +41 | **+29** | +41 | **+29** |
+| 0.30 | +14 | **+20** | +14 | **+20** |
+| 0.25 | +6 | **+6** | +6 | **+6** |
+
+O braço fica encaixado em toda a progressão. E o deltoide, que esticava 74 mm,
+agora estica **18,8 mm** com o busto e **0,000 mm** com o quadril.
+
+**A rigidez do membro foi preservada:** 4 972 vértices, **0,000 mm** de mudança
+em qualquer combinação de intensidade. Sem S no antebraço, sem cotovelo
+deslocado, punho e mão alinhados.
 
 ## 2. Roupa
 
@@ -176,7 +217,9 @@ O orçamento da `baixa` continua respeitado: o teste que o protege
 | `estados.png` | original · só AfterBust® · só AfterCurve® · os dois juntos |
 | `isolado-busto.png` | AfterBust® 250% com AfterCurve® em 0 |
 | `isolado-curva.png` | AfterCurve® 250% com AfterBust® em 0 |
-| `ombro.png` | ombro, axila, antebraços e mãos de perto, ambos em 250% |
+| `ombro.png` | ombro e axila de perto, ambos em 250% |
+| `ombro-zero.png`, `ombro-busto.png`, `ombro-curva.png` | a mesma junção em 0%, só busto 250% e só quadril 250% |
+| `ombro-esportivo.png` | a junção com roupa esportiva, ambos em 250% |
 | `niveis.png` | os quatro níveis de qualidade, ambos em 250% |
 | `costas.png` | quadril de costas, AfterCurve® 250% |
 | `andando.png` | em movimento, ciclo de caminhada, ambos em 250% |
@@ -190,18 +233,28 @@ um PNG bom.
 
 ## 6. O que **não** está resolvido
 
-**1. A saia ainda engole a mão — mas não por causa do BET.**
+**1. A saia engole a mão — e piorou com a correção do ombro.** Este é o
+compromisso que a correção do ombro impôs, e está aqui sem maquiagem:
 
-| situação | invasão mão/tecido |
+| | invasão mão/tecido |
 |---|---|
-| BET desligado | **−78 mm** |
-| AfterCurve® 250% | **−57 mm** |
-| AfterBust® 250% | **+7 mm (livre)** |
+| BET desligado | −78 mm *(herdado do Character 2.0)* |
+| AfterBust® 250% | −56 mm |
+| AfterCurve® 250% | **−142 mm** |
+| ambos 250% | **−120 mm** |
 
-A invasão **diminui** quando o BET sobe. Os −78 mm de origem são do Character
-2.0: a saia é mais larga do que a linha em que os braços pendem, com o BET
-desligado. Não empurrei o braço mais para fora para esconder isso — seria
-exatamente a "posição artificial" que não se deve forçar.
+Antes desta correção, o quadril em 250% marcava −57 mm, porque a junta do ombro
+recuava 85 mm — e era justamente esse recuo exagerado que descolava o braço do
+tronco. Escolhi o ombro correto em vez do número bonito na roupa.
+
+Os −78 mm de base existem com o BET desligado: a saia é mais larga do que a
+linha em que os braços pendem.
+
+**O caminho para resolver, se você autorizar:** girar o osso do braço
+(abdução) em vez de transladar a junta. Giro pivota no ombro, então não abre
+fenda nenhuma ali, e tira a mão do tecido. Não fiz porque muda a pose do
+esqueleto e sua instrução foi não mexer nisso sem demonstrar necessidade —
+estes números são a demonstração; a decisão é sua.
 
 **2. Na caminhada, aparece um retalho de pele sobre a saia em 250%.**
 Visível em `andando.png`. Sondando por osso os vértices daquele pedaço da tela,
@@ -215,10 +268,9 @@ presa ao quadril, e não simula — membros em balanço a atravessam.
 mostra facetas: a peça tem poucos anéis naquela altura. O campo está correto; a
 malha da roupa é que é grossa ali.
 
-**4. O deltoide estica 74 mm em 250%.** É o custo do reposicionamento de junta,
-e é **idêntico ao que o AfterBust® já fazia** antes deste trabalho. Não é novo,
-mas também não é bonito: num futuro passe de rig, os pesos do ombro merecem
-atenção.
+**4. O deltoide estica 18,8 mm em 250% de busto.** Caiu de 74 mm com a correção
+do ombro. É o custo do reposicionamento de junta e está dentro do que os pesos
+de skinning absorvem sem artefato visível.
 
 **5. `tests/unit/coracao-roseiral.test.ts` falha — e não é deste trabalho.**
 Reproduzi a falha **com as minhas mudanças guardadas** (`git stash`), na árvore

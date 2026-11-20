@@ -543,35 +543,35 @@ describe('o braço anda pelo esqueleto, não pelo campo', () => {
     avatar.dispose();
   });
 
-  it('o AfterCurve® afasta a junta do ombro, como o AfterBust® já fazia', () => {
-    const avatar = new Avatar();
-    const ombro = () => {
-      avatar.root.updateMatrixWorld(true);
-      return avatar.root.getObjectByName('braco-e')!.position.x;
-    };
-    avatar.setMorph(0, 0);
-    const parado = ombro();
-    avatar.setMorph(2.5, 0);
-    const porBusto = ombro();
-    avatar.setMorph(0, 2.5);
-    const porQuadril = ombro();
-    expect(porBusto).toBeGreaterThan(parado);
-    // Sem isto, a saia em 250% passava 142 mm por fora da mão.
-    expect(porQuadril).toBeGreaterThan(parado);
-    expect(porQuadril).toBeCloseTo(porBusto, 6);
-    avatar.dispose();
-  });
-
-  it('busto e quadril não somam: o braço contorna o mais largo, não os dois', () => {
+  it('a junta do ombro recua exatamente o quanto o tronco engordou', () => {
+    // A constante que existia aqui vinha da matemática antiga do BET e
+    // recuava a junta quatro vezes mais do que o corpo crescia: o braço
+    // descolava do tronco, 45 mm de encaixe em 0% viravam 44 mm de fenda
+    // em 250%. Agora o recuo é medido no próprio campo.
     const avatar = new Avatar();
     const ombro = (bust: number, curve: number) => {
       avatar.setMorph(bust, curve);
-      avatar.root.updateMatrixWorld(true);
       return avatar.root.getObjectByName('braco-e')!.position.x;
     };
-    const so = ombro(2.5, 0);
-    const juntos = ombro(2.5, 2.5);
-    expect(juntos).toBeCloseTo(so, 6);
+    const parado = ombro(0, 0);
+    const cheio = ombro(2.5, 0);
+    const axila = { x: parado, y: 0.27, z: 0 };
+    const engordou = displaceVertex(axila, Zone.Bust, 2.5, 0).x - axila.x;
+    expect(cheio - parado).toBeCloseTo(engordou, 9);
+    expect(engordou).toBeGreaterThan(0.01);
+    avatar.dispose();
+  });
+
+  it('o AfterCurve® não mexe no ombro: ele não alarga o corpo ali', () => {
+    const avatar = new Avatar();
+    const ombro = (bust: number, curve: number) => {
+      avatar.setMorph(bust, curve);
+      return avatar.root.getObjectByName('braco-e')!.position.x;
+    };
+    const parado = ombro(0, 0);
+    expect(ombro(0, 2.5)).toBe(parado);
+    // E com os dois ligados, quem manda é só o busto.
+    expect(ombro(2.5, 2.5)).toBe(ombro(2.5, 0));
     avatar.dispose();
   });
 

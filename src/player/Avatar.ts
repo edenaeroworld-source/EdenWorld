@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { MAX_INTENSITY, aftersMorphGLSL } from '../afters/AftersMorph';
+import { MAX_INTENSITY, Zone, aftersMorphGLSL, displaceVertex } from '../afters/AftersMorph';
 import { MAX_GESTATION, gestationGLSL } from './Gestation';
 import { clamp } from '../utils/math';
 import { Ch, type Pose } from './AvatarAnimator';
@@ -21,22 +21,15 @@ import { type BodyProportions, DEFAULT_PROPORTIONS, sameProportions, sanitizePro
 export { HIP_HEIGHT } from './body/BodyRig';
 export type { BodyProportions } from './body/BodyProportions';
 
-/** Quanto o ombro abre por unidade de AfterBust® (0–2.5). */
-const SHOULDER_SPREAD = 0.034;
+/**
+ * Altura da axila no espaço do tronco (origem na cintura).
+ *
+ * É ali que o braço encosta no corpo, então é ali que se mede quanto o
+ * corpo engordou para saber quanto a junta precisa recuar.
+ */
+const ARMPIT_TORSO_Y = 0.27;
 /** Quanto a perna abre por unidade de AfterCurve® (0–2.5). */
 const LEG_SPREAD = 0.022;
-/**
- * Quanto o ombro abre por unidade de AfterCurve® (0–2.5).
- *
- * O quadril largo também pede braço mais afastado, pelo mesmo motivo que
- * o busto pede: senão o tecido da saia passa por fora da mão. Medido com
- * vestido em `ultra`: sem isto, o AfterCurve® sozinho em 250% enfiava a
- * mão 142 mm para dentro do tecido.
- *
- * É o mesmo valor do busto porque o problema é o mesmo — e os dois não
- * se somam, veja `updateRig`.
- */
-const CURVE_SHOULDER_SPREAD = 0.034;
 /** Quanto o braço afasta do corpo na gestação plena: contorna o ventre. */
 const GESTATION_SHOULDER_SPREAD = 0.04;
 /**
@@ -510,11 +503,22 @@ export class Avatar {
    * largo — por Afters ou por gestação.
    */
   private updateRig(): void {
-    // Busto e quadril não somam: o braço precisa contornar o mais largo
-    // dos dois, não a soma deles. Somar punha o braço em cruz quando as
-    // duas intensidades subiam juntas.
-    const volume = Math.max(this.bustUniform.value * SHOULDER_SPREAD, this.curveUniform.value * CURVE_SHOULDER_SPREAD);
-    const shoulder = this.metrics.shoulderX + volume + this.gestationUniform.value * GESTATION_SHOULDER_SPREAD;
+    // Quanto a junta recua é **medido no próprio campo**, não estimado:
+    // pergunta-se ao AfterBust® quanto ele move a superfície do tronco na
+    // altura da axila, e a junta recua exatamente isso.
+    //
+    // A constante que existia aqui (0.034 por unidade, 85 mm em 250%)
+    // tinha sido calibrada para a matemática antiga do BET, quando a
+    // banda do busto abria o peito em 0.2. Hoje o volume vem dos lobos e
+    // a banda abre 0.055 — a junta recuava quatro vezes mais do que o
+    // corpo engordava, e o braço descolava do tronco: medido, 45 mm de
+    // encaixe em 0% viravam 44 mm de fenda em 250%.
+    //
+    // O quadril não entra nesta conta: ele não alarga o corpo na altura
+    // da axila, então mover o ombro por causa dele só abre fenda.
+    const axila = { x: this.metrics.shoulderX, y: ARMPIT_TORSO_Y, z: 0 };
+    const engordou = displaceVertex(axila, Zone.Bust, this.bustUniform.value, 0).x - axila.x;
+    const shoulder = this.metrics.shoulderX + Math.max(0, engordou) + this.gestationUniform.value * GESTATION_SHOULDER_SPREAD;
     this.bones[Bone.ArmL].position.x = shoulder;
     this.bones[Bone.ArmR].position.x = -shoulder;
     const leg = this.metrics.legX + this.curveUniform.value * LEG_SPREAD;
