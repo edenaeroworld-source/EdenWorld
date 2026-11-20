@@ -149,6 +149,11 @@ function tinted(geometry: THREE.BufferGeometry, color: THREE.ColorRepresentation
   // com a rugosidade da pele, inclusive os cílios.
   const finishes = new Float32Array(count).fill(finish);
   flat.setAttribute('aFinish', new THREE.BufferAttribute(finishes, 1));
+  // A oclusão assada vale para o corpo; as peças do rosto não passam
+  // por ela. Mesmo assim o atributo precisa existir: um atributo
+  // ausente é lido como zero pelo WebGL, e zero quer dizer
+  // "totalmente ocluído" — o rosto inteiro ficaria sem luz ambiente.
+  flat.setAttribute('aAo', new THREE.BufferAttribute(new Float32Array(count).fill(1), 1));
   return flat;
 }
 

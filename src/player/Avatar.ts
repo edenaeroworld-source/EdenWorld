@@ -186,7 +186,31 @@ export class Avatar {
           .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n\ttotalEmissiveRadiance += diffuseColor.rgb * avatarFill;')
           // A rugosidade e o metal passam a vir do acabamento do vértice.
           .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = edenRoughness(vFinish);')
-          .replace('#include <metalnessmap_fragment>', 'float metalnessFactor = edenMetalness(vFinish);');
+          .replace('#include <metalnessmap_fragment>', 'float metalnessFactor = edenMetalness(vFinish);')
+          // A oclusão assada entra aqui, no mesmo ponto em que o
+          // Three.js aplicaria um `aoMap`: depois das luzes, e só
+          // sobre a parcela indireta.
+          // O mapa de ambiente deixa de dobrar a luz ambiente: fica
+          // com o reflexo, que é o que só ele faz.
+          // `iblIrradiance` só acumula o que vem do mapa de ambiente —
+          // o mapa de luz entra em `irradiance`, à parte —, então
+          // escalá-lo depois do include atinge exatamente a parcela
+          // que se quer. (Substituir dentro do chunk não funciona:
+          // `onBeforeCompile` recebe os `#include` ainda fechados.)
+          .replace(
+            '#include <lights_fragment_maps>',
+            '#include <lights_fragment_maps>\n\tiblIrradiance *= edenEnvDiffuse( vFinish );',
+          )
+          .replace(
+            '#include <aomap_fragment>',
+            `#include <aomap_fragment>
+\tfloat edenAo = vAo;
+\treflectedLight.indirectDiffuse *= edenAo;
+\t{
+\t\tfloat edenDotNV = saturate( dot( geometryNormal, geometryViewDir ) );
+\t\treflectedLight.indirectSpecular *= edenApplyOcclusion( edenAo, material.roughness, edenDotNV );
+\t}`,
+          );
         if (physical) {
           // Depois que o Three.js monta o `material`, os termos de
           // tecido e de verniz são remarcados por fragmento. Antes
@@ -209,7 +233,7 @@ export class Avatar {
             `#include <common>\n${aftersMorphGLSL()}\n${gestationGLSL()}\n${bodyMorphGLSL()}\n${finishVertexGLSL()}`,
           )
           .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\n\tobjectNormal = edenBodyNormal(position, objectNormal);')
-          .replace('#include <begin_vertex>', '#include <begin_vertex>\n\ttransformed = edenBodyPosition(transformed);\n\tvFinish = aFinish;');
+          .replace('#include <begin_vertex>', '#include <begin_vertex>\n\ttransformed = edenBodyPosition(transformed);\n\tvFinish = aFinish;\n\tvAo = aAo;');
       };
       material.customProgramCacheKey = () => `eden-avatar-organico-${physical ? 'fisico' : 'simples'}`;
       return material;

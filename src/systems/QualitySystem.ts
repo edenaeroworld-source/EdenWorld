@@ -241,6 +241,17 @@ export function suggestQualityLevel(hints: DeviceHints): QualityLevel {
   return 'baixa';
 }
 
+/**
+ * Perfil bruto de um nível, sem passar pelo `QualitySystem`.
+ *
+ * Serve a quem só quer consultar o que um nível significa — a
+ * bancada de validação, por exemplo, que mostra lado a lado o que
+ * cada perfil pede de malha e de material.
+ */
+export function profileFor(level: QualityLevel): QualityProfile {
+  return PRESETS[level];
+}
+
 export function isQualityLevel(value: unknown): value is QualityLevel {
   return typeof value === 'string' && (QUALITY_LEVELS as readonly string[]).includes(value);
 }

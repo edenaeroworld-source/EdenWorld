@@ -167,6 +167,8 @@ export class SurfaceBuilder {
   private readonly position: number[] = [];
   private readonly color: number[] = [];
   private readonly finish: number[] = [];
+  /** Oclusão por vértice: 1 = céu aberto, 0 = totalmente fechado. */
+  private readonly ao: number[] = [];
 
   /**
    * Acabamento dos próximos vértices. Quem monta uma parte do corpo
@@ -196,6 +198,7 @@ export class SurfaceBuilder {
     WHITE.set(station.color);
     this.color.push(WHITE.r, WHITE.g, WHITE.b);
     this.finish.push(station.finish ?? this.surface);
+    this.ao.push(1);
     if (override !== undefined) {
       const [b0, b1, b2] = [override.bones[0], override.bones[1] ?? 0, override.bones[2] ?? 0];
       const [w0, w1, w2] = [override.weights[0], override.weights[1] ?? 0, override.weights[2] ?? 0];
@@ -592,11 +595,17 @@ export class SurfaceBuilder {
         // Normalizado pela vizinhança: assim a malha densa e a
         // esparsa recebem a mesma sombra, e o LOD não muda a cor do
         // personagem.
+        //
+        // E vai para um atributo próprio, **não** multiplicado na cor.
+        // Oclusão ambiente descreve quanta luz do céu chega a um
+        // ponto; não tem nada a dizer sobre o sol, que vem de uma
+        // direção só e ou bate ou não bate. Misturá-la no albedo
+        // apagava os dois juntos: a pele na dobra perdia a luz direta
+        // também e saía cinza-oliva, porque o que restava era o
+        // ambiente esverdeado do chão. Quem separa os dois é o
+        // shader.
         if (seen === 0) continue;
-        const ao = Math.max(floor, 1 - (sum / seen) * strength);
-        this.color[i] *= ao;
-        this.color[i + 1] *= ao;
-        this.color[i + 2] *= ao;
+        this.ao[v] = Math.max(floor, 1 - (sum / seen) * strength);
       }
     }
   }
@@ -607,6 +616,7 @@ export class SurfaceBuilder {
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(this.position, 3));
     geometry.setAttribute('color', new THREE.Float32BufferAttribute(this.color, 3));
     geometry.setAttribute('aFinish', new THREE.Float32BufferAttribute(this.finish, 1));
+    geometry.setAttribute('aAo', new THREE.Float32BufferAttribute(this.ao, 1));
     geometry.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(this.skinIndex, 4));
     geometry.setAttribute('skinWeight', new THREE.Float32BufferAttribute(this.skinWeight, 4));
     geometry.setAttribute('aZone', new THREE.Float32BufferAttribute(this.zone, 1));

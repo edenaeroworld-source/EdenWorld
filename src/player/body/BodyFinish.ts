@@ -42,13 +42,16 @@ export const FINISH_METALNESS = [0.0, 0.0, 0.08, 0.0, 0.0, 0.55] as const;
 export function finishVertexGLSL(): string {
   return `
 attribute float aFinish;
+attribute float aAo;
 varying float vFinish;
+varying float vAo;
 `;
 }
 
 export function finishVaryingGLSL(): string {
   return `
 varying float vFinish;
+varying float vAo;
 
 float edenFinishPick(float id, float a, float b, float c, float d, float e, float f) {
   float w = 0.0;
@@ -74,6 +77,48 @@ float edenMetalness(float id) {
 /** Quanto cada acabamento recebe de brilho de tecido. */
 float edenSheen(float id) {
   return edenFinishPick(id, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0);
+}
+
+/**
+ * Aplica a oclusão assada — e só onde ela faz sentido.
+ *
+ * Oclusão ambiente mede quanta luz do céu chega a um ponto. O sol não
+ * é céu: vem de uma direção só, e ou bate ou não bate. É por isso que
+ * ela multiplica a luz **indireta** e deixa a direta em paz. Assar a
+ * oclusão no albedo, como estava, apagava as duas juntas — a pele na
+ * dobra perdia o sol também e saía cinza-oliva, que era o que restava
+ * depois de o ambiente esverdeado do chão tomar conta.
+ *
+ * A oclusão especular é atenuada à parte: uma fresta pode estar
+ * fechada para a luz difusa e ainda assim enxergar um pedaço de céu
+ * no ângulo do reflexo, e tratá-las igual deixa o olho e o verniz
+ * opacos sem motivo.
+ */
+float edenApplyOcclusion(float ao, float roughness, float dotNV) {
+  return saturate(pow(dotNV + ao, exp2(-16.0 * roughness - 1.0)) - 1.0 + ao);
+}
+
+/**
+ * Quanto da irradiância do mapa de ambiente cada acabamento aceita.
+ *
+ * A cena tem **duas** fontes de luz indireta difusa: a luz
+ * hemisférica (céu azul em cima, chão verde embaixo) e o PMREM do
+ * próprio céu, que o mundo captura para os reflexos. Para o avatar
+ * isso é o mesmo ambiente contado duas vezes — e a segunda conta vem
+ * tingida de verde, porque a captura inclui o chão.
+ *
+ * Medido na bancada, com o mapa ligado o queixo saía 158/162/134:
+ * verde acima do vermelho, numa pele cujo albedo tem o vermelho 58%
+ * acima do verde. Com o mapa desligado, 117/100/54. O personagem não
+ * estava mal iluminado, estava iluminado duas vezes.
+ *
+ * Quem fica com a parcela difusa é a luz hemisférica, que é
+ * explícita e ajustável pela atmosfera. Ao mapa de ambiente sobra o
+ * que só ele sabe fazer — o reflexo especular, que continua inteiro
+ * e é o que dá o molhado do olho e o lustro do cabelo.
+ */
+float edenEnvDiffuse(float id) {
+  return edenFinishPick(id, 0.22, 0.26, 0.5, 1.0, 0.26, 1.0);
 }
 
 /** E de verniz — só o olho, que é molhado. */
