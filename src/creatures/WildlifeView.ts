@@ -19,7 +19,7 @@
 
 import * as THREE from 'three';
 import { TAU, createRng } from '../utils/math';
-import { type CreatureParts, buildCreature, disposeCreature } from './CreatureMesh';
+import { CREATURE_DETAIL, type CreatureDetail, type CreatureParts, buildCreature, disposeCreature } from './CreatureMesh';
 import { type Habitat, type Species, getSpecies } from './Species';
 import type { WildAnimal } from './Wildlife';
 
@@ -72,6 +72,8 @@ export class WildlifeView {
   private readonly rng: () => number;
   private viewDistance: number;
   private detailScale = 1;
+  /** Densidade de malha dos corpos, vinda do perfil de qualidade. */
+  private detail: CreatureDetail = CREATURE_DETAIL.alta;
 
   constructor(options: WildlifeViewOptions) {
     this.options = options;
@@ -123,7 +125,7 @@ export class WildlifeView {
       const species = getSpecies(data.speciesId);
       if (!species) continue;
       const home = this.anchorFor(species);
-      const parts = buildCreature(species, 0.9 + this.rng() * 0.3);
+      const parts = buildCreature(species, 0.9 + this.rng() * 0.3, this.detail);
       // Começa dentro do habitat, não onde o sorteio puro mandou.
       const angle = this.rng() * TAU;
       const radius = Math.sqrt(this.rng()) * home.radius;
@@ -176,6 +178,17 @@ export class WildlifeView {
 
   setDetailScale(scale: number): void {
     this.detailScale = scale;
+  }
+
+  /**
+   * Troca a densidade de malha dos bichos.
+   *
+   * Só vale para quem nascer daqui em diante: remontar a fauna
+   * inteira no meio de uma troca de configuração seria um engasgo
+   * grande, e `populate` já reconstrói tudo na próxima região.
+   */
+  setDetail(detail: CreatureDetail): void {
+    this.detail = detail;
   }
 
   setViewDistance(distance: number): void {

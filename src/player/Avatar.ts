@@ -160,6 +160,10 @@ export class Avatar {
             vertexColors: true,
             roughness: 0.52,
             metalness: 0.02,
+            // O mundo já guarda um PMREM do céu em `scene.environment`, e o
+            // resto do cenário o lê entre 1,25 e 1,8. O avatar lia com 1, o
+            // que o deixava mais fosco que tudo à volta.
+            envMapIntensity: 1.15,
             // Precisam ser diferentes de zero para o Three.js compilar os
             // termos; o valor por fragmento vem do acabamento.
             sheen: 1,
@@ -168,7 +172,7 @@ export class Avatar {
             clearcoat: 1,
             clearcoatRoughness: 0.12,
           })
-        : new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.52, metalness: 0.02 });
+        : new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.52, metalness: 0.02, envMapIntensity: 1.15 });
       material.name = 'avatar';
       // Luz de preenchimento: soma um pouco da própria cor para que a pele e as
       // roupas não fiquem acinzentadas na sombra (a luz ambiente é azulada).

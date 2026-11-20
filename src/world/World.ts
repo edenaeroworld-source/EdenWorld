@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { DEFAULT_REGION_ID, getBlueprint } from '../cities';
 import type { CityFrame } from '../cities/aurora-city/CityContext';
+import { CREATURE_DETAIL } from '../creatures/CreatureMesh';
 import { WildlifeView } from '../creatures/WildlifeView';
 import type { WildAnimal } from '../creatures/Wildlife';
 import type { SurfaceType } from '../physics/Collision';
@@ -191,6 +192,7 @@ export class World {
     this.particles.setEnvironmentEffects(profile.environmentEffects);
     this.region.setDetailScale(profile.lodBias);
     this.wildlife.setDetailScale(profile.lodBias);
+    this.wildlife.setDetail(CREATURE_DETAIL[profile.characterDetail]);
     this.wildlife.setViewDistance(Math.min(profile.viewDistance, 120));
   }
 
