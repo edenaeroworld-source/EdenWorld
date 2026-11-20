@@ -24,10 +24,11 @@ import { DEFAULT_APPEARANCE, type AvatarAppearance } from '../player/AvatarAppea
 import type { BodyDetailLevel } from '../player/body/BodyRig';
 import { Environment } from '../world/Environment';
 import { CREATURE_DETAIL, buildCreature, type CreatureParts } from '../creatures/CreatureMesh';
+import { passoQuadrupede } from '../creatures/WildlifeView';
 import { allSpecies } from '../creatures/Species';
 import { QUALITY_LEVELS, profileFor } from '../systems/QualitySystem';
 
-type Mode = 'corpo' | 'rosto' | 'bichos' | 'niveis';
+type Mode = 'corpo' | 'rosto' | 'bichos' | 'niveis' | 'elenco';
 
 const canvas = document.getElementById('tela') as HTMLCanvasElement;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -65,6 +66,7 @@ scene.add(criaturas);
 
 const ui = {
   modo: 'corpo' as Mode,
+  andando: false,
   nivel: 'ultra' as BodyDetailLevel,
   roupa: 'vestido' as AvatarAppearance['outfit'],
   bust: 0,
@@ -93,23 +95,48 @@ function limpar(): void {
   creatures.length = 0;
 }
 
-function novoAvatar(nivel: BodyDetailLevel, x: number): Avatar {
-  const avatar = new Avatar({ ...DEFAULT_APPEARANCE, outfit: ui.roupa });
+/**
+ * O elenco de validação: um cidadão, uma cidadã, cabelo longo, cabelo
+ * curto e um corpo com os Afters no máximo. Validar só o avatar padrão
+ * esconde justamente o que varia entre personagens.
+ */
+const ELENCO: readonly { nome: string; aparencia: Partial<AvatarAppearance>; bust?: number; curve?: number }[] = [
+  { nome: 'cidadão', aparencia: { hairStyle: 'curto', hairColor: '#2b1d16', outfit: 'casual', skin: '#cf8f63' } },
+  { nome: 'cidadã', aparencia: { hairStyle: 'rabo', hairColor: '#8a5a2b', outfit: 'vestido', skin: '#ffe0c8' } },
+  { nome: 'cabelo longo', aparencia: { hairStyle: 'longo', hairColor: '#d9a441', outfit: 'aero', skin: '#e8ab82' } },
+  { nome: 'cabelo curto', aparencia: { hairStyle: 'espetado', hairColor: '#c0392b', outfit: 'esportivo', skin: '#7d4a2c' } },
+  { nome: 'Afters no máximo', aparencia: { hairStyle: 'coque', hairColor: '#2b1d16', outfit: 'vestido', skin: '#f6c9a4' }, bust: 1, curve: 1 },
+];
+
+/** Tempo de construção do último `montar`, por avatar, em ms. */
+const custos: { nome: string; ms: number; verts: number }[] = [];
+
+function novoAvatar(nivel: BodyDetailLevel, x: number, extra?: Partial<AvatarAppearance>): Avatar {
+  const t0 = performance.now();
+  const avatar = new Avatar({ ...DEFAULT_APPEARANCE, outfit: ui.roupa, ...extra });
   avatar.setDetail(nivel);
   avatar.setShadows(true);
   avatar.setMaterialTier(nivel === 'ultra' || nivel === 'alta');
   avatar.root.position.x = x;
   scene.add(avatar.root);
   avatars.push(avatar);
+  const geometry = (avatar as unknown as { body: THREE.Mesh }).body.geometry as THREE.BufferGeometry;
+  custos.push({ nome: `${nivel}${extra?.hairStyle ? ' ' + extra.hairStyle : ''}`, ms: performance.now() - t0, verts: geometry.getAttribute('position').count });
   return avatar;
 }
 
 function montar(): void {
   limpar();
+  custos.length = 0;
   if (ui.modo === 'niveis') {
     // Os quatro níveis lado a lado, na mesma luz: é a única forma
     // honesta de ver o que o LOD custa em aparência.
     QUALITY_LEVELS.forEach((nivel, i) => novoAvatar(nivel as BodyDetailLevel, (i - 1.5) * 0.85));
+  } else if (ui.modo === 'elenco') {
+    ELENCO.forEach((quem, i) => {
+      const avatar = novoAvatar(ui.nivel, (i - 1.25) * 0.9, quem.aparencia);
+      if (quem.bust !== undefined || quem.curve !== undefined) avatar.setMorph(quem.bust ?? 0, quem.curve ?? 0);
+    });
   } else if (ui.modo === 'bichos') {
     const porMovimento = new Map<string, ReturnType<typeof allSpecies>[number]>();
     for (const sp of allSpecies()) if (!porMovimento.has(sp.movement)) porMovimento.set(sp.movement, sp);
@@ -138,7 +165,7 @@ function aplicarMorph(): void {
 
 function enquadrar(): void {
   const rosto = ui.modo === 'rosto';
-  const largo = ui.modo === 'niveis' || ui.modo === 'bichos';
+  const largo = ui.modo === 'niveis' || ui.modo === 'bichos' || ui.modo === 'elenco';
   // O alvo do rosto fica na linha do nariz, não na dos olhos: era por
   // isso que a boca e o queixo saíam fora do quadro.
   const alvo = new THREE.Vector3(0, rosto ? 1.56 : 0.95, 0);
@@ -160,6 +187,9 @@ function redimensionar(): void {
 
 let last = performance.now();
 let elapsed = 0;
+/** Janela de quadros para medir FPS: média móvel sobre 1 s. */
+const fpsJanela: number[] = [];
+let fps = 0;
 const motion = { state: 'idle' as const, speed: 0, stridePhase: 0, verticalSpeed: 0, elapsed: 0 };
 
 function quadro(): void {
@@ -167,6 +197,20 @@ function quadro(): void {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
   elapsed += dt;
+  fpsJanela.push(dt);
+  let soma = 0;
+  for (let i = fpsJanela.length - 1; i >= 0; i -= 1) {
+    soma += fpsJanela[i];
+    if (soma > 1) {
+      fpsJanela.splice(0, i);
+      break;
+    }
+  }
+  if (soma > 0.2) fps = fpsJanela.length / soma;
+  if (ui.andando) {
+    // O ciclo de caminhada de verdade, a mesma função que o jogo usa.
+    for (const parts of creatures) if (parts.knees.length > 0) passoQuadrupede(parts, elapsed, 1.2, true);
+  }
   if (ui.girar) angle += dt * 0.5;
 
   environment.clock.setHours(ui.hora);
@@ -248,6 +292,18 @@ const dbg = gl.getExtension('WEBGL_debug_renderer_info');
   /** Aproxima (f < 1) ou afasta (f > 1) a câmera. */
   perto(f: number) {
     zoom = f;
+  },
+  /** Quadros por segundo, média móvel de um segundo. */
+  get fps() {
+    return fps;
+  },
+  /** Custo de construção do último `montar`. */
+  get custos() {
+    return custos.slice();
+  },
+  /** Liga o ciclo de caminhada das criaturas. */
+  andar(on: boolean) {
+    ui.andando = on;
   },
   /** Move o alvo da câmera, para enquadrar algo fora do centro. */
   mirar(x: number, y: number, z: number) {

@@ -66,6 +66,29 @@ const STATE_TIME: Record<WildAnimal['state'], [number, number]> = {
 };
 
 /**
+ * Um quadro do ciclo de caminhada de um quadrúpede.
+ *
+ * Exportada porque a bancada de validação precisa rodar **este**
+ * ciclo, não uma cópia dele: um ciclo reimplementado para o teste
+ * valida o teste, não o jogo. Devolve a fase do passo, que quem
+ * chama usa para o balanço do corpo.
+ */
+export function passoQuadrupede(parts: CreatureParts, t: number, speed: number, moving: boolean): number {
+  const stride = moving ? Math.sin(t * (6 + speed)) : 0;
+  for (let i = 0; i < parts.legs.length; i += 1) {
+    // Diagonais opostas em fase: é o que faz parecer andar.
+    const sign = i === 0 || i === 3 ? 1 : -1;
+    const swing = stride * sign * 0.55;
+    swingLeg(parts.legs[i], swing);
+    // O joelho dobra na recolhida e estende no apoio: é isso que tira
+    // o pé do chão em vez de arrastá-lo. Sem essa metade da fase a
+    // pata articulada andaria igual ao cilindro antigo.
+    flexKnee(parts.knees[i], Math.max(0, swing) * 1.1);
+  }
+  return stride;
+}
+
+/**
  * Gira o quadril a partir da pose de repouso, em vez de substituí-la.
  *
  * As patas agora nascem com uma inclinação anatômica — cotovelo para
@@ -355,17 +378,7 @@ export class WildlifeView {
       return;
     }
 
-    const stride = moving ? Math.sin(t * (6 + species.speed)) : 0;
-    for (let i = 0; i < parts.legs.length; i += 1) {
-      // Diagonais opostas em fase: é o que faz parecer andar.
-      const sign = i === 0 || i === 3 ? 1 : -1;
-      const swing = stride * sign * 0.55;
-      swingLeg(parts.legs[i], swing);
-      // O joelho dobra na recolhida e estende no apoio: é isso que
-      // tira o pé do chão em vez de arrastá-lo. Sem essa metade da
-      // fase a pata articulada andaria igual ao cilindro antigo.
-      flexKnee(parts.knees[i], Math.max(0, swing) * 1.1);
-    }
+    const stride = passoQuadrupede(parts, t, species.speed, moving);
     parts.root.position.y = baseY + (moving ? Math.abs(stride) * species.size * 0.08 : Math.sin(t * 1.4) * species.size * 0.02);
     parts.root.rotation.x = 0;
     if (parts.head) {

@@ -139,3 +139,46 @@ describe('refinamento local da malha', () => {
   });
 
 });
+
+describe('pálpebras', () => {
+  it('as calotas olham para fora do globo', () => {
+    // O defeito que isto tranca: com o winding invertido a pálpebra é
+    // descartada pelo backface culling e o olho fica com o globo
+    // inteiro exposto. Não dá para ver num teste de contagem nem num
+    // `tsc` — só no render ou aqui.
+    const avatar = new Avatar({ ...DEFAULT_APPEARANCE });
+    avatar.setDetail('ultra');
+    const face = (avatar as unknown as { faceMesh: THREE.Mesh }).faceMesh;
+    const geometry = face.geometry as THREE.BufferGeometry;
+    const p = geometry.getAttribute('position');
+    const index = geometry.getIndex();
+    // A malha do rosto vive em espaço local do osso da cabeça, com o
+    // centro dela em y = 0,16 — não em `cy`.
+    const centro = new THREE.Vector3(0.38 * 0.176, 0.16 + 0.12 * 0.176, 0.695 * 0.176);
+    const raio = 0.158 * 0.176 * 1.035;
+    let olhandoFora = 0;
+    let olhandoDentro = 0;
+    const a = new THREE.Vector3();
+    const b = new THREE.Vector3();
+    const c = new THREE.Vector3();
+    const total = index ? index.count : p.count;
+    for (let t = 0; t < total; t += 3) {
+      const i0 = index ? index.getX(t) : t;
+      const i1 = index ? index.getX(t + 1) : t + 1;
+      const i2 = index ? index.getX(t + 2) : t + 2;
+      a.set(p.getX(i0), p.getY(i0), p.getZ(i0));
+      b.set(p.getX(i1), p.getY(i1), p.getZ(i1));
+      c.set(p.getX(i2), p.getY(i2), p.getZ(i2));
+      const centroide = a.clone().add(b).add(c).divideScalar(3);
+      const dist = centroide.distanceTo(centro);
+      // Só a casca da pálpebra: entre o globo e um fio além dele.
+      if (dist < raio * 0.92 || dist > raio * 1.12) continue;
+      const normal = b.clone().sub(a).cross(c.clone().sub(a));
+      if (normal.dot(centroide.clone().sub(centro)) > 0) olhandoFora += 1;
+      else olhandoDentro += 1;
+    }
+    expect(olhandoFora + olhandoDentro).toBeGreaterThan(20);
+    expect(olhandoDentro).toBeLessThan((olhandoFora + olhandoDentro) * 0.25);
+    avatar.dispose();
+  });
+});
