@@ -562,15 +562,20 @@ const LUMA: EdenCharacter = {
   name: 'Luma',
   title: 'Deusa do Corpo e da Silhueta Viva',
   domain: ['Tecnologia corporal', 'Silhueta', 'Ecossistema BET', 'Aparência pessoal'],
-  colors: ['#ffc1d6', '#f0588c'],
+  colors: ['#bff4ff', '#a855f7'],
   tagline: 'Assina a tecnologia Afters — o corpo como expressão.',
   bio: [
     'Luma cuida de tudo que envolve aparência e presença: silhueta, luz do corpo, estilo.',
     'É dela o ecossistema Afters, a família de produtos BET (Body Expansion Tech) do Éden Aero.',
     'Seu lema: a tecnologia serve para você parecer mais com você — nunca com outra pessoa.',
+    'Cabelo roxo em ondas, olhos castanhos, Manto Aurora de vidro líquido: ela mesma é a vitrine do que assina.',
   ],
   place: inFrontOf('atelie-aero'),
-  appearance: look('#ffe0c8', 'longo', '#ff8fc0', '#7a5cc9', 'vestido', '#ffc1d6', '#f0588c', '#f4f6fb', 'flor', 1.01),
+  // Remaster 2.0 — a arte oficial "LUMA — EDEN AERO": cabelo roxo
+  // ondulado, olhos castanhos, pele morena, Manto Aurora de vidro
+  // líquido e brincos de cristal. A silhueta, os Afters e o lugar no
+  // mundo continuam os mesmos: é a mesma Luma, não outra deusa.
+  appearance: look('#cf8f63', 'ondulado', '#a855f7', '#3b2a20', 'aurora', '#dff7ff', '#8fe9d8', '#dff7ff', 'cristal', 1.01),
   aura: 0xff9ec6,
   // Quem assina a tecnologia usa a tecnologia: a silhueta da Luma é a
   // referência que ela mostra no Ateliê, nos dois canais.

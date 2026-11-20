@@ -156,6 +156,8 @@ export const Finish = Object.freeze({
   Eye: 3,
   Rubber: 4,
   Shine: 5,
+  /** Vidro líquido: o traje Aero da Luma — liso, envernizado, iridescente. */
+  Glass: 6,
 } as const);
 
 export type FinishId = (typeof Finish)[keyof typeof Finish];

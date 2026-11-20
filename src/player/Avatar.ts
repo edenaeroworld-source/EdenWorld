@@ -176,6 +176,13 @@ export class Avatar {
             sheenColor: new THREE.Color(0x1a1a1a),
             clearcoat: 1,
             clearcoatRoughness: 0.12,
+            // Idem para a película fina: o Three.js só compila o termo
+            // de iridescência se ele nascer diferente de zero. Quem
+            // decide por fragmento é `edenIridescence`.
+            iridescence: 1,
+            iridescenceIOR: 1.3,
+            iridescenceThicknessMinimum: 100,
+            iridescenceThicknessMaximum: 420,
           })
         : new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.52, metalness: 0.02, envMapIntensity: 1.15 });
       material.name = 'avatar';
@@ -225,7 +232,8 @@ export class Avatar {
             `#include <lights_physical_fragment>
 \tmaterial.sheenColor *= edenSheen(vFinish);
 \tmaterial.clearcoat = edenClearcoat(vFinish);
-\tmaterial.clearcoatRoughness = mix(0.5, 0.04, edenClearcoat(vFinish));`,
+\tmaterial.clearcoatRoughness = mix(0.5, 0.04, edenClearcoat(vFinish));
+\tmaterial.iridescence = edenIridescence(vFinish);`,
           );
         }
         // A deformação acontece no espaço de bind, **antes** da pele: é por

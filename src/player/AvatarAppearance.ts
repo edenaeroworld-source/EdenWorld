@@ -6,11 +6,12 @@ import { type Rng, clamp, pick } from '../utils/math';
  * valores desconhecidos são substituídos pelo padrão em `sanitizeAppearance`.
  */
 
-export const HAIR_STYLES = ['curto', 'longo', 'rabo', 'coque', 'cacheado', 'espetado', 'careca'] as const;
+export const HAIR_STYLES = ['curto', 'longo', 'ondulado', 'rabo', 'coque', 'cacheado', 'espetado', 'careca'] as const;
 export type HairStyle = (typeof HAIR_STYLES)[number];
 export const HAIR_LABELS: Record<HairStyle, string> = {
   curto: 'Curto',
   longo: 'Longo',
+  ondulado: 'Longo ondulado',
   rabo: 'Rabo de cavalo',
   coque: 'Coque',
   cacheado: 'Cacheado',
@@ -18,17 +19,26 @@ export const HAIR_LABELS: Record<HairStyle, string> = {
   careca: 'Sem cabelo',
 };
 
-export const OUTFITS = ['casual', 'aero', 'vestido', 'esportivo', 'praia'] as const;
+export const OUTFITS = ['casual', 'aero', 'vestido', 'esportivo', 'praia', 'aurora'] as const;
 export type Outfit = (typeof OUTFITS)[number];
+/**
+ * O que um habitante qualquer pode vestir.
+ *
+ * O Manto Aurora é de vidro líquido e existe para uma pessoa só: se
+ * entrasse no sorteio, cinquenta e quatro habitantes apareceriam de
+ * traje divino na praça — e o que é de uma deixaria de ser dela.
+ */
+export const CITIZEN_OUTFITS = OUTFITS.filter((o) => o !== 'aurora');
 export const OUTFIT_LABELS: Record<Outfit, string> = {
   casual: 'Casual',
   aero: 'Traje Aero',
   vestido: 'Vestido',
   esportivo: 'Esportivo',
   praia: 'Praia',
+  aurora: 'Manto Aurora',
 };
 
-export const ACCESSORIES = ['nenhum', 'oculos', 'fones', 'chapeu', 'flor', 'aureola'] as const;
+export const ACCESSORIES = ['nenhum', 'oculos', 'fones', 'chapeu', 'flor', 'cristal', 'aureola'] as const;
 export type Accessory = (typeof ACCESSORIES)[number];
 export const ACCESSORY_LABELS: Record<Accessory, string> = {
   nenhum: 'Nenhum',
@@ -36,11 +46,12 @@ export const ACCESSORY_LABELS: Record<Accessory, string> = {
   fones: 'Fones',
   chapeu: 'Chapéu',
   flor: 'Flor',
+  cristal: 'Brincos de cristal',
   aureola: 'Auréola',
 };
 
 export const SKIN_TONES = ['#ffe0c8', '#f6c9a4', '#e8ab82', '#cf8f63', '#a96c45', '#7d4a2c', '#5a3320', '#f3d2c1'] as const;
-export const HAIR_COLORS = ['#2b1d16', '#5a3a22', '#8a5a2b', '#d9a441', '#f3e3a6', '#c0392b', '#ff8fc0', '#7fd6ff', '#9a7bff', '#f4f6fb'] as const;
+export const HAIR_COLORS = ['#2b1d16', '#5a3a22', '#8a5a2b', '#d9a441', '#f3e3a6', '#c0392b', '#ff8fc0', '#7fd6ff', '#9a7bff', '#a855f7', '#f4f6fb'] as const;
 export const EYE_COLORS = ['#3b2a20', '#2f6fb3', '#2f9a66', '#7a5cc9', '#1f1f24', '#c98a2b'] as const;
 export const CLOTH_COLORS = [
   '#ffffff',
@@ -119,7 +130,7 @@ export function randomAppearance(rng: Rng): AvatarAppearance {
     hairStyle: pick(rng, HAIR_STYLES),
     hairColor: pick(rng, HAIR_COLORS),
     eyeColor: pick(rng, EYE_COLORS),
-    outfit: pick(rng, OUTFITS),
+    outfit: pick(rng, CITIZEN_OUTFITS),
     topColor: pick(rng, CLOTH_COLORS),
     bottomColor: pick(rng, CLOTH_COLORS),
     shoeColor: pick(rng, CLOTH_COLORS),

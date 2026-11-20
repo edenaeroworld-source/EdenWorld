@@ -19,6 +19,7 @@
 
 import * as THREE from 'three';
 import * as aftersMorph from '../afters/AftersMorph';
+import { getCharacter } from '../characters/Pantheon';
 import { Avatar } from '../player/Avatar';
 import { AvatarAnimator } from '../player/AvatarAnimator';
 import { DEFAULT_APPEARANCE, type AvatarAppearance } from '../player/AvatarAppearance';
@@ -30,7 +31,7 @@ import type { MotionState } from '../player/PlayerMotor';
 import { allSpecies } from '../creatures/Species';
 import { QUALITY_LEVELS, profileFor } from '../systems/QualitySystem';
 
-type Mode = 'corpo' | 'rosto' | 'bichos' | 'niveis' | 'elenco' | 'bet' | 'betrampa';
+type Mode = 'corpo' | 'rosto' | 'bichos' | 'niveis' | 'elenco' | 'bet' | 'betrampa' | 'luma';
 
 const canvas = document.getElementById('tela') as HTMLCanvasElement;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -170,6 +171,15 @@ function montar(): void {
       const avatar = novoAvatar(ui.nivel, (i - (BET_RAMPA.length - 1) / 2) * 0.78);
       avatar.setMorph(valor, valor);
     });
+  } else if (ui.modo === 'luma') {
+    // A Luma como o jogo a monta: aparência do panteão e os Afters dela.
+    // Três distâncias porque identidade se julga no rosto, mas silhueta
+    // se julga de corpo inteiro.
+    const luma = getCharacter('luma');
+    if (luma) {
+      const avatar = novoAvatar(ui.nivel, 0, luma.appearance);
+      if (luma.afters) avatar.setMorph(luma.afters.bust, luma.afters.curve);
+    }
   } else if (ui.modo === 'bichos') {
     const porMovimento = new Map<string, ReturnType<typeof allSpecies>[number]>();
     for (const sp of allSpecies()) if (!porMovimento.has(sp.movement)) porMovimento.set(sp.movement, sp);
@@ -194,7 +204,7 @@ function montar(): void {
 
 /** Cenas em que cada avatar tem a própria silhueta, e os sliders não mandam. */
 function morphPorAvatar(): boolean {
-  return ui.modo === 'bet' || ui.modo === 'betrampa' || ui.modo === 'elenco';
+  return ui.modo === 'bet' || ui.modo === 'betrampa' || ui.modo === 'elenco' || ui.modo === 'luma';
 }
 
 function aplicarMorph(): void {
