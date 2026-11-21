@@ -243,6 +243,62 @@ describe('Akemi-Chan 2.0 — o cabelo', () => {
     expect(maisBaixo).toBeGreaterThan(0.3);
   });
 
+  it('o relevo dos cachos não deforma o crânio', () => {
+    // A cabeça da Akemi saiu **amassada** na primeira versão, e a
+    // causa é que `feature()` não sabe o que é cabelo: empurra todo
+    // vértice ao alcance, e alcance é três vezes o raio da bolha.
+    // Uma bolha nasceu a sete milímetros da orelha e puxou a lateral
+    // do crânio 28 mm para fora; outras 1 106 saíram do lugar, com
+    // média de 8,5 mm.
+    //
+    // O crânio é construído antes do cabelo, então os vértices de
+    // pele ocupam os mesmos índices nas duas construções e dá para
+    // comparar um a um. O gabarito é o `rabo`, que não chama
+    // `feature()` nenhuma vez.
+    const comRelevo = montar({ ...akemi.appearance, hairStyle: 'cachos' }, 'ultra').mesh;
+    const gabarito = montar({ ...akemi.appearance, hairStyle: 'rabo' }, 'ultra').mesh;
+    const pa = comRelevo.geometry.getAttribute('position');
+    const pb = gabarito.geometry.getAttribute('position');
+    const fa = comRelevo.geometry.getAttribute('aFinish');
+    let pior = 0;
+    const lim = Math.min(pa.count, pb.count);
+    for (let i = 0; i < lim; i += 1) {
+      if (Math.round(fa.getX(i)) !== Finish.Skin) continue;
+      // Só a cabeça: abaixo disso é pescoço e tronco.
+      if (pb.getY(i) < 0.55) continue;
+      const d = Math.hypot(pa.getX(i) - pb.getX(i), pa.getY(i) - pb.getY(i), pa.getZ(i) - pb.getZ(i));
+      if (d > pior) pior = d;
+    }
+    // Dois milímetros num crânio de trinta e cinco centímetros de
+    // largura é meio por cento: invisível. Vinte e oito não eram.
+    expect(pior).toBeLessThan(0.002);
+  });
+
+  it('o crânio é tão redondo quanto o das outras deusas', () => {
+    // A medida que o olho faz: a variação de raio do crânio numa
+    // altura. Se o cabelo empurrar um lado, este número abre.
+    const variacao = (mesh: THREE.SkinnedMesh, y: number): number => {
+      const pos = mesh.geometry.getAttribute('position');
+      const fin = mesh.geometry.getAttribute('aFinish');
+      let min = Infinity;
+      let max = 0;
+      for (let i = 0; i < pos.count; i += 1) {
+        if (Math.round(fin.getX(i)) !== Finish.Skin) continue;
+        if (Math.abs(pos.getY(i) - y) > 0.012) continue;
+        const r = Math.hypot(pos.getX(i), pos.getZ(i));
+        min = Math.min(min, r);
+        max = Math.max(max, r);
+      }
+      return max - min;
+    };
+    const dela = montar({ ...akemi.appearance, hairStyle: 'cachos' }, 'ultra').mesh;
+    const gabarito = montar({ ...akemi.appearance, hairStyle: 'rabo' }, 'ultra').mesh;
+    for (const y of [0.7, 0.78, 0.84]) {
+      // Idêntico ao gabarito, não apenas parecido.
+      expect(variacao(dela, y)).toBeCloseTo(variacao(gabarito, y), 4);
+    }
+  });
+
   it('os óculos nascem com o penteado e em vidro', () => {
     const comCachos = contarFinish(montar({ ...akemi.appearance, hairStyle: 'cachos' }, 'alta').mesh, Finish.Glass);
     const semCachos = contarFinish(montar({ ...akemi.appearance, hairStyle: 'careca' }, 'alta').mesh, Finish.Glass);

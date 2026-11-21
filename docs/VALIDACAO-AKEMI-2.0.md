@@ -16,7 +16,7 @@ e foi publicado **antes** de qualquer geometria ser escrita.
 | `src/player/body/BodyBuilder.ts` | Penteado `cachos`, `buildAkemiGlasses()`, `buildCosplaySuit()`, barra própria da saia, meia alta por cor |
 | `src/characters/Pantheon.ts` | Ficha da Akemi: cabelo castanho, `cachos`, `cosplay`, `accessory: 'nenhum'` |
 | `lab.html` | Akemi-Chan no seletor de deusa da bancada |
-| `tests/unit/akemi-remaster.test.ts` | 23 casos novos |
+| `tests/unit/akemi-remaster.test.ts` | 25 casos novos |
 
 ---
 
@@ -91,10 +91,10 @@ corpo por `addGeometry`. Nenhuma peça nova paga chamada de desenho.
 
 | Portão | Resultado |
 |---|---|
-| `tests/unit/akemi-remaster.test.ts` | **23 / 23** |
+| `tests/unit/akemi-remaster.test.ts` | **25 / 25** |
 | `npx tsc --noEmit` | limpo |
 | `npm run build` | 668 ms, sem aviso novo |
-| Suíte geral (`npx vitest run`) | **1 179 passam**, 11 pulados, **1 falha preexistente** |
+| Suíte geral (`npx vitest run`) | **1 181 passam**, 11 pulados, **1 falha preexistente** |
 
 A falha é `coracao-roseiral.test.ts` → *"nenhum habitante nasce dentro,
 nem vai parar lá em dois minutos de parque"*, timeout de 5 s. **Ela
@@ -184,6 +184,55 @@ captura e foram corrigidos depois de medir a malha.
    da saia muda de raio a cada altura, então o vinco ficava para
    dentro do tecido embaixo e para fora em cima.
 9. **A coxa nua renderizava envernizada.** Ver a seção 9.
+10. **A cabeça saía deformada.** Ver a seção 8.1 — foi o defeito mais
+    grave do marco, e o único encontrado depois do PR aberto.
+
+### 8.1 A cabeça deformada
+
+O defeito mais grave do marco, e o que mais ensinou.
+
+`feature()` **não sabe o que é cabelo**: ele empurra todo vértice
+dentro do alcance, e o alcance é três vezes o raio da bolha. O campo
+de cachos estava, sem querer, esculpindo o crânio junto.
+
+Medido contra o `rabo` como gabarito (que não chama `feature()`
+nenhuma vez), na construção `ultra`:
+
+| | antes | depois |
+|---|---|---|
+| Vértices de pele da cabeça deslocados | **1 107** | 133 |
+| Deslocamento médio | **8,5 mm** | 0,4 mm |
+| Pior deslocamento | **35,2 mm** | **1,7 mm** |
+| Variação de raio do crânio em `y = 0,78` | **48,5 mm** | **20,3 mm** |
+| …o mesmo, no gabarito | 20,3 mm | 20,3 mm |
+
+Duas causas, e a segunda só apareceu depois de corrigir a primeira:
+
+**Altura.** No alto da queda o cabelo encosta na cabeça — em
+`t = 0,95` o perfil vale `1,05·R` contra um crânio de até `1,01·R`,
+menos de um centímetro de folga. O relevo passou a parar em
+`t = 0,74`, e a coroa ficou lisa, que é como cabelo cacheado se
+comporta na raiz de todo modo.
+
+**Distância ao crânio, que é o critério certo.** Limitar por altura
+não bastava: a seção da queda é uma elipse **rasa na frente**, então
+nos azimutes frontais o ponto da elipse cai *dentro* do crânio, não do
+lado de fora. Foi assim que uma bolha nasceu em
+`x = 0,162 · y = 0,692 · z = 0,009` — a **sete milímetros da orelha**,
+com peso gaussiano de 0,96 — e empurrou a lateral da cabeça 28 mm.
+
+A correção final testa cada bolha contra o elipsoide da cabeça
+(`1,05·R` de lado, `1,12·R` de altura, `1,15·R` de frente a trás) e
+descarta quem estiver a menos de um quarto de raio da casca. A
+meia-largura é `1,05·R` e não a do crânio (`0,85·R`) por causa da
+**orelha**, que se projeta até `1,03·R` e foi o último vazamento a
+cair.
+
+Dois casos de teste novos travam isso: um compara os vértices de pele
+um a um contra o gabarito e exige erro abaixo de 2 mm; o outro exige
+que a variação de raio do crânio seja **idêntica** à do gabarito em
+três alturas. Nada disso custou triângulo: os números de orçamento não
+se moveram.
 
 ---
 

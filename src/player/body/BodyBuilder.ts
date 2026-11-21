@@ -2358,18 +2358,62 @@ function buildHair(b: SurfaceBuilder, a: AvatarAppearance, m: BodyMetrics, detai
         // Agora cada bolha é avaliada na mesma parametrização do
         // `loft`: escolhe-se o anel `t` e o azimute, e o ponto sai
         // da própria elipse daquele anel.
+        // O relevo para antes da calota, e isso não é estética: é a
+        // condição para o crânio continuar redondo.
+        //
+        // `feature()` empurra **todo** vértice ao alcance, e alcance
+        // é três vezes o raio da bolha. No alto da queda o cabelo
+        // encosta na cabeça — em `t = 0,95` o perfil vale `1,05·R`
+        // contra um crânio de `0,90·R` a `1,01·R`, ou seja menos de
+        // um centímetro de folga. Bolha ali empurrava o osso junto:
+        // medidos 1 107 vértices de pele deslocados, calombo de até
+        // 35 mm, e a variação de raio do crânio saltando de 20 mm
+        // (normal) para 48 mm. A cabeça saía ovalada.
+        //
+        // Abaixo de `t = 0,74` a queda já se afastou: sobram mais de
+        // sete centímetros até o crânio, e com raio `0,22·R` o peso
+        // gaussiano que chega lá é da ordem de 0,007 — menos de um
+        // décimo de milímetro. A coroa fica lisa, que é como cabelo
+        // cacheado se comporta na raiz de todo modo.
+        //
+        // E limitar por altura não basta. A seção da queda é uma
+        // elipse **rasa na frente**: nos azimutes frontais o ponto da
+        // elipse cai dentro do crânio, não do lado de fora dele. Foi
+        // assim que uma bolha nasceu em `x = 0,162 · y = 0,692 ·
+        // z = 0,009` — a sete milímetros da orelha, com peso
+        // gaussiano de 0,96 — e empurrou a lateral da cabeça 28 mm
+        // para fora. A cabeça saía amassada de um lado.
+        //
+        // Então o critério não é altura nem azimute: é **distância
+        // ao crânio**. Cada bolha é testada contra o elipsoide da
+        // cabeça, medido na própria malha — meia-largura `1,05·R` de
+        // lado, `1,12·R` de altura e `1,15·R` de frente a trás. Só
+        // passa quem estiver a um quarto de raio da casca; mais perto
+        // que isso, o relevo do cabelo vira relevo de osso.
+        //
+        // A meia-largura é `1,05·R`, e não a do crânio (`0,85·R`),
+        // por causa da **orelha**: ela se projeta até `1,03·R` e foi
+        // o último vazamento a cair. Com o elipsoide estreito a bolha
+        // passava no teste e ainda assim parava a um centímetro da
+        // orelha, amassando-a em 19 mm. O preço é que na faixa da
+        // orelha não nasce cacho de lado — que é como cabelo se
+        // comporta ali de todo modo, preso atrás dela.
+        const dentro = (x: number, y: number, z: number): boolean => {
+          const dx = x / (R * 1.05);
+          const dy = (y - cy) / (R * 1.12);
+          const dz = z / (R * 1.15);
+          return Math.sqrt(dx * dx + dy * dy + dz * dz) < 1.25;
+        };
         const bolhas = detail.segments >= 26 ? 38 : 22;
         for (let i = 0; i < bolhas; i += 1) {
-          const t = (i + 0.5) / bolhas;
+          const t = 0.04 + ((i + 0.5) / bolhas) * 0.7;
           const az = i * 2.39996;
           const cz = Math.cos(az);
           const px = Math.sin(az) * rxOf(t);
+          const py = yOf(t);
           const pz = zcOf(t) + cz * (cz >= 0 ? R * 0.34 : rzBackOf(t));
-          // O rosto não é cabelo. `feature()` empurra todo vértice
-          // ao alcance, e alcance é três vezes o raio: bolha solta
-          // na frente da cabeça deformaria bochecha e nariz.
-          if (pz > 0 && Math.abs(px) < R * 0.78) continue;
-          b.feature([px, yOf(t), pz], [R * 0.27, R * 0.27, R * 0.27], R * 0.17);
+          if (dentro(px, py, pz)) continue;
+          b.feature([px, py, pz], [R * 0.22, R * 0.22, R * 0.22], R * 0.17);
         }
       }
 
