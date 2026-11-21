@@ -1003,9 +1003,28 @@ const MAZE: EdenCharacter = {
   bio: [
     'Maze cuida da natureza do Éden Aero: vegetação, ecossistemas, parques e jardins.',
     'No Parque das Águas ela acompanha o lago, o rio e as árvores que seguram a margem.',
+    'Juba cacheada com folhas e brotos acesos; drapeado branco com folhagem verde, vinhas na barra e gotas de água.',
   ],
   place: { x: -114, z: 18, heading: Math.PI / 2, label: 'Parque das Águas, margem leste do lago' },
-  appearance: look('#7d4a2c', 'longo', '#3fcf86', '#2f9a66', 'vestido', '#a8f0c0', '#1fae6b', '#f3ead6', 'flor', 1.03),
+  // Maze 2.0. Os três campos de aparência eram compartilhados, e dois
+  // deles pertenciam a gente que ainda não pode ser repintada:
+  // `longo` é o penteado do **Criador Aérion** e da Amara, e
+  // `vestido` é o traje da **Júpiter**, que ainda não teve marco.
+  // Remasterizar qualquer um dos dois onde ele mora gastaria o marco
+  // de outra pessoa — por isso ela ganhou `copa` e `jardim`.
+  //
+  // `hairColor` era `#3fcf86`, verde. O Criador escolheu a juba
+  // castanha da arte de referência, e o verde não se perdeu: virou a
+  // cor das folhas, dos brotos acesos e da folhagem do traje. A
+  // paleta canônica `colors` não foi tocada.
+  //
+  // `accessory: 'nenhum'` é deliberado. A `flor` custava **912
+  // triângulos idênticos nos quatro LODs** — nunca cortava, nem a
+  // cinquenta metros — para desenhar uma florzinha rosa de um
+  // centímetro numa têmpora só. A coroa agora nasce dentro do
+  // penteado, é um anel completo e corta por distância. A `flor`
+  // volta inteira para os habitantes, que a herdam no sorteio.
+  appearance: look('#7d4a2c', 'copa', '#a8702f', '#2f9a66', 'jardim', '#eef9ef', '#2fa36a', '#f3ead6', 'nenhum', 1.03),
   aura: 0x7df0a8,
   contact: {
     handle: '@maze',
