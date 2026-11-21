@@ -141,9 +141,11 @@ describe('Saturno 2.0 — o que é exclusivo dela', () => {
     expect(HAIR_STYLES).toContain('silvestre');
     expect(CITIZEN_HAIR_STYLES).not.toContain('silvestre');
     // E o `cacheado` que ela usava continua de pé, intocado: é
-    // penteado de habitante **e** é o da Júpiter.
+    // penteado de habitante. **Reescrito no marco da Júpiter 2.0**:
+    // ele também era o penteado dela, e deixou de ser. O catálogo é
+    // que não podia perdê-lo, e não perdeu — a Júpiter é que saiu.
     expect(CITIZEN_HAIR_STYLES).toContain('cacheado');
-    expect(jupiter.appearance.hairStyle).toBe('cacheado');
+    expect(jupiter.appearance.hairStyle).toBe('pincelada');
   });
 
   it('o traje `guardia` existe no catálogo e os habitantes não o herdam', () => {
@@ -213,11 +215,19 @@ describe('Saturno 2.0 — a ficha', () => {
     expect(CITIZEN_ACCESSORIES).toContain('flor');
   });
 
-  it('a ficha da Júpiter sai do marco intacta', () => {
-    // A Júpiter ainda não foi remasterizada. Mexer na aparência dela
-    // aqui seria gastar o marco dela sem briefing.
-    expect(jupiter.appearance.hairStyle).toBe('cacheado');
-    expect(jupiter.appearance.outfit).toBe('vestido');
+  it('a ficha da Júpiter sai do marco da Saturno intacta', () => {
+    // **Reescrito no marco da Júpiter 2.0.** O que este caso guardava
+    // era que o marco da Saturno não podia gastar o marco da Júpiter
+    // sem briefing, e não gastou: quem mudou estes dois campos foi o
+    // marco dela, com briefing próprio e decisão do Criador.
+    //
+    // O que continua valendo, e é o que importa aqui: a Saturno não
+    // leva nada da Júpiter junto. As peças que a Júpiter deixou são
+    // de habitante e seguem no catálogo.
+    expect(jupiter.appearance.hairStyle).toBe('pincelada');
+    expect(jupiter.appearance.outfit).toBe('lumen');
+    expect(CITIZEN_HAIR_STYLES).toContain('cacheado');
+    expect(CITIZEN_OUTFITS).toContain('vestido');
   });
 
   it('a ficha da Maze mudou no marco dela, e não neste', () => {

@@ -138,7 +138,12 @@ describe('Maze 2.0 — o que é exclusivo dela', () => {
     expect(maze.appearance.accessory).toBe('nenhum');
     expect(aerion.appearance.hairStyle).toBe('longo');
     expect(amara.appearance.hairStyle).toBe('longo');
-    expect(jupiter.appearance.outfit).toBe('vestido');
+    // **Reescrito no marco da Júpiter 2.0.** O que este caso guardava
+    // é que a Maze não podia levar o `vestido` embora junto com ela:
+    // era peça de habitante e da Júpiter. Não levou — quem saiu dele
+    // foi a própria Júpiter, no marco dela, com briefing próprio. O
+    // `vestido` continua no catálogo, que é o que importava aqui.
+    expect(CITIZEN_OUTFITS).toContain('vestido');
     expect(CITIZEN_ACCESSORIES).toContain('flor');
   });
 
@@ -553,10 +558,19 @@ describe('Maze 2.0 — orçamento e chamadas de desenho', () => {
 });
 
 describe('Maze 2.0 — o resto do Éden não mudou', () => {
-  it('a Júpiter, o Aérion e a Amara não foram tocados', () => {
-    // As três fichas que dependiam das peças que a Maze largou.
-    expect(jupiter.appearance.hairStyle).toBe('cacheado');
-    expect(jupiter.appearance.outfit).toBe('vestido');
+  it('o Aérion e a Amara não foram tocados, e a Júpiter só no marco dela', () => {
+    // **Reescrito no marco da Júpiter 2.0.** As três fichas aqui
+    // dependiam das peças que a Maze largou. O Aérion e a Amara
+    // continuam intocados — nenhum dos dois teve marco ainda.
+    //
+    // A Júpiter saiu do `cacheado` e do `vestido` no marco dela, que
+    // é o nono e último do elenco. O que este caso continua provando
+    // é que **as peças não sumiram do catálogo** quando ela saiu: a
+    // Maze não as levou, e a Júpiter também não.
+    expect(CITIZEN_HAIR_STYLES).toContain('cacheado');
+    expect(CITIZEN_OUTFITS).toContain('vestido');
+    expect(jupiter.appearance.hairStyle).toBe('pincelada');
+    expect(jupiter.appearance.outfit).toBe('lumen');
     expect(aerion.appearance.hairStyle).toBe('longo');
     expect(amara.appearance.hairStyle).toBe('longo');
   });
@@ -565,7 +579,7 @@ describe('Maze 2.0 — o resto do Éden não mudou', () => {
     // Se o despacho do `jardim` tivesse vazado para o `vestido`, a
     // Júpiter mudaria junto, sem briefing.
     const a = triangles(montar({ ...DEFAULT_APPEARANCE, outfit: 'vestido' }, 'ultra').mesh);
-    const b = triangles(montar({ ...jupiter.appearance }, 'ultra').mesh);
+    const b = triangles(montar({ ...jupiter.appearance, outfit: 'vestido' }, 'ultra').mesh);
     expect(a).toBeGreaterThan(0);
     expect(b).toBeGreaterThan(0);
     expect(triangles(montar({ ...DEFAULT_APPEARANCE, outfit: 'vestido' }, 'ultra').mesh)).toBe(a);
