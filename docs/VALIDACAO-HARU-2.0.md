@@ -189,12 +189,22 @@ deviam. A bisseção por arquivo apontou o `BodyBuilder.ts`, e a leitura
 do hunk mostrou o comentário *"é luz batendo em cacho"* onde deveria
 estar o da fibra óptica.
 
-Revertido. A Akemi voltou ao hash original `1674871555`.
+Revertido. A Akemi voltou ao hash original, e a §7.4 mostra
+`cabelo/cachos` e `panteao/akemi` idênticos à `main` na varredura
+final.
 
-**Conclusão de processo:** substituição por texto em arquivo de 3 600
-linhas precisa de âncora que inclua o comentário vizinho, não só a
-linha de código. A comparação de hashes contra a base não é burocracia
-— foi a única coisa que viu isto.
+**Conclusão de processo, em duas partes.** A primeira: substituição
+por texto em arquivo de 3 600 linhas precisa de âncora que inclua o
+comentário vizinho, não só a linha de código — foi a semelhança entre
+dois blocos de queda de cabelo que deixou a correção cair no `case`
+errado.
+
+A segunda deu origem a `tools/assinaturas.ts`, que ficou no
+repositório. A conta improvisada que pegou este acidente olhava só
+`position` da malha do corpo, e isso é sorte: uma peça **repintada**
+sem sair do lugar teria passado. A ferramenta agora cobre todos os
+atributos de geometria, as três malhas do avatar e o catálogo inteiro
+peça a peça, e serve o marco da Maze e o da Júpiter sem reescrita.
 
 ---
 
@@ -229,13 +239,108 @@ se reproduzem.
 
 `npm run build` — **651 ms**, sem avisos novos.
 
-### 7.4 O resto do Éden não mudou
+### 7.4 O resto do Éden não mudou — e a conta dos quatro divergentes
 
-84 assinaturas de malha (12 personagens × 4 níveis + 40 habitantes
-sorteados com semente fixa), comparadas contra um worktree em
-`9d96910`:
+Esta é a prova que mais importa, porque é a única que pega dano
+colateral silencioso. Ela roda com `tools/assinaturas.ts`, uma
+ferramenta escrita neste marco e deixada no repositório para os
+próximos (a Maze e a Júpiter ainda vêm).
 
-**80 idênticas. 4 diferentes — os quatro níveis da Haru.**
+#### O que a assinatura cobre
+
+A primeira versão desta conta olhava só `position` da malha do corpo.
+Era fraca em dois sentidos, e os dois foram corrigidos:
+
+- **todos os atributos de geometria** entram no hash, em ordem
+  alfabética — `position`, `normal`, `color`, `aFinish`, `skinIndex`,
+  `skinWeight` — mais o buffer de índices. Uma peça **repintada sem
+  sair do lugar** é uma alteração tão involuntária quanto uma peça
+  movida, e a conta antiga a teria deixado passar;
+- **as três malhas** do avatar entram (`corpo`, `rosto`, `halo`), não
+  só o corpo.
+
+Cada número é arredondado a cinco casas decimais: abaixo disso é
+ruído de ponto flutuante, acima disso um deslocamento de décimo de
+milímetro passaria batido. Foi um deslocamento de **0,7 mm** que
+denunciou o acidente da Akemi.
+
+#### O que a varredura enumera
+
+Amostrar só as fichas do Panteão não bastava. Penteado, traje e
+acessório são campos **compartilhados com os habitantes sorteados**,
+e um marco que mexa em `curto` ou em `aero` muda gente pelo mundo
+todo — sorteio aleatório pode simplesmente não cair no estilo
+afetado. Por isso o catálogo inteiro entra, peça a peça:
+
+| grupo | casos |
+|---|---|
+| Panteão, com a ficha de cada um | 12 × 4 níveis = 48 |
+| cada penteado do catálogo | 13 × 4 = 52 *(14 × 4 = 56 depois, com `fibra`)* |
+| cada traje do catálogo | 11 × 4 = 44 *(12 × 4 = 48 depois, com `sistema`)* |
+| cada acessório do catálogo | 8 × 4 = 32 |
+| habitantes sorteados, semente fixa | 60 |
+| **total** | **232 antes · 240 depois** |
+
+#### O resultado
+
+| | |
+|---|---|
+| chaves presentes nos dois lados | **232** |
+| idênticas | **228** |
+| **divergentes** | **4** |
+| chaves novas (só depois) | 8 — `cabelo/fibra` e `traje/sistema`, 4 níveis cada |
+| chaves perdidas (só antes) | **0** |
+
+As 8 chaves novas são esperadas e necessárias: são as duas peças que
+este marco criou, e elas não podiam existir em `9d96910`. **Zero
+chaves perdidas** confirma que nada foi removido do catálogo.
+
+#### Os quatro divergentes, um a um
+
+São exatamente `panteao/haru`, nos quatro níveis de qualidade — e,
+dentro de cada um, **só a malha do corpo**:
+
+| nível | malha | antes (`9d96910`) | depois | |
+|---|---|---|---|---|
+| baixa | `corpo` | `-279154171` | `1334845578` | **muda** |
+| média | `corpo` | `-1149277345` | `-1635503639` | **muda** |
+| alta | `corpo` | `157457820` | `653359474` | **muda** |
+| ultra | `corpo` | `-505680071` | `1390608517` | **muda** |
+| todos | `rosto` | `279745785` | `279745785` | igual |
+| todos | `halo` | `-1243317816` | `-1243317816` | igual |
+
+**Por que os quatro, e não menos.** A ficha dela trocou de penteado
+**e** de traje, e as duas peças existem em todos os níveis: já no LOD
+baixo há calota, queda longa, traje grafite e o emblema ∞. Não existe
+nível em que a Haru pudesse ter ficado igual. Se um dos quatro
+tivesse batido, o suspeito seria o corte de LOD estar errado.
+
+**Por que só a malha do corpo.** `rosto` e `halo` são construções
+separadas, e nenhuma das duas depende de penteado, traje ou
+acessório. O `rosto` idêntico é a prova independente de que o relevo
+dos filamentos **não deformou o crânio** — é o mesmo que o teste
+`o relevo dos filamentos não deforma o crânio` mede por outro
+caminho, e os dois concordam. O `halo` idêntico confirma que a aura
+`0x7fd6ff` não foi tocada.
+
+#### Os controles que tinham de ficar parados
+
+Estes são os casos em que um erro teria sido caro, e todos vieram
+**idênticos**:
+
+| chave | por que importa |
+|---|---|
+| `traje/aero` | é o traje do **Criador Aérion** e da Amara |
+| `panteao/aerion` · `panteao/amara` | as duas fichas que usam `aero` |
+| `cabelo/curto` | o penteado antigo dela, herdado por habitantes |
+| `acessorio/oculos` | o acessório antigo dela, herdado por habitantes |
+| `cabelo/cachos` · `panteao/akemi` | onde o acidente da §6 caiu — **confirma a reversão** |
+| `panteao/nexara` | a deusa digital vizinha, de marco já fechado |
+| 60 habitantes sorteados | o mundo povoado |
+
+**Conclusão:** não há alteração involuntária. As únicas malhas que
+este marco mudou são as quatro da Haru, e as únicas chaves novas são
+as duas peças que ela estreia.
 
 ### 7.5 Bancada
 
