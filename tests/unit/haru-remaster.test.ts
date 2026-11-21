@@ -76,7 +76,6 @@ import { createRng } from '../../src/utils/math';
 const haru = getCharacter('haru')!;
 const nexara = getCharacter('nexara')!;
 const aerion = getCharacter('aerion')!;
-const amara = getCharacter('amara')!;
 
 function bodyOf(avatar: Avatar): THREE.SkinnedMesh {
   const mesh = avatar.root.getObjectByName('corpo') as THREE.SkinnedMesh;
@@ -252,14 +251,18 @@ describe('Haru 2.0 — o território, que é da Nexara ao lado', () => {
     expect(fora).toBe(0);
   });
 
-  it('o traje do Criador Aérion e o da Amara saem do marco intactos', () => {
-    // `aero` é o traje dos dois, e nenhum deles foi remasterizado.
-    // Contagem idêntica nos quatro LODs: é a mesma construção.
+  it('o traje do Criador Aérion sai do marco intacto', () => {
+    // **Atualizado no marco da Amara 2.0.** O caso comparava a Amara
+    // com o Aérion porque os dois vestiam `aero` e saíam da mesma
+    // malha; ela saiu para o `regaco`, com briefing próprio. O que o
+    // caso guarda — que a Haru não levou o `aero` embora — continua
+    // de pé com o dono da peça, comparado contra um habitante que a
+    // veste.
     expect(aerion.appearance.outfit).toBe('aero');
-    expect(amara.appearance.outfit).toBe('aero');
+    const habitante = { ...aerion.appearance, hairStyle: 'curto' as const };
     for (const nivel of ['baixa', 'media', 'alta', 'ultra'] as const) {
-      expect(triangles(montar(aerion.appearance, nivel).mesh)).toBe(
-        triangles(montar(amara.appearance, nivel).mesh),
+      expect(triangles(montar(aerion.appearance, nivel).mesh)).toBeGreaterThan(
+        triangles(montar(habitante, nivel).mesh),
       );
     }
   });

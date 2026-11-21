@@ -508,7 +508,11 @@ describe('Júpiter 2.0 — a fronteira com o resto do elenco', () => {
   it('o vermelho domina a silhueta dela, e o dourado é o da Saturno', () => {
     expect(jupiter.colors).toEqual(['#ffb199', '#c0392b']);
     expect(saturno.colors).toEqual(['#ffd98a', '#e08a2f']);
-    expect(amara.colors).toEqual(['#ffe9a6', '#c79a3a']);
+    // **Atualizado no marco da Amara 2.0.** O dourado dela era
+    // vizinho direto do da Saturno; ela saiu dele para a água-marinha
+    // com briefing próprio. A asserção que importa aqui continua de
+    // pé, e é a de baixo: nenhuma das três partilha ponta de paleta.
+    expect(amara.colors).toEqual(['#aef0dd', '#2f9b8e']);
     // Nenhuma das três partilha ponta de paleta com outra.
     const todas = [...jupiter.colors, ...saturno.colors, ...amara.colors];
     expect(new Set(todas).size).toBe(todas.length);
@@ -549,11 +553,12 @@ describe('Júpiter 2.0 — a fronteira com o resto do elenco', () => {
     expect(saturno.appearance.hairStyle).toBe('silvestre');
   });
 
-  it('o Aérion e a Amara continuam com o `longo`, que não foi tocado', () => {
-    // Nenhum dos dois teve marco. Mexer no `longo` aqui seria gastar
-    // o marco deles sem briefing.
+  it('o Aérion continua com o `longo`, que não foi tocado', () => {
+    // **Atualizado no marco da Amara 2.0.** A testemunha do `longo`
+    // passou a ser só o Aérion: a Amara saiu dele para a `nascente`,
+    // com briefing próprio. O que este caso guarda é a peça, não quem
+    // a veste — e a peça continua inteira e no catálogo de habitante.
     expect(aerion.appearance.hairStyle).toBe('longo');
-    expect(amara.appearance.hairStyle).toBe('longo');
     expect(CITIZEN_HAIR_STYLES).toContain('longo');
   });
 });

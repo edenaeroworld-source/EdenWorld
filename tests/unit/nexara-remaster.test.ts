@@ -181,18 +181,37 @@ describe('o acabamento que emite luz', () => {
     for (const t of tabelas) expect(t).toHaveLength(Finish.Holo + 1);
   });
 
-  it('é usado pela Nexara e por mais ninguém', () => {
+  it('só brilha quem tem briefing para brilhar, e nunca uma peça genérica', () => {
     const dela = montar(nexara.appearance);
     expect(finishes(dela.mesh).get(Finish.Holo) ?? 0).toBeGreaterThan(0);
     dela.a.dispose();
 
-    for (const id of ['luma', 'suki', 'aerion', 'amara']) {
+    // **Atualizado no marco da Amara 2.0.** O caso dizia "a Nexara e
+    // mais ninguém" quando ela era a única a ter ganhado um marco com
+    // peça emissiva. A Amara ganhou o dela — o Nimbo Materno, o fio
+    // da borda do manto e as nervuras da saia são `Finish.Holo` por
+    // briefing do Criador, que pediu a auréola acesa.
+    //
+    // O que este caso guarda não mudou, e é mais forte do que era:
+    // **o holograma não vaza para peça de habitante.** Quem não tem
+    // marco continua sem brilhar, e a própria Amara, trocadas as três
+    // peças dela pelas genéricas, volta a zero.
+    for (const id of ['luma', 'suki', 'aerion']) {
       const ficha = getCharacter(id);
       if (!ficha) continue;
       const outra = montar(ficha.appearance);
       expect(finishes(outra.mesh).get(Finish.Holo) ?? 0, `${id} não pode brilhar`).toBe(0);
       outra.a.dispose();
     }
+
+    const amara = getCharacter('amara')!;
+    const comPecasDela = montar(amara.appearance);
+    expect(finishes(comPecasDela.mesh).get(Finish.Holo) ?? 0).toBeGreaterThan(0);
+    comPecasDela.a.dispose();
+
+    const semPecasDela = montar({ ...amara.appearance, hairStyle: 'longo', outfit: 'aero', accessory: 'nenhum' });
+    expect(finishes(semPecasDela.mesh).get(Finish.Holo) ?? 0, 'o brilho é das peças dela, não dela').toBe(0);
+    semPecasDela.a.dispose();
 
     const padrao = montar({});
     expect(finishes(padrao.mesh).get(Finish.Holo) ?? 0).toBe(0);

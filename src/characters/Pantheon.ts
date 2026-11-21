@@ -1191,7 +1191,13 @@ const AMARA: EdenCharacter = {
   name: 'Amara',
   title: 'Deusa da Maternidade',
   domain: ['Maternidade', 'Gestação'],
-  colors: ['#ffe9a6', '#c79a3a'],
+  // Água-marinha, a paleta da arte de referência. O dourado que ela
+  // usava era vizinho direto do da Saturno (`#ffd98a` / `#e08a2f`) e
+  // do pêssego da Júpiter; o verde novo fica 15° acima do verde
+  // vegetal da Maze e da Suki em matiz, e bem abaixo do ciano azulado
+  // da Haru. Da turquesa da Lilly separa-o o valor: 81% de
+  // luminosidade contra o néon de palco dela.
+  colors: ['#aef0dd', '#2f9b8e'],
   tagline: 'A deusa grávida: cuida do que ainda está começando.',
   bio: [
     'Amara é a Deusa da Maternidade do Éden Aero — o domínio do cuidado que começa antes de alguém chegar.',
@@ -1199,8 +1205,24 @@ const AMARA: EdenCharacter = {
     'Costuma ser encontrada no alto do Mirante Celeste, de onde se vê Aurora City inteira. Diz que gosta de olhar de longe as coisas que ainda vão crescer.',
   ],
   place: { x: 176, z: 60, heading: facing(176, 60, 0, 0), label: 'Mirante Celeste' },
-  appearance: look('#7d4a2c', 'longo', '#2b1d16', '#c98a2b', 'aero', '#f3ead6', '#c79a3a', '#ffffff', 'nenhum', 1.02),
-  aura: 0xffe9a6,
+  // Remasterização Amara 2.0 (ver `docs/PLANO-AMARA-2.0.md`).
+  //
+  // Ela era a última deusa do Panteão vestindo as duas peças
+  // genéricas, e por isso era **geometricamente idêntica ao Aérion**
+  // nos quatro níveis de detalhe: a Deusa da Maternidade e o Criador
+  // do Éden Aero saíam da mesma malha, diferindo só na semente do
+  // rosto. `longo` e `aero` continuam inteiros e são dele; o que
+  // mudou foi ela.
+  //
+  // Pele e olho ficam como estavam: `#7d4a2c` e o âmbar `#c98a2b`
+  // são identidade dela, e o âmbar é o único ponto quente de um
+  // visual que sem ele vira monocromático.
+  appearance: look('#7d4a2c', 'nascente', '#e3f6ec', '#c98a2b', 'regaco', '#8fe3cd', '#2f9b8e', '#ffffff', 'nimbo', 1.02),
+  aura: 0x9fe8d8,
+  // A auréola dela é água-marinha, não o dourado do Criador. O campo
+  // existe na ficha desde que o halo foi criado e nunca tinha sido
+  // usado por ninguém — Amara é a primeira.
+  halo: 0xbdf6e8,
   // Gestação plena: a silhueta do avatar carrega o ventre em toda a cidade,
   // andando, parada ou conversando. Ver `src/player/Gestation.ts`.
   gestation: 1,

@@ -46,6 +46,16 @@ function tint(color: Hex, target: Hex, amount: number): number {
   return new THREE.Color(color).lerp(new THREE.Color(target), amount).getHex();
 }
 
+/**
+ * A raiz da Nascente, o cabelo da Amara: o tom médio da paleta dela.
+ *
+ * Cor fixa do módulo, e não derivada de `hairColor`, pela mesma razão
+ * do degradê da Nexara: este é um degradê de **matiz**, de água-marinha
+ * a quase branco, e `shade` só sabe andar para o branco ou para o
+ * preto — um cabelo que já nasce claro não tem para onde clarear.
+ */
+const NASCENTE_RAIZ = 0x7fcfb8;
+
 /** Atalho para um ponto de controle. */
 interface Ctl {
   y: number;
@@ -189,11 +199,23 @@ export function buildBodyGeometry(a: AvatarAppearance, p: BodyProportions, m: Bo
   // a do `vestido` que ela deixou — a saia dela para no joelho, como
   // na arte, e não varre o chão como a da Maze.
   const lumen = outfit === 'lumen';
+  // O Manto Regaço, da Amara: vestido de vidro água-marinha com gola
+  // alta e um manto que desce dos ombros, contorna o ventre e fecha
+  // abaixo dele.
+  //
+  // Ombros e braços nus, como a arte de referência mostra — e isso
+  // também é o que deixa o abraço visível: manga comprida clara
+  // encostaria no manto claro e as duas peças virariam uma mancha só.
+  //
+  // Barra longa, a do Manto Aurora, porque na arte o vestido varre o
+  // chão. Ela é a única deusa grávida do Éden, e saia curta num corpo
+  // que o morph empurra 9 cm para a frente sobe junto com o ventre.
+  const regaco = outfit === 'regaco';
   const longSleeves = outfit === 'aero' || aurora || rede || sonora || cosplay || sistema;
-  const bareArms = outfit === 'esportivo' || outfit === 'vestido' || guardia || jardim || lumen;
+  const bareArms = outfit === 'esportivo' || outfit === 'vestido' || guardia || jardim || lumen || regaco;
   const longPants = outfit === 'casual' || outfit === 'aero' || rede || sistema;
-  const bareLegs = outfit === 'vestido' || docente || cosplay || guardia || jardim || lumen;
-  const dress = outfit === 'vestido' || aurora || docente || sonora || cosplay || guardia || jardim || lumen;
+  const bareLegs = outfit === 'vestido' || docente || cosplay || guardia || jardim || lumen || regaco;
+  const dress = outfit === 'vestido' || aurora || docente || sonora || cosplay || guardia || jardim || lumen || regaco;
   // Dois acabamentos, e a diferença entre eles é deliberada.
   //
   // `cloth` é o que vale para o que se **acrescenta** por cima do
@@ -241,7 +263,7 @@ export function buildBodyGeometry(a: AvatarAppearance, p: BodyProportions, m: Bo
   // A barra longa é a mesma do Manto Aurora: abaixo de `GOWN_HEM_Y` a
   // saia deixa de abrir como cone e vira coluna, que é o que separa
   // um vestido longo de uma tenda.
-  if (dress) buildSkirt(b, m, detail, dress && (sonora || cosplay || guardia) ? bottom : top, origins, cosplay ? COSPLAY_HEM_Y : aurora || docente || sonora || guardia || jardim ? GOWN_HEM_Y : SKIRT_HEM_Y);
+  if (dress) buildSkirt(b, m, detail, dress && (sonora || cosplay || guardia) ? bottom : top, origins, cosplay ? COSPLAY_HEM_Y : aurora || docente || sonora || guardia || jardim || regaco ? GOWN_HEM_Y : SKIRT_HEM_Y);
 
   // A oclusão é a última coisa antes de fechar a malha: ela precisa do
   // corpo inteiro montado para saber o que esconde o quê. É daqui que
@@ -379,6 +401,9 @@ function buildTorso(b: SurfaceBuilder, ctx: TorsoCtx): void {
   }
   if (outfit === 'jardim') {
     buildGardenSuit(b, m, detail, torso, hip);
+  }
+  if (outfit === 'regaco') {
+    buildRegacoSuit(b, m, detail, torso, hip);
   }
 
   if (outfit === 'aero') {
@@ -1878,6 +1903,413 @@ function buildVNeck(b: SurfaceBuilder, m: BodyMetrics, detail: BodyDetail, skin:
  * altura, e a escala é aplicada antes da rotação, quando o eixo Y da
  * rosca ainda é o que vai virar Z.
  */
+/**
+ * Manto Regaço, da Amara — e só dela.
+ *
+ * O Criador escolheu, entre quatro caminhos, que a maternidade dela
+ * fosse dita por **um manto que envolve e protege**: nada de ventre
+ * iluminado, nada de broto, nada de símbolo literal. Acolhimento é a
+ * forma, não o desenho.
+ *
+ * ## O que manda neste traje é o ventre
+ *
+ * Amara é a única personagem do Éden com `gestation` (ver
+ * `src/player/Gestation.ts`), e o morph **multiplica** o raio dos
+ * vértices das zonas `Bust` e `Curve` por uma banda gaussiana.
+ * Medido na malha real, descontando `aMorphOrigin` como o shader faz:
+ *
+ * | `y`    | fator em `z` (Bust) |
+ * | ------ | ------------------- |
+ * | 0,36   | 1,003               |
+ * | 0,24   | 1,436               |
+ * | 0,16   | **2,047**           |
+ * | 0,08   | 1,472               |
+ * | −0,04  | 1,010               |
+ *
+ * Duas consequências de projeto, e as duas estão no desenho abaixo:
+ *
+ *  1. **Geometria rígida só fora da banda** — acima de `y = 0,36` ou
+ *     abaixo de `y = −0,04`. A gola e as gotas do colar ficam em
+ *     cima; o fecho do manto, embaixo. Uma pedra no meio do ventre
+ *     seria esticada ao dobro e viraria uma lasca.
+ *  2. **Pano dentro da banda, com zona declarada.** Como o
+ *     deslocamento é multiplicativo, uma camada desenhada com folga
+ *     constante sobre o perfil **não deformado** mantém a folga
+ *     depois do morph — ela cresce junto, na mesma proporção. É o que
+ *     permite o manto abraçar o ventre sem o atravessar, e é por isso
+ *     que o raio aqui sai das estações de `buildTorso` e da saia
+ *     varrida, que são a superfície antes de crescer.
+ *
+ * ## O abraço é uma peça só
+ *
+ * O manto não são duas abas simétricas pregadas no peito: é **uma**
+ * faixa contínua em U, que desce do ombro esquerdo, abre para
+ * contornar o ventre pelo flanco, cruza a frente por baixo dele e
+ * sobe de volta ao ombro direito. Peça partida em duas mostraria duas
+ * pontas soltas no fundo, exatamente onde o olho procura o fecho.
+ *
+ * ## As costas ficam para o cabelo
+ *
+ * A lição do véu da Nexara é explícita: a malha é opaca, e pano largo
+ * nas costas apaga o cabelo que desce por elas. A Nascente é a queda
+ * mais longa do catálogo, e é peça principal deste marco — então
+ * atrás só passam as duas tiras de ombro, que ancoram o manto e não
+ * disputam espaço com nada.
+ */
+function buildRegacoSuit(
+  b: SurfaceBuilder,
+  m: BodyMetrics,
+  detail: BodyDetail,
+  torso: readonly [number, number, number],
+  hip: readonly [number, number, number],
+): void {
+  const chest = { skin: { bone: Bone.Torso }, zone: MorphZone.Bust, origin: torso } as const;
+  const quadril = { skin: { bone: Bone.Hips }, zone: MorphZone.Curve, origin: hip } as const;
+
+  // A paleta sai da ficha (`colors`), não dos campos de roupa: é o que
+  // garante que ela siga sendo a deusa de água-marinha mesmo que
+  // alguém vista o traje noutra cor. Mesma regra do Lumen.
+  const agua = 0xaef0dd;
+  const teal = 0x2f9b8e;
+  const vidro = 0xdcf8ef;
+  const luz = 0xc4fff2;
+
+  /**
+   * O corpo **antes** do ventre, nas alturas que interessam.
+   *
+   * Em cima são as estações do próprio `buildTorso`, derivadas de
+   * `m`: cópia de números daria uma roupa que deixa de caber no corpo
+   * assim que alguém ajustar uma proporção, que foi como o vestido
+   * rachou.
+   *
+   * Embaixo **não é o corpo, é a saia**. Na quinta rodada esta tabela
+   * parava na pelve nua (`PELVIS_PROFILE`, raio 0,13 a 0,17) e o
+   * fecho do abraço, desenhado em 0,12, nasceu **dentro do pano** da
+   * saia — invisível e pago, que foi o erro das folhas da Saturno.
+   * Os anéis de baixo são varridos na malha vestida:
+   *
+   *     y  0,00 → 0,2389 × 0,1540
+   *     y −0,05 → 0,2378 × 0,1901
+   *     y −0,10 → 0,2345 × 0,2181
+   */
+  const estacoes: readonly { y: number; rx: number; rz: number }[] = [
+    { y: -0.1, rx: 0.2345, rz: 0.2181 },
+    { y: -0.05, rx: 0.2378, rz: 0.1901 },
+    { y: 0.0, rx: 0.2389, rz: 0.154 },
+    { y: 0.055, rx: 0.19, rz: 0.12 },
+    { y: 0.105, rx: m.waistWidth * 1.08, rz: 0.092 },
+    { y: 0.165, rx: m.waistWidth * 1.06, rz: 0.09 },
+    { y: 0.235, rx: m.chestWidth * 0.97, rz: 0.104 },
+    { y: 0.3, rx: m.chestWidth, rz: 0.102 },
+    { y: 0.365, rx: Math.max(m.chestWidth * 0.99, m.shoulderX * 0.88), rz: 0.096 },
+    { y: m.waist + m.shoulderY, rx: Math.max(m.chestWidth * 0.8, m.shoulderX * 0.72), rz: 0.082 },
+  ];
+  const corpoEm = (y: number): { rx: number; rz: number } => {
+    if (y <= estacoes[0].y) return estacoes[0];
+    const ultima = estacoes[estacoes.length - 1];
+    if (y >= ultima.y) return ultima;
+    for (let i = 1; i < estacoes.length; i += 1) {
+      const a = estacoes[i - 1];
+      const c = estacoes[i];
+      if (y <= c.y) {
+        const k = (y - a.y) / (c.y - a.y);
+        return { rx: a.rx + (c.rx - a.rx) * k, rz: a.rz + (c.rz - a.rz) * k };
+      }
+    }
+    return ultima;
+  };
+  /** Raio da elipse do tronco num azimute — o torso é 2,3 : 1, não um cilindro. */
+  const raioEm = (y: number, a: number, fora: number): number => {
+    const { rx, rz } = corpoEm(y);
+    const sx = Math.sin(a) / (rx + fora);
+    const sz = Math.cos(a) / (rz + fora);
+    return 1 / Math.sqrt(sx * sx + sz * sz);
+  };
+
+  /**
+   * Uma faixa de pano que corre pelo corpo.
+   *
+   * Mesmo triedro do Manto Lumen: `T` no avanço, `N` radial para fora,
+   * `W = N × T` no plano tangente. É a montagem que fecha as junções
+   * sem serrilha — a primeira tentativa daquele marco pôs a largura
+   * na tangente do anel horizontal e devolveu uma folha de palmeira.
+   * Aqui ela é reescrita, e não importada: o Lumen é da Júpiter e não
+   * se mexe num marco que não é o dela.
+   */
+  const faixa = (
+    caminho: (t: number) => { y: number; az: number; fora: number },
+    largura: (t: number) => number,
+    cor: (t: number) => Hex,
+    passos: number,
+    esp: number,
+    acab: FinishId,
+    origem: typeof chest | typeof quadril,
+    /** Desloca na direção da largura: é o que põe o fio de luz na **borda**. */
+    desvio = 0,
+  ): void => {
+    const ponto = (t: number): readonly [number, number, number] => {
+      const c = caminho(Math.min(1, Math.max(0, t)));
+      const r = raioEm(c.y, c.az, c.fora);
+      return [Math.sin(c.az) * r, c.y, Math.cos(c.az) * r];
+    };
+    const cantos = (t: number): number[][] => {
+      const p = ponto(t);
+      const q = ponto(t + 0.004);
+      const o = ponto(t - 0.004);
+      let tx = q[0] - o[0];
+      let ty = q[1] - o[1];
+      let tz = q[2] - o[2];
+      const tl = Math.hypot(tx, ty, tz) || 1;
+      tx /= tl;
+      ty /= tl;
+      tz /= tl;
+      const rl = Math.hypot(p[0], p[2]) || 1;
+      const nx = p[0] / rl;
+      const nz = p[2] / rl;
+      let wx = -ty * nz;
+      let wy = nz * tx - nx * tz;
+      let wz = nx * ty;
+      const wl = Math.hypot(wx, wy, wz) || 1;
+      wx /= wl;
+      wy /= wl;
+      wz /= wl;
+      const meia = largura(t) * 0.5;
+      const d = desvio * largura(t);
+      return [
+        [-1, -1],
+        [1, -1],
+        [1, 1],
+        [-1, 1],
+      ].map(([u, w]) => [
+        p[0] + wx * (u * meia + d) + nx * w * esp,
+        p[1] + wy * (u * meia + d) + w * esp * 0.2,
+        p[2] + wz * (u * meia + d) + nz * w * esp,
+      ]);
+    };
+    for (let i = 0; i < passos; i += 1) {
+      const t0 = i / passos;
+      const t1 = (i + 1) / passos;
+      const a = cantos(t0);
+      const z = cantos(t1);
+      const v: number[] = [];
+      for (const c of [...a, ...z]) v.push(c[0], c[1], c[2]);
+      const idx: number[] = [];
+      for (let k = 0; k < 4; k += 1) {
+        const k2 = (k + 1) % 4;
+        idx.push(k, k2, 4 + k2, k, 4 + k2, 4 + k);
+      }
+      if (i === 0) idx.push(0, 2, 1, 0, 3, 2);
+      if (i === passos - 1) idx.push(4, 5, 6, 4, 6, 7);
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(v), 3));
+      g.setIndex(idx);
+      g.computeVertexNormals();
+      b.addGeometry(g, { color: cor(t0), finish: acab, ...origem }, new THREE.Matrix4());
+    }
+  };
+
+  // --- o abraço ---
+  //
+  // `s` vale 1 nos dois ombros e 0 no fundo do U. O azimute é
+  // `u · (0,44 + 0,83 · sen(π s) / s)`: a divisão por `s` é o que faz
+  // a abertura **fechar sozinha** no fundo, em vez de dar um salto de
+  // meio radiano ao trocar de lado. Com um termo constante ali, a
+  // faixa se parte no meio da frente — foi o primeiro desenho, e não
+  // passou do papel.
+  //
+  // A abertura máxima caiu de 60° para 44°, e isso é geometria, não
+  // gosto: o tronco é uma elipse de 2,3 : 1, e um ponto a 60° nela
+  // tem `z = 0,061` — está **ao lado** do corpo. O ventre empurra a
+  // frente até `z = 0,19`, de modo que a sexta rodada devolveu um
+  // manto passando atrás da barriga, engolido por ela, e no meio do
+  // peito sobrou o que parecia uma gravata. A 44° o ponto fica em
+  // `z = 0,098`, que depois do morph vai a `0,201` — à frente do
+  // ventre, que vai a `0,168`.
+  //
+  //  · `s = 1`   → `y = 0,420`, azimute 25°  (ombro)
+  //  · `s = 0,5` → `y = 0,168`, azimute 44°  (a volta do ventre)
+  //  · `s = 0`   → `y = −0,085`, azimute 0°  (o fecho, fora da banda
+  //    do ventre, e já sobre a saia — que é o que o manto veste ali)
+  const abraco = (t: number): { y: number; az: number; fora: number } => {
+    const u = t * 2 - 1;
+    const s = Math.abs(u);
+    const sino = 1 - (2 * s - 1) * (2 * s - 1);
+    return {
+      y: -0.085 + 0.505 * s,
+      az: u * (0.44 + 0.55 * (s > 0.001 ? Math.sin(Math.PI * s) / s : Math.PI)),
+      // Mais solto na volta do ventre, rente no ombro e no fecho.
+      fora: 0.013 + 0.013 * sino,
+    };
+  };
+  // A primeira rodada saiu com 0,034 a 0,082 de largura e a bancada
+  // devolveu **dois suspensórios**: fita estreita sobre pano claro não
+  // lê como manto, lê como alça. O pano de um manto tem de ter palmo.
+  const larguraAbraco = (t: number): number => {
+    const s = Math.abs(t * 2 - 1);
+    return 0.07 + 0.14 * (1 - (2 * s - 1) * (2 * s - 1));
+  };
+  // O manto é mais escuro que o vestido, e isso é o que o faz existir:
+  // na primeira rodada ele era claro sobre claro e sumiu dentro do
+  // traje. O teal da ficha entra aqui como **recorte**, não como
+  // enfeite.
+  const corAbraco = (t: number): Hex => {
+    const s = Math.abs(t * 2 - 1);
+    // Mais escuro que o vestido em **toda** a extensão. Enquanto o
+    // degradê subia até o branco no ombro, o manto sumia dentro do
+    // traje justamente onde ele nasce.
+    return tint(teal, agua, 0.3 + 0.35 * s);
+  };
+  // 0,8 por segmento, não 1,5: a faixa é uma banda lisa e longa, e
+  // cada passo custa oito triângulos em quatro faces. A 66 passos o
+  // manto sozinho passava de dois mil triângulos em ultra sem
+  // mostrar uma dobra a mais que a 35.
+  const passos = Math.max(14, Math.round(detail.segments * 0.8));
+  // `Finish.Cloth`, e não `Finish.Glass`: envernizado, cada quadro
+  // da varredura devolvia o sol com um ângulo diferente e o abraço
+  // saía **facetado**, lido como placa de vidro em vez de pano. O
+  // vidro líquido também é vocabulário da Luma. O brilho desta peça
+  // vem do fio `Holo` na borda, que é de outra ordem — ele acende,
+  // não espelha.
+  faixa(abraco, larguraAbraco, corAbraco, passos, 0.0075, Finish.Cloth, chest);
+
+  if (detail.segments >= 14) {
+    // O fio de luz na borda de baixo do abraço: é ele que faz a peça
+    // ler como vidro aceso e não como pano claro. `Finish.Holo` é o
+    // único acabamento que emite, e por isso continua visível de
+    // noite — uma deusa não apaga quando o sol se põe.
+    faixa(
+      (t) => {
+        const c = abraco(t);
+        return { y: c.y - 0.0, az: c.az, fora: c.fora + 0.004 };
+      },
+      (t) => larguraAbraco(t) * 0.1,
+      () => luz,
+      passos,
+      0.0035,
+      Finish.Holo,
+      chest,
+      // Na borda de fora, não no meio: a sexta rodada pôs o fio sobre
+      // a linha central e a peça saiu **listrada**, como se o manto
+      // tivesse uma costura no eixo.
+      0.46,
+    );
+
+    // --- as duas tiras de ombro ---
+    //
+    // Passam por cima do trapézio e descem um palmo nas costas, que é
+    // o que ancora o manto: sem elas, o abraço parece colado na
+    // frente. Curtas de propósito — atrás é o lugar do cabelo.
+    for (const lado of [-1, 1] as const) {
+      faixa(
+        (t) => ({ y: 0.42 - 0.1 * t * t, az: lado * (0.44 + 1.5 * t), fora: 0.012 + 0.006 * t }),
+        () => 0.038,
+        (t) => tint(vidro, agua, t),
+        Math.max(5, Math.round(detail.segments * 0.4)),
+        0.006,
+        Finish.Glass,
+        chest,
+      );
+    }
+  }
+
+  // --- a gola ---
+  //
+  // Alta e fechada, como na arte. Toda ela acima de `y = 0,43`, onde o
+  // fator do ventre é 1,003: é a faixa do corpo em que pedraria pode
+  // existir sem ser esticada.
+  const golaBaixo = m.waist + m.shoulderY + 0.012;
+  const gola: Ctl[] = [
+    { y: golaBaixo, rx: m.neckR * 1.62, rz: m.neckR * 1.5, color: vidro, finish: Finish.Glass, bone: Bone.Torso, zone: MorphZone.Bust, origin: torso },
+    { y: golaBaixo + 0.028, rx: m.neckR * 1.28, rz: m.neckR * 1.24, color: vidro, finish: Finish.Glass, bone: Bone.Head },
+    { y: golaBaixo + 0.062, rx: m.neckR * 1.2, rz: m.neckR * 1.18, color: tint(vidro, agua, 0.5), finish: Finish.Glass, bone: Bone.Head },
+    { y: golaBaixo + 0.085, rx: m.neckR * 1.26, rz: m.neckR * 1.24, color: agua, finish: Finish.Glass, bone: Bone.Head },
+  ];
+  // Subdivisão 3: a gola tem 8,5 cm de altura e quatro anéis de
+  // controle. Com os sete de ultra eram 22 anéis para um tubo quase
+  // reto — 1 900 triângulos num colarinho.
+  b.loft(subdivideProfile(toStations(gola), Math.min(3, detail.steps)), { segments: Math.max(10, detail.segments) });
+
+  if (detail.segments >= 14) {
+    // O fio aceso na borda da gola.
+    b.addGeometry(
+      new THREE.TorusGeometry(m.neckR * 1.3, 0.0055, 4, Math.max(10, detail.segments)),
+      { color: luz, finish: Finish.Holo, skin: { bone: Bone.Head } },
+      new THREE.Matrix4().makeRotationX(Math.PI / 2).setPosition(0, golaBaixo + 0.088, 0),
+    );
+  }
+
+  if (detail.segments >= 20) {
+    // As gotas do colar, descendo da gola ao alto do peito. Param em
+    // `y = 0,372`: abaixo disso começa a banda do ventre, e pedra
+    // dentro dela é pedra esticada.
+    const gotas = 5;
+    for (let i = 0; i < gotas; i += 1) {
+      const k = i / (gotas - 1);
+      const y = golaBaixo - 0.012 - k * 0.046;
+      const { rz } = corpoEm(y);
+      b.ball(
+        [0, y, rz + 0.016 - k * 0.002],
+        [0.0085 - k * 0.0012, 0.011 - k * 0.0015, 0.007],
+        { color: k > 0.6 ? luz : tint(agua, luz, k), finish: Finish.Holo, ...chest },
+        4,
+      );
+    }
+  }
+
+  if (detail.segments >= 20) {
+    // --- as linhas de continuidade ---
+    //
+    // Nervuras acesas que descem pela saia. Vida que segue adiante,
+    // dita como ritmo — sem nenhum símbolo literal, que foi o que o
+    // Criador pediu ao escolher o manto.
+    //
+    // O raio é **medido na malha vestida**, nunca tirado do perfil de
+    // controle de `buildSkirt`: aquele perfil mente, e foi por
+    // confiar nele que as folhas da Saturno nasceram dentro do pano.
+    // Varrido nesta saia, com a barra `GOWN_HEM_Y`:
+    //
+    //     y −0,10 → 0,2345 × 0,2181    y −0,30 → 0,3315 × 0,3116
+    //     y −0,15 → 0,2669 × 0,2612    y −0,35 → 0,3543 × 0,3331
+    //     y −0,20 → 0,2758 × 0,2593    y −0,45 → 0,4118 × 0,3871
+    //
+    // Presas a `Bone.Hips`, como as vinhas da barra da Maze: é o
+    // osso que o repositório já usa para peça pregada em saia.
+    const saiaRx = (y: number): number => 0.2345 + (0.3543 - 0.2345) * smoothstep(-0.12, -0.35, y);
+    const saiaRz = (y: number): number => 0.2181 + (0.3331 - 0.2181) * smoothstep(-0.12, -0.35, y);
+    const nervuras = 9;
+    for (let i = 0; i < nervuras; i += 1) {
+      const az = (i / nervuras) * TAU + 0.26;
+      // Atrás não: é por ali que desce a Nascente.
+      if (Math.cos(az) < -0.45) continue;
+      const topo = -0.1;
+      const base = -0.335;
+      const passosN = 3;
+      for (let j = 0; j < passosN; j += 1) {
+        const y0 = topo + (base - topo) * (j / passosN);
+        const y1 = topo + (base - topo) * ((j + 1) / passosN);
+        const raio = (y: number): number => {
+          const rx = saiaRx(y) + 0.008;
+          const rz = saiaRz(y) + 0.008;
+          const sx = Math.sin(az) / rx;
+          const sz = Math.cos(az) / rz;
+          return 1 / Math.sqrt(sx * sx + sz * sz);
+        };
+        const r0 = raio(y0);
+        const r1 = raio(y1);
+        const comp = Math.hypot(r1 - r0, y1 - y0);
+        b.addGeometry(
+          new THREE.BoxGeometry(0.0095, comp, 0.007),
+          { color: tint(luz, agua, j / passosN), finish: Finish.Holo, ...quadril },
+          new THREE.Matrix4()
+            .makeRotationY(az)
+            .multiply(new THREE.Matrix4().makeRotationX(Math.atan2(r1 - r0, y0 - y1)))
+            .setPosition(Math.sin(az) * (r0 + r1) * 0.5, (y0 + y1) * 0.5, Math.cos(az) * (r0 + r1) * 0.5),
+        );
+      }
+    }
+  }
+}
+
 function flatRing(radius: number, depth: number, tube: number, segments: number, arc?: number): THREE.TorusGeometry {
   const ring = new THREE.TorusGeometry(radius, tube, 6, segments, arc);
   ring.scale(1, depth, 1);
@@ -4258,6 +4690,344 @@ function buildHair(b: SurfaceBuilder, a: AvatarAppearance, m: BodyMetrics, detai
       }
       break;
     }
+    case 'nascente': {
+      // A Nascente — da Amara, e só dela.
+      //
+      // Água que brota: a arte de referência mostra um cabelo
+      // clarís­simo, liso e longuíssimo, que desce em corrente pelas
+      // costas e passa à frente dos ombros. É a queda mais longa do
+      // catálogo, e é de propósito — ela é a Deusa da Maternidade, e
+      // comprimento aqui é continuidade, não enfeite.
+      //
+      // A ficha dizia `longo`, que é a peça do Aérion: 380 triângulos
+      // no LOD baixo, uma casca de quatro anéis que para no ombro. Ele
+      // não foi tocado, porque é o cabelo do Criador e o de meia
+      // cidade. A Amara é que saiu dele.
+      const bottomY = cy - 0.78;
+      // Até o alto do crânio: a calota que `buildHair` desenha antes
+      // do `switch` é comum aos dezesseis penteados, e aparecer por
+      // baixo da queda foi o que a bancada da Júpiter flagrou. Cobrir,
+      // nunca alterar.
+      // O domo é uma elipse **medida no crânio**, não um múltiplo de
+      // `R` escolhido no olho, e é por isso que a bancada devolveu
+      // capuz quatro rodadas seguidas. `cy` não é o centro da cabeça:
+      // é `headJointY + 0,16 · headSize`, que neste corpo cai em
+      // 0,636 — a altura da **boca**. A orelha está em `cy + 0,27 R`
+      // e o alto do crânio em `cy + 1,71 R`. Com `topY = cy + 1,08 R`
+      // o cabelo inteiro acabava em 0,82, meio crânio abaixo do topo,
+      // e tudo que se via no alto da cabeça era a calota lisa que
+      // `buildHair` desenha para os dezesseis penteados.
+      //
+      // Pele nua varrida nesta malha (`maxX` por altura):
+      //
+      //     y 0,80 → 0,1654   y 0,88 → 0,0986
+      //     y 0,84 → 0,1446   y 0,92 → 0,0493   topo 0,929
+      //
+      // O domo abaixo passa por fora disso em toda altura, de modo
+      // que a calota fica coberta — nunca alterada — e o volume do
+      // alto passa a ser desta peça.
+      //
+      // E `cy` vale **0,716**, não 0,636: `headJointY` não é
+      // `neckY`. Uma rodada inteira saiu com a cabeça medida meio
+      // crânio abaixo de onde ela está, e foi por isso que o domo
+      // nasceu em cima do avatar como um chapéu — a verificação é
+      // `domoY + domoH` contra o topo varrido, e os dois têm de
+      // bater na quarta casa.
+      // O topo fica em `domoY + domoH = cy + 1,34 R = 0,945`, um
+      // centímetro e meio acima do crânio (0,929) e não mais.
+      const domoY = cy + R * 0.42;
+      const domoH = R * 0.92;
+      const domoW = R * 1.15;
+      const topY = domoY + domoH;
+      // 11 anéis em ultra, não 15: `subdivideProfile` ainda os
+      // multiplica por `detail.steps` (7 em ultra), de modo que cada
+      // anel de controle custa sete anéis de malha × 44 segmentos ×
+      // 2 triângulos ≈ 616. Quatro a menos devolvem ~2 500
+      // triângulos sem que a queda perca uma curva sequer — o que
+      // precisava de anel era o **domo**, e o domo cabe em quatro.
+      const rings = segments >= 26 ? 11 : segments >= 14 ? 9 : 6;
+      const ruido = (n: number): number => {
+        const v = Math.sin(n * 12.9898) * 43758.5453;
+        return v - Math.floor(v);
+      };
+      /**
+       * Volume em cada altura.
+       *
+       * Liso, não ondulado: a referência é cabelo de água corrente, e
+       * a Pincelada da Júpiter já ocupa o lugar da juba com onda. O
+       * que dá vida aqui é o afinamento lento e a mecha, não a
+       * costela.
+       */
+      const perfil = (y: number): number => {
+        if (y >= cy) {
+          // Até o centro do domo a massa só engrossa; daí para cima
+          // é a elipse. A junção é contínua por construção: em
+          // `domoY` os dois ramos valem `domoW`.
+          // 1,12 R na base do domo, não 0,9 R: a pele na altura de
+          // `cy` mede 0,18 de raio, e `0,9 R = 0,154` punha o cabelo
+          // **dentro do crânio** — a massa sumia justamente na
+          // altura da orelha.
+          if (y <= domoY) return R * (1.12 + 0.03 * smoothstep(cy, domoY, y));
+          const k = Math.min(1, (y - domoY) / domoH);
+          return Math.max(R * 0.06, domoW * Math.sqrt(Math.max(0, 1 - k * k)));
+        }
+        const d = cy - y;
+        // Abre pouco no ombro e afina devagar: a queda tem de chegar
+        // **larga** na ponta, ou o comprimento não se lê. A lição da
+        // oitava rodada da Júpiter foi essa — a sonda media cabelo na
+        // cintura e a captura mostrava cabelo curto.
+        // Estreita na altura do rosto (`d < 0,1`), abre no ombro,
+        // afina devagar na ponta: é esse estrangulamento que faz o
+        // cabelo **emoldurar** em vez de engolir.
+        // O ombro mede `|x| = 0,1768`. A queda chegava a `1,40 R`
+        // (0,239) — mais larga que a dona — e de costas a bancada
+        // devolveu um **casulo**: uma massa de cabelo tapando o
+        // vestido inteiro, de ombro a ombro. Cabelo comprido é mais
+        // estreito que os ombros, e é a silhueta do pano atrás dele
+        // que diz que há uma pessoa ali.
+        return R * (1.14 + 0.08 * smoothstep(0.04, 0.3, d) - 0.32 * smoothstep(0.36, 0.78, d));
+      };
+      // Rasa na linha do olhar: a frente do rosto está em `z = 0,2089`
+      // nesta malha, e cabelo que avança ali engole a cara.
+      // A quarta rodada enquadrou o rosto num **elmo**: a massa
+      // chegava rente à bochecha dos dois lados e a testa ficava
+      // dentro de uma viseira. O raio frontal cai pela metade na
+      // altura do olhar, e o centro da queda recua junto.
+      // A entrada do cabelo fica em `y ≈ 0,83`, medida contra a
+      // testa varrida (`z` da pele: 0,1549 em 0,80; 0,1426 em 0,82;
+      // 0,1341 em 0,84). Abaixo disso o raio frontal é pequeno e a
+      // testa aparece; acima, o domo passa à frente da pele e a
+      // coroa é cabelo. Com o fator antigo (0,62 no alto) o domo
+      // corria **atrás** da testa e quem aparecia no alto da cabeça
+      // era a calota clara — a touca que a bancada acusou.
+      //
+      // A rampa é longa — `cy + 0,03` a `cy + 0,15` — porque com
+      // uma curta (`+0,06` a `+0,13`) a frente do cabelo saltava de
+      // 0,045 para 0,18 em quatro centímetros de altura, e a bancada
+      // mostrou uma **aba** atravessada na testa, como a pala de um
+      // boné. Linha de cabelo é curva, não degrau.
+      //
+      // E o teto é 1,17 e não 0,98: `buildHair` empurra a franja
+      // para `z ≈ 0,177` na altura de 0,84 (um `feature` de
+      // `R · 0,075` sobre a calota), e qualquer teto menor deixava
+      // esse **rolo claro** aparecendo à frente da massa, atravessado
+      // na testa como uma tiara. A coroa fica um pouco mais funda que
+      // larga, que é o perfil certo para cabelo que vem para a
+      // frente.
+      const frente = (y: number): number => perfil(y) * (0.12 + 1.05 * smoothstep(cy + 0.03, cy + 0.15, y));
+      // O recuo do centro também tem de afrouxar na coroa: 0,18 R
+      // de recuo somados ao raio frontal ainda deixavam o domo atrás
+      // da pele da testa.
+      const zcOf = (y: number): number =>
+        -R * (0.4 - 0.22 * smoothstep(cy - 0.6, cy, y) - 0.13 * smoothstep(cy, cy + 0.14, y));
+
+      const fall: Ctl[] = [];
+      for (let i = 0; i < rings; i += 1) {
+        const t = i / (rings - 1);
+        // Expoente 0,45, e isto é aritmética, não gosto. Com 0,82 só
+        // **dois** dos treze anéis caíam acima de `cy`: o domo inteiro
+        // do cabelo tinha dois anéis de vértices, `feature()` não
+        // tinha o que empurrar, e a bancada devolveu touca de natação
+        // duas rodadas seguidas. Com 0,45, mais de um terço dos anéis
+        // fica no alto da cabeça, que é onde o volume se vê.
+        const y = bottomY + (topY - bottomY) * Math.pow(t, 0.45);
+        fall.push({
+          y,
+          rx: perfil(y),
+          rz: frente(y),
+          rzBack: perfil(y) * 0.98,
+          z: zcOf(y),
+          // Degradê de **matiz**, como o da Nexara: a raiz é a cor da
+          // ficha e a ponta acende no verde-água da paleta dela. Um
+          // cabelo que já nasce quase branco não tem para onde
+          // clarear, e `shade` só anda para o branco ou para o preto.
+          // Raiz verde-água, ponta quase branca. Na quarta rodada o
+          // degradê ia de claro a claro, e a captura de costas
+          // devolveu um **casulo**: cabelo e vestido na mesma cor,
+          // sem silhueta no meio. Agora a raiz é `NASCENTE_RAIZ`, que
+          // é o tom médio da paleta dela, e a ponta é a cor da ficha
+          // clareada — é o degradê da arte, e é o que separa a massa
+          // do cabelo do pano do traje.
+          // Três paradas, não duas: claro na coroa, verde no meio da
+          // queda, claro na ponta. Com duas, o alto da cabeça saía no
+          // verde cheio da raiz — e como a calota de `buildHair` é
+          // sempre `hairColor`, a emenda virava uma **linha de
+          // chapéu** no meio da testa, tom escuro por cima do claro.
+          // Aqui a coroa termina na cor da calota e a emenda some.
+          color: tint(
+            tint(NASCENTE_RAIZ, shade(hair, 0.22), smoothstep(0, 0.62, cy - y)),
+            hair,
+            smoothstep(0.0, -0.2, cy - y),
+          ),
+          bone: Bone.Head,
+          bone2: Bone.Torso,
+          blend: 0.68 * (1 - smoothstep(cy - 0.52, cy - 0.02, y)),
+        });
+      }
+      // Subdivisão 4, não `detail.steps` (que é 7 em ultra): os
+      // penteados do catálogo têm quatro anéis de controle e
+      // precisam da interpolação para não facetar. Este tem onze —
+      // a curva já está nos anéis, e multiplicar por sete só pagava
+      // 2 600 triângulos de malha lisa. Com 4 são 41 anéis ao longo
+      // de 85 cm de cabelo, um a cada dois centímetros.
+      b.loft(subdivideProfile(toStations(fall), Math.min(4, detail.steps)), {
+        segments,
+        capTop: R * 0.04,
+        capBottom: R * 0.12,
+        capRings: 2,
+      });
+
+      if (detail.segments >= 14) {
+        // --- as duas mechas da frente ---
+        //
+        // Caem sobre o ombro, à frente do corpo, como na arte. Nenhum
+        // penteado do catálogo tem isso hoje, e é o que separa a
+        // Nascente de "mais uma queda comprida" vista de frente.
+        //
+        // Elas nascem **atrás da linha da orelha** (medida nesta
+        // malha em `|x| = 0,1804`, `y = 0,6820`) e passam por fora
+        // dela: nascendo na frente, a mecha sai do meio da bochecha.
+        for (const lado of [-1, 1] as const) {
+          const mecha: Ctl[] = [];
+          const nos = segments >= 26 ? 5 : 4;
+          for (let i = 0; i < nos; i += 1) {
+            const t = i / (nos - 1);
+            const y = cy + R * 0.42 - t * 0.74;
+            mecha.push({
+              y,
+              // Achatadas contra o corpo: a primeira rodada fez os
+              // dois raios quase iguais e a mecha saiu **cilíndrica**,
+              // como um tubo pendurado na orelha. Cabelo que cai sobre
+              // o ombro é uma cortina — larga de frente, fina de lado.
+              rx: R * (0.3 - 0.1 * t),
+              rz: R * (0.12 - 0.04 * t),
+              // Por **fora** da orelha, que esta malha põe em
+              // `|x| = 0,1804` — isto é, `R · 1,05`. A rodada
+              // anterior usou `R · 0,92` e as duas mechas nasceram
+              // por dentro da orelha, cobrindo a bochecha: de frente
+              // pareciam duas tiras coladas na cara.
+              // Para a **frente**. Na quinta rodada elas desciam em
+              // `|x| = R · 1,07` com `z` quase nulo — isto é, na
+              // linha do ombro (`shoulderX = 0,1768`) e dentro do
+              // braço, que cai exatamente ali. Sumiram as duas.
+              // Agora a mecha vem para cima do peito, que é onde a
+              // arte de referência a mostra.
+              x: lado * R * (1.0 - 0.14 * smoothstep(0.1, 0.9, t)),
+              // O `smoothstep` começa em 0,3 e não em 0: na sétima
+              // rodada a mecha vinha para a frente já na altura da
+              // orelha e passava **por cima da bochecha**. Ela só
+              // cruza para o peito depois do queixo.
+              z: R * (-0.12 + 1.1 * smoothstep(0.3, 0.8, t)),
+              color: tint(NASCENTE_RAIZ, shade(hair, 0.22), 0.25 + 0.7 * t),
+              bone: Bone.Head,
+              bone2: Bone.Torso,
+              blend: 0.6 * smoothstep(0.1, 0.9, t),
+            });
+          }
+          b.loft(subdivideProfile(toStations(mecha), detail.steps), { segments: Math.max(6, Math.round(segments * 0.5)), capBottom: R * 0.07, capRings: 2 });
+        }
+      }
+
+      if (detail.segments >= 20) {
+        // --- o volume do alto ---
+        //
+        // Sem isto o alto da cabeça lê como touca: a calota é lisa e a
+        // queda passa por cima dela igualmente lisa. As bolhas ficam
+        // todas acima de `cy + R · 0,38`, longe do rosto — o empurrão
+        // de `feature()` varre a malha inteira, e foi assim que um
+        // relevo de cabelo deformou a cara da Akemi em 35 mm.
+        // A cerca tem **duas** portas, e a primeira rodada só tinha
+        // uma. Medido: uma bolha no alto da cabeça, em
+        // `cy + R · 0,38`, dá distância normalizada 0,77 — era
+        // descartada pelo limiar de 1,08, e a bancada devolveu uma
+        // calota lisa que lia como **touca de natação**.
+        //
+        // O limiar existe para proteger o **rosto** (foi um relevo de
+        // cabelo que empurrou a cara da Akemi 35 mm), e rosto é coisa
+        // que está abaixo da testa. Acima de `cy + R · 0,45` não há o
+        // que proteger: ali é crânio, e crânio está coberto.
+        const longeDaCabeca = (x: number, y: number, z: number): boolean => {
+          if (y >= cy + R * 0.45) return true;
+          const dx = x / (R * 1.06);
+          const dy = (y - cy) / (R * 1.1);
+          const dz = z / (R * 1.16);
+          return Math.sqrt(dx * dx + dy * dy + dz * dz) >= 1.08;
+        };
+        // --- as divisões da coroa ---
+        //
+        // Sem isto o alto da cabeça é casca lisa, e casca lisa lê
+        // como touca por mais volume que tenha — foi o laudo de
+        // cinco rodadas seguidas. São **vales**, não bolhas:
+        // amplitude negativa, na direção do próprio raio, descendo
+        // em meridiano da coroa até a altura da testa.
+        for (let col = 0; col < (segments >= 26 ? 9 : 6); col += 1) {
+          const nCol = segments >= 26 ? 9 : 6;
+          const az = (col / nCol) * TAU + 0.35;
+          // A frente recebe um vale a mais e mais fundo, descendo
+          // até a linha do cabelo: é o que transforma a borda de
+          // baixo do domo numa **franja recortada** em vez de uma
+          // aba lisa. O domo cobre o rolo que `buildHair` levanta
+          // sobre a testa, mas cobrir com casca lisa só trocava um
+          // rolo por outro — a borda precisa ter dentes.
+          const frontal = Math.cos(az) > 0.45;
+          const passos = frontal ? 4 : 3;
+          for (let passo = 0; passo < passos; passo += 1) {
+            const y = cy + R * (1.18 - passo * 0.34);
+            const r = perfil(y) * 0.98;
+            b.feature(
+              [Math.sin(az) * r, y, Math.cos(az) * r + zcOf(y)],
+              [R * 0.14, R * (frontal ? 0.24 : 0.3), R * 0.14],
+              -R * ((frontal ? 0.14 : 0.09) + 0.04 * ruido(col * 7 + passo)),
+              [Math.sin(az), 0.25, Math.cos(az)],
+            );
+          }
+        }
+
+        for (let anel = 0; anel < 3; anel += 1) {
+          // Na coroa — `cy + 0,5 R` a `cy + 1,1 R`, ou seja 0,80 a
+          // 0,90, que é a calota inteira. Enquanto estavam em
+          // `cy + 0,26 R` empurravam a massa na altura da **orelha**,
+          // e o alto da cabeça, que era o defeito, continuava liso.
+          const y = cy + R * (0.5 + anel * 0.3);
+          const n = anel === 2 ? 5 : 7;
+          for (let i = 0; i < n; i += 1) {
+            const az = (i / n) * TAU + anel * 0.7;
+            const r = perfil(y) * (Math.cos(az) < 0 ? 1.06 : 0.98);
+            const px = Math.sin(az) * r;
+            const pz = zcOf(y) + Math.cos(az) * r;
+            if (!longeDaCabeca(px, y, pz)) continue;
+            // A amplitude é aritmética, não gosto: `feature()` pesa o
+            // empurrão por `exp(-d²·1,4)`, e no marco da Maze um
+            // relevo de onze milímetros simplesmente não apareceu.
+            b.feature([px, y, pz], [R * 0.33, R * 0.25, R * 0.33], R * (0.1 + 0.05 * ruido(anel * 11 + i)), [Math.sin(az), 0.3, Math.cos(az)]);
+          }
+        }
+
+        // --- o fio de água na queda ---
+        //
+        // Sulcos verticais rasos e irregulares, que custam **zero**
+        // triângulo: empurram vértices que já existem. Verticais, e
+        // não em anel, porque anel em volta da cabeça lê como colmeia
+        // — foi a sétima rodada da Júpiter.
+        for (let col = 0; col < 9; col += 1) {
+          const az = (col / 9) * TAU + 0.4;
+          for (let passo = 0; passo < 4; passo += 1) {
+            const y = cy - 0.1 - passo * 0.17 - ruido(col * 5 + passo) * 0.05;
+            if (y < bottomY + 0.06) continue;
+            const raio = Math.cos(az) < 0 ? perfil(y) * 1.05 : frente(y);
+            const px = Math.sin(az) * perfil(y);
+            const pz = zcOf(y) + Math.cos(az) * raio;
+            // Fundos de propósito: a primeira rodada usou `R · 0,07`
+            // — doze milímetros — e de perfil a queda continuou um
+            // bloco retangular. O empurrão de `feature()` é pesado
+            // por `exp(-d²·1,4)`, e amplitude pedida não é amplitude
+            // entregue.
+            b.feature([px, y, pz], [R * 0.3, R * 0.52, R * 0.3], R * (0.16 + 0.1 * ruido(col * 3 + passo)), [Math.sin(az), 0, Math.cos(az)]);
+          }
+        }
+      }
+      break;
+    }
     case 'espetado': {
       const spikes: [number, number, number, number, number][] = [
         [0, 0.2, 0.04, 0.5, 0],
@@ -4772,6 +5542,64 @@ function buildAccessory(b: SurfaceBuilder, a: AvatarAppearance, m: BodyMetrics, 
             new THREE.BoxGeometry(0.006, 0.03, 0.006),
             { color: ouro, finish: Finish.Shine, skin: head },
             new THREE.Matrix4().makeTranslation(side * R * 0.98, cy - 0.072, R * 0.06),
+          );
+        }
+      }
+      break;
+    }
+    case 'nimbo': {
+      // O Nimbo Materno — da Amara, e só dela.
+      //
+      // Todo o Panteão já tem uma auréola: um toro dourado que
+      // `Avatar.ts` cria para qualquer divindade (`HALO_DEFAULT`).
+      // Ela é compartilhada e continua intacta — o que a Amara faz é
+      // usar o campo `halo` da ficha, previsto desde sempre e até
+      // hoje vazio, para que a dela seja água-marinha.
+      //
+      // Este acessório é outra peça. A auréola comum é um aro
+      // **horizontal** flutuando acima da cabeça; o nimbo é o disco
+      // **vertical** da pintura sacra, no plano do rosto: de frente
+      // emoldura a cabeça inteira, de perfil é um traço fino.
+      //
+      // Não são os anéis da Nexara. Aqueles orbitam, são vários e
+      // vêm inclinados em ângulos diferentes; este é um só, parado e
+      // frontal, e é insígnia, não órbita.
+      const aro = R * 1.32;
+      // Atrás do centro da cabeça: o rosto tem de ficar livre, e o
+      // nimbo nasce **por fora** da queda do cabelo, que nesta malha
+      // abre até `R · 1,2`.
+      const atras = -R * 0.3;
+      // Aberto embaixo, 250°: o quarto de baixo seria enterrado no
+      // cabelo e nos ombros, onde um arco não se vê e só custa.
+      const arco = (250 * Math.PI) / 180;
+      const anel = new THREE.TorusGeometry(aro, R * 0.035, 4, Math.max(14, segs), arco);
+      b.addGeometry(
+        anel,
+        { color: 0xc4fff2, finish: Finish.Holo, skin: head },
+        // Girado para que a abertura fique embaixo.
+        new THREE.Matrix4().makeRotationZ(Math.PI / 2 - arco / 2).setPosition(0, cy + R * 0.12, atras),
+      );
+      if (detail.segments >= 14) {
+        // Um segundo fio, por dentro e mais apagado: dá espessura de
+        // luz ao nimbo. Um aro sozinho lê como argola de metal.
+        b.addGeometry(
+          new THREE.TorusGeometry(aro * 0.86, R * 0.016, 4, Math.max(12, segs), arco),
+          { color: 0xaef0dd, finish: Finish.Holo, skin: head },
+          new THREE.Matrix4().makeRotationZ(Math.PI / 2 - arco / 2).setPosition(0, cy + R * 0.12, atras - 0.004),
+        );
+      }
+      if (detail.segments >= 20) {
+        // As contas de luz no aro. Sete, espaçadas no arco de cima —
+        // criação, proteção, vida e continuidade ditas como ritmo, e
+        // não como desenho de nada.
+        const contas = 7;
+        for (let i = 0; i < contas; i += 1) {
+          const a = -arco / 2 + (arco * (i + 0.5)) / contas;
+          b.ball(
+            [Math.sin(a) * aro, cy + R * 0.12 + Math.cos(a) * aro, atras],
+            [R * 0.045, R * 0.045, R * 0.026],
+            { color: 0xeafff9, finish: Finish.Holo, skin: head },
+            4,
           );
         }
       }
