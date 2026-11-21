@@ -95,7 +95,7 @@ intactos.
 
 ```
 antes   look('#a96c45', 'cacheado', '#8a5a2b', '#c98a2b', 'casual',  '#ffd84a', '#7ddc5a', '#f3ead6', 'flor',   1.0)
-depois  look('#a96c45', 'silvestre','#8a5a2b', '#c98a2b', 'guardia', '#ffd84a', '#d99a30', '#f3ead6', 'nenhum', 1.0)
+depois  look('#f3d2c1', 'silvestre','#8a5a2b', '#c98a2b', 'guardia', '#ffd84a', '#d99a30', '#f3ead6', 'nenhum', 1.0)
 ```
 
 **Três dos quatro campos trocados eram compartilhados:**
@@ -113,9 +113,15 @@ inteira e a figura saía como uma deusa-da-vegetação genérica — o que
 o briefing proíbe e o que atropelava a Maze. O ouro virou o pano; o
 verde virou o vidro.
 
-**Preservado:** aura `0xffd98a`, paleta `['#ffd98a','#e08a2f']`, pele,
-cor do cabelo, cor dos olhos, altura, título, domínio, bio, contato e
-o lugar dela em frente à Casa EdenPawl.
+**A pele:** `#a96c45` → **`#f3d2c1`**, pedido direto do Criador depois
+do PR aberto. O tom sai do catálogo canônico `SKIN_TONES`, não é
+inventado, e **não** é o `#ffe0c8` da Akemi — duas deusas com a mesma
+pele exata encurtam o elenco. Nenhuma outra personagem usava
+`#f3d2c1`.
+
+**Preservado:** aura `0xffd98a`, paleta `['#ffd98a','#e08a2f']`, cor
+do cabelo, cor dos olhos, altura, título, domínio, bio, contato e o
+lugar dela em frente à Casa EdenPawl.
 
 ---
 
@@ -377,7 +383,7 @@ Nenhuma delas sobreviveu, e todas estão comentadas no código:
 |---|---|
 | investigação antes de implementar | ✅ dois achados que mudaram o desenho |
 | plano apresentado antes do código | ✅ `docs/PLANO-SATURNO-2.0.md`, commit `040b93f` |
-| não inventar nada contra o cânone | ✅ título, domínio, aura, paleta, bio e lugar preservados |
+| não inventar nada contra o cânone | ✅ título, domínio, aura, paleta, bio e lugar preservados; a pele nova sai do catálogo `SKIN_TONES` |
 | conexão com natureza e animais | ✅ galhada, pata EdenPawl, folhas de vidro |
 | vidro translúcido e materiais luminosos | ✅ `Glass` na galhada e nas folhas, `Holo` no emblema |
 | verdes, aqua, dourados | ✅ ouro no pano, verde-amarelado e verde-azulado no vidro |

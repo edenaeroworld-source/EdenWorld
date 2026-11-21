@@ -184,11 +184,16 @@ describe('Saturno 2.0 — a ficha', () => {
 
   it('preserva a identidade canônica da ficha', () => {
     // O briefing manda elevar o acabamento, não trocar a personagem.
-    // Aura, paleta, olhos, pele, altura e título são quem ela é.
+    // Aura, paleta, olhos, altura e título são quem ela é.
+    //
+    // A pele é a exceção, e foi pedida pelo Criador depois do PR
+    // aberto: `#a96c45` → `#f3d2c1`. O tom novo sai do catálogo
+    // canônico `SKIN_TONES`, não é inventado, e não é o `#ffe0c8` da
+    // Akemi — duas deusas com a mesma pele exata encurtam o elenco.
     expect(saturno.aura).toBe(0xffd98a);
     expect(saturno.colors).toEqual(['#ffd98a', '#e08a2f']);
     expect(saturno.appearance.eyeColor).toBe('#c98a2b');
-    expect(saturno.appearance.skin).toBe('#a96c45');
+    expect(saturno.appearance.skin).toBe('#f3d2c1');
     expect(saturno.appearance.hairColor).toBe('#8a5a2b');
     expect(saturno.appearance.height).toBe(1.0);
     expect(saturno.title).toBe('Defensora dos Animais');

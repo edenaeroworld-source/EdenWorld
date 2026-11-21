@@ -909,7 +909,7 @@ const SATURNO: EdenCharacter = {
   //
   // `accessory: 'nenhum'` é deliberado: a galhada nasce do penteado
   // `silvestre`, não do acessório, e assim ela deixa a `flor` para a Maze.
-  appearance: look('#a96c45', 'silvestre', '#8a5a2b', '#c98a2b', 'guardia', '#ffd84a', '#d99a30', '#f3ead6', 'nenhum', 1.0),
+  appearance: look('#f3d2c1', 'silvestre', '#8a5a2b', '#c98a2b', 'guardia', '#ffd84a', '#d99a30', '#f3ead6', 'nenhum', 1.0),
   aura: 0xffd98a,
   contact: {
     handle: '@saturno',
