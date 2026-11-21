@@ -1890,22 +1890,33 @@ function buildHair(b: SurfaceBuilder, a: AvatarAppearance, m: BodyMetrics, detai
       // marco posterior tem o direito de tomar o que já era dela.
       const topY = cy + 0.12;
       const bottomY = cy - 0.6;
-      // Por que tantos anéis — e por que a subdivisão cai junto.
+      // Por que esta varredura não passa por `subdivideProfile`.
       //
-      // `blendStations` **não interpola cor**: ela trava na estação
-      // mais próxima (`t > 0.5 ? 1 : 0`). O número de faixas de cor
-      // do cabelo é, portanto, exatamente o número de anéis de
-      // controle, e subdividir não acrescenta nenhuma: com dez
-      // anéis o degradê saiu na tela como cinco listras horizontais
-      // de borda dura — um bolo de camadas, não uma mecha acesa.
+      // Duas coisas que a malha precisa aqui morrem na subdivisão.
       //
-      // A função é compartilhada por todo corpo do Éden e não se
-      // toca. A saída é dobrar os anéis de controle e cortar a
-      // subdivisão pela metade: ela existe para alisar a silhueta, e
-      // um anel de controle alisa tanto quanto um interpolado. Sai
-      // o dobro de passos de cor pelo mesmo tanto de geometria.
-      const rings = segments >= 26 ? 20 : segments >= 14 ? 12 : 4;
-      const steps = segments >= 14 ? Math.max(2, Math.round(detail.steps * 0.5)) : detail.steps;
+      // A primeira é a cor: `blendStations` **não interpola**, ela
+      // trava na estação mais próxima (`t > 0.5 ? 1 : 0`). Faixa de
+      // cor é anel de controle, e com dez anéis o degradê saiu na
+      // tela como cinco listras horizontais de borda dura.
+      //
+      // A segunda é pior e levou um teste para aparecer: ela
+      // **descarta `finish`**. Copia `zone` e `origin` da estação
+      // vizinha e deixa o acabamento cair para o padrão da
+      // superfície. Ou seja: declarar `Finish.Holo` num anel de
+      // cabelo subdividido não acende nada — a cor neon ficava lá,
+      // chapada, sem emissão nenhuma.
+      //
+      // Essa função é lida por todo corpo do Éden e não se toca. A
+      // saída é não subdividir: o perfil já é analítico, então ele
+      // nasce direto na densidade final. Sai mais barato, ainda por
+      // cima — trinta anéis de controle custam menos que vinte
+      // anéis subdivididos em quatro.
+      // A contagem subiu depois do traçado de raios: com trinta
+      // anéis apareceu uma fresta de pele num único azimute das
+      // costas. Sem subdivisão, o perfil anda em corda entre um anel
+      // e o seguinte, e a corda passa por dentro da curva — onde a
+      // folga sobre o crânio já era pequena, ela zerava.
+      const rings = segments >= 26 ? 38 : segments >= 14 ? 26 : 6;
       const limao = 0x9dfb57;
       const turquesa = 0x2ee8c0;
       const yOf = (t: number): number => bottomY + (topY - bottomY) * t;
@@ -1918,11 +1929,15 @@ function buildHair(b: SurfaceBuilder, a: AvatarAppearance, m: BodyMetrics, detai
       // largo no alto, fechando num bico na cintura. Cabelo comprido
       // mantém corpo até perto da ponta e só então recolhe. Agora a
       // largura é quase constante na descida (quem dá o movimento é
-      // a onda) e o recolhimento vive nos últimos quinze por cento.
+      // a onda) e o recolhimento vive no fim. Esse recolhimento
+      // precisou de duas rodadas: com a ponta em 55% da largura o
+      // cabelo terminava num bloco aceso de fundo chato, que de
+      // costas parecia um babador luminoso. Em 28% ela fecha em
+      // ponta e o brilho vira mecha.
       const rxOf = (t: number): number =>
         R *
         (0.96 + 0.1 * smoothstep(0.75, 1, t) + 0.16 * smoothstep(0.62, 0.2, t)) *
-        (1 - 0.45 * smoothstep(0.18, 0, t)) *
+        (1 - 0.72 * smoothstep(0.26, 0, t)) *
         (1 - 0.14 * smoothstep(0.84, 1, t)) *
         (1 + 0.16 * Math.sin(t * Math.PI * 3.1 + 0.9));
       // Profundidade: curva de raiz, como a do Fluxo. A reta desenha
@@ -1985,7 +2000,7 @@ function buildHair(b: SurfaceBuilder, a: AvatarAppearance, m: BodyMetrics, detai
           blend: 0.88 * (1 - smoothstep(cy - 0.54, cy - 0.1, yOf(t))),
         });
       }
-      b.loft(subdivideProfile(toStations(fall), steps), { segments, capBottom: R * 0.07, capRings: 2 });
+      b.loft(toStations(fall), { segments, capBottom: R * 0.07, capRings: 2 });
 
       // O risco no alto da cabeça: sem ele a calota é uma superfície
       // lisa e o penteado lê como touca. Vale para qualquer cabelo
