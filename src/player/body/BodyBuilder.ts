@@ -143,11 +143,16 @@ export function buildBodyGeometry(a: AvatarAppearance, p: BodyProportions, m: Bo
   // manga comprida e perna comprida —, que é o que faz um macacão
   // ser um macacão e não um conjunto.
   const rede = outfit === 'rede';
-  const longSleeves = outfit === 'aero' || aurora || rede;
+  // O Traje Sonora, da Lilly: jaqueta curta escura de gola sobre uma
+  // saia longa translúcida. É o contraste que a arte dela mostra —
+  // pano opaco em cima, luz embaixo —, e é também o que a separa das
+  // outras três deusas, todas claras da cabeça aos pés.
+  const sonora = outfit === 'sonora';
+  const longSleeves = outfit === 'aero' || aurora || rede || sonora;
   const bareArms = outfit === 'esportivo' || outfit === 'vestido';
   const longPants = outfit === 'casual' || outfit === 'aero' || rede;
   const bareLegs = outfit === 'vestido' || docente;
-  const dress = outfit === 'vestido' || aurora || docente;
+  const dress = outfit === 'vestido' || aurora || docente || sonora;
   // Dois acabamentos, e a diferença entre eles é deliberada.
   //
   // `cloth` é o que vale para o que se **acrescenta** por cima do
@@ -159,7 +164,11 @@ export function buildBodyGeometry(a: AvatarAppearance, p: BodyProportions, m: Bo
   // Luma, e o corpo dele é pano. Mudar isso agora mudaria a Luma,
   // que está pronta e integrada. O Traje Rede é de vidro nos dois,
   // porque é um macacão inteiriço e não um vestido sobre um corpo.
-  const cloth: FinishId = aurora || rede ? Finish.Glass : Finish.Cloth;
+  //
+  // O Sonora segue o Manto Aurora e pela mesma lógica invertida: a
+  // saia é vidro porque é camada de som, e a jaqueta é pano porque é
+  // jaqueta. Um traje inteiro de vidro escuro vira plástico.
+  const cloth: FinishId = aurora || rede || sonora ? Finish.Glass : Finish.Cloth;
   const suit: FinishId = rede ? Finish.Glass : Finish.Cloth;
 
   // Cada parte declara o seu acabamento antes de ser varrida.
@@ -178,7 +187,7 @@ export function buildBodyGeometry(a: AvatarAppearance, p: BodyProportions, m: Bo
   // A barra longa é a mesma do Manto Aurora: abaixo de `GOWN_HEM_Y` a
   // saia deixa de abrir como cone e vira coluna, que é o que separa
   // um vestido longo de uma tenda.
-  if (dress) buildSkirt(b, m, detail, top, origins, aurora || docente ? GOWN_HEM_Y : SKIRT_HEM_Y);
+  if (dress) buildSkirt(b, m, detail, dress && sonora ? bottom : top, origins, aurora || docente || sonora ? GOWN_HEM_Y : SKIRT_HEM_Y);
 
   // A oclusão é a última coisa antes de fechar a malha: ela precisa do
   // corpo inteiro montado para saber o que esconde o quê. É daqui que
@@ -276,7 +285,7 @@ function buildTorso(b: SurfaceBuilder, ctx: TorsoCtx): void {
   b.feature([0, 0.285, 0.09], [0.11, 0.07, 0.07], 0.01, [0, 0, 1]);
   b.feature([0, 0.3, -0.09], [0.12, 0.06, 0.06], 0.006, [0, 0, -1]);
 
-  if (outfit === 'aurora' || outfit === 'rede') {
+  if (outfit === 'aurora' || outfit === 'rede' || outfit === 'sonora') {
     // Gola alta: o manto fecha no pescoço, como na arte oficial. Sobe
     // pelo próprio pescoço, sem folga, para não flutuar quando a
     // cabeça gira — pertence ao osso da cabeça, como a gola Aero.
@@ -298,6 +307,9 @@ function buildTorso(b: SurfaceBuilder, ctx: TorsoCtx): void {
   }
   if (outfit === 'rede') {
     buildNetSuit(b, m, detail, top, bottom, accent, torso, hip);
+  }
+  if (outfit === 'sonora') {
+    buildSonoraSuit(b, m, detail, top, accent, torso, hip);
   }
 
   if (outfit === 'aero') {
@@ -422,6 +434,152 @@ function buildNetSuit(
     { color: tint(bottom, accent, 0.58), finish: Finish.Holo, skin: { bone: Bone.Hips }, zone: MorphZone.Curve, origin: hip },
     place,
   );
+}
+
+/**
+ * O Traje Sonora, da Lilly — e por que o equalizador é uma coroa.
+ *
+ * O pedido listava várias formas possíveis para "música em três
+ * dimensões": ondas orbitais, anéis de frequência, partículas,
+ * cristais. Escolher importa mais do que parece, porque a Nexara já
+ * tem **dois anéis orbitando a cabeça**. Pôr anéis luminosos numa
+ * segunda deusa não dá a ela uma identidade — tira a da outra. Duas
+ * personagens com o mesmo truque viram a mesma personagem vista de
+ * ângulos diferentes.
+ *
+ * Então a vibração de Lilly é a imagem mais direta que a música tem:
+ * um **equalizador**. Uma coroa de barras em volta do quadril, com
+ * alturas diferentes, como um espectro congelado no instante em que
+ * a música passou. É geometria, não efeito, e por isso aparece de
+ * costas, de perfil e no escuro.
+ *
+ * Nada disso custa uma chamada de desenho: barras, cinto e costuras
+ * entram por `addGeometry` na malha única, presos ao osso do quadril
+ * e do tronco, e acompanham a animação sem uma linha de código.
+ */
+function buildSonoraSuit(
+  b: SurfaceBuilder,
+  m: BodyMetrics,
+  detail: BodyDetail,
+  top: Hex,
+  accent: Hex,
+  torso: readonly [number, number, number],
+  hip: readonly [number, number, number],
+): void {
+  const chest = { skin: { bone: Bone.Torso }, zone: MorphZone.Bust, origin: torso } as const;
+  const magenta = 0xff5ecf;
+  const turquesa = 0x2ee8c0;
+
+  // A costura da jaqueta: a linha acesa que desce do peito à cintura.
+  // Fina de propósito — a arte mostra um fio de luz, não uma faixa.
+  b.addGeometry(
+    new THREE.BoxGeometry(0.011, 0.19, 0.008),
+    { color: accent, finish: Finish.Holo, ...chest },
+    new THREE.Matrix4().makeTranslation(0, 0.3, 0.084),
+  );
+
+  // Duas linhas curtas sobre os ombros, no mesmo fio de luz. Elas
+  // fazem o contorno da jaqueta aparecer de costas, que é de onde a
+  // silhueta escura some contra o fundo escuro.
+  for (const side of [1, -1]) {
+    b.addGeometry(
+      new THREE.BoxGeometry(0.052, 0.009, 0.009),
+      { color: accent, finish: Finish.Holo, ...chest },
+      new THREE.Matrix4().makeTranslation(side * m.shoulderX * 0.62, m.waist + m.shoulderY - 0.012, 0.02),
+    );
+  }
+
+  // O cinto de cristal, achatado como o tronco: um aro circular num
+  // corpo elíptico ou enterra nos flancos ou flutua na barriga.
+  const belt = flatRing(m.waistWidth * 1.07, WAIST_DEPTH, 0.015, Math.max(12, detail.segments));
+  b.addGeometry(belt, { color: shade(top, 0.22), finish: Finish.Glass, ...chest }, new THREE.Matrix4().makeRotationX(Math.PI / 2).setPosition(0, 0.15, 0));
+  // O cristal da fivela: o ponto de magenta que a arte põe no centro.
+  b.ball([0, 0.15, 0.085], [0.017, 0.024, 0.013], { color: magenta, finish: Finish.Holo, ...chest }, 6);
+
+  // --- o equalizador radial ---
+  //
+  // Só de `segments >= 14` para cima. No LOD distante ele não seria
+  // visto, e é lá que o orçamento aperta: dezenas de habitantes em
+  // cena ao mesmo tempo.
+  if (detail.segments < 14) return;
+  // Densidade: com vinte barras a volta de dezessete centímetros
+  // deixava seis centímetros de vão entre uma e outra, e o que
+  // se via na tela era confete pregado na saia. Espectro se lê
+  // quando barra e vão têm a mesma ordem de grandeza.
+  const bars = detail.segments >= 26 ? 30 : 18;
+
+  // Onde a coroa mora, e por que não no quadril.
+  //
+  // A primeira versão pôs as barras em `hipWidth * 1,1`, à altura do
+  // cinto. Medido depois: nessa faixa a saia tem raio `0,24` e as
+  // barras, `0,18`. O equalizador inteiro estava **dentro** do
+  // tecido — construído, pago em triângulos, invisível.
+  //
+  // A coroa desceu para a linha da coxa e passou a sentar na
+  // superfície do manto, que é um cone: entre `y = −0,14` e
+  // `y = −0,30` o raio abre meio centímetro por centímetro descido.
+  // Uma barra vertical encostada em cima desse cone afasta do pano
+  // conforme desce; por isso cada barra é **inclinada** no mesmo
+  // ângulo do cone e cresce rampa abaixo, e não para o chão.
+  // Inclinação medida na malha pronta, não estimada: entre
+  // `y = −0,15` e `y = −0,25` o manto abre `0,058` em `0,10` de
+  // queda. Com `0,50` — o primeiro palpite — a ponta das barras
+  // mais longas afundava no pano trinta centésimos abaixo.
+  const slope = 0.62;
+  const tilt = Math.atan(slope);
+  const yTop = -0.12;
+  // Raio do manto no topo da coroa, medido na malha construída.
+  const rx0 = m.hipWidth * 1.496;
+  const rz0 = m.hipWidth * 1.356;
+  // Passo descido ao longo da geratriz, decomposto em raio e altura.
+  const dr = slope / Math.hypot(slope, 1);
+  const dy = 1 / Math.hypot(slope, 1);
+  for (let i = 0; i < bars; i += 1) {
+    const az = (i / bars) * Math.PI * 2;
+    // A altura vem de uma onda amostrada, não de um sorteio: uma
+    // coroa aleatória lê como cerca quebrada, e uma coroa de altura
+    // constante lê como franja. O que lê como espectro é uma curva —
+    // duas senoides de períodos diferentes, que é o suficiente para
+    // nenhum vizinho repetir o vizinho e o conjunto ainda assim
+    // parecer uma leitura, e não ruído.
+    const onda = 0.5 + 0.5 * Math.sin(i * 2.399 + Math.cos(i * 1.1));
+    const len = 0.035 + 0.085 * onda;
+    // Largura: a barra tem de ser mais larga que o fio da costura,
+    // senão a coroa lê como franja de cordinhas. Com vinte barras a
+    // volta mede dezesseis centímetros, e `0,024` deixa vão visível
+    // entre uma e outra — barra e silêncio, que é o que faz um
+    // espectro ser lido como espectro.
+    const bar = new THREE.BoxGeometry(0.03, len, 0.012);
+    // A cor da barra, em três degraus — e por que não num degradê.
+    //
+    // A primeira versão interpolava ciano em magenta conforme a
+    // altura. Mas o caminho entre essas duas cores no espaço RGB
+    // passa pelo **cinza-lavanda**: metade das barras saía lilás
+    // desbotado, e a coroa inteira lia como tule de tutu. Três
+    // degraus discretos da paleta da personagem mantêm toda barra
+    // saturada, e ainda separam melhor um nível do outro, que é o
+    // que um analisador de espectro faz.
+    //
+    // Todas entram escurecidas: `Finish.Holo` soma `0,55` de emissão
+    // sobre a cor difusa, e partindo das cores puras a soma estoura
+    // para o branco-rosado. Escurecer a base é o que devolve a cor
+    // cheia depois que a emissão a levanta.
+    const viva = onda > 0.72 ? magenta : onda > 0.38 ? turquesa : accent;
+    const cor = shade(viva, -0.3);
+    // Centro da barra: meia rampa abaixo do topo, mais um milímetro
+    // para fora, que é o que a mantém pousada sobre o pano em vez de
+    // brigar com ele pelo mesmo plano.
+    const mid = len * 0.5;
+    const place = new THREE.Matrix4()
+      .makeRotationY(az)
+      .multiply(new THREE.Matrix4().makeRotationX(-tilt))
+      .setPosition(
+        Math.sin(az) * (rx0 + dr * mid + 0.014),
+        yTop - dy * mid,
+        Math.cos(az) * (rz0 + dr * mid + 0.014),
+      );
+    b.addGeometry(bar, { color: cor, finish: Finish.Holo, skin: { bone: Bone.Hips }, zone: MorphZone.Curve, origin: hip }, place);
+  }
 }
 
 /**
@@ -1707,6 +1865,175 @@ function buildHair(b: SurfaceBuilder, a: AvatarAppearance, m: BodyMetrics, detai
       buildOrbitRings(b, detail, cy, R);
       break;
     }
+    case 'onda': {
+      // A queda da Lilly. Prima do Fluxo na construção — mesma casca
+      // contínua, mesmo cuidado com a nuca — e oposta dele na
+      // leitura, porque a personagem é outra:
+      //
+      //  · **a largura oscila**. Três ciclos rasos ao longo da
+      //    descida, com amplitude o dobro da do Fluxo. É a envoltória
+      //    de uma forma de onda, e é o que faz a silhueta dizer "som"
+      //    antes de qualquer brilho — de longe, no escuro, contra o
+      //    céu, a silhueta é a única coisa que sobra;
+      //  · **o degradê acende**. Raiz quase preta, verde-limão no
+      //    meio, turquesa nas pontas.
+      //
+      // E o degradê acende de verdade: os anéis de baixo trocam de
+      // **acabamento**, não só de cor. `Ctl.finish` chega até a
+      // estação, então a parte neon do cabelo é `Holo` e emite, e a
+      // raiz continua sendo cabelo. Isso custa **zero triângulos** —
+      // a alternativa seria desenhar mechas de luz por cima, e mecha
+      // solta já foi rejeitada em três marcos seguidos.
+      //
+      // O comprimento para acima da Cascata: o cabelo mais longo do
+      // Éden é o da Suki-Chan, há um teste que afirma isso, e nenhum
+      // marco posterior tem o direito de tomar o que já era dela.
+      const topY = cy + 0.12;
+      const bottomY = cy - 0.6;
+      // Por que esta varredura não passa por `subdivideProfile`.
+      //
+      // Duas coisas que a malha precisa aqui morrem na subdivisão.
+      //
+      // A primeira é a cor: `blendStations` **não interpola**, ela
+      // trava na estação mais próxima (`t > 0.5 ? 1 : 0`). Faixa de
+      // cor é anel de controle, e com dez anéis o degradê saiu na
+      // tela como cinco listras horizontais de borda dura.
+      //
+      // A segunda é pior e levou um teste para aparecer: ela
+      // **descarta `finish`**. Copia `zone` e `origin` da estação
+      // vizinha e deixa o acabamento cair para o padrão da
+      // superfície. Ou seja: declarar `Finish.Holo` num anel de
+      // cabelo subdividido não acende nada — a cor neon ficava lá,
+      // chapada, sem emissão nenhuma.
+      //
+      // Essa função é lida por todo corpo do Éden e não se toca. A
+      // saída é não subdividir: o perfil já é analítico, então ele
+      // nasce direto na densidade final. Sai mais barato, ainda por
+      // cima — trinta anéis de controle custam menos que vinte
+      // anéis subdivididos em quatro.
+      // A contagem subiu depois do traçado de raios: com trinta
+      // anéis apareceu uma fresta de pele num único azimute das
+      // costas. Sem subdivisão, o perfil anda em corda entre um anel
+      // e o seguinte, e a corda passa por dentro da curva — onde a
+      // folga sobre o crânio já era pequena, ela zerava.
+      const rings = segments >= 26 ? 38 : segments >= 14 ? 26 : 6;
+      const limao = 0x9dfb57;
+      const turquesa = 0x2ee8c0;
+      const yOf = (t: number): number => bottomY + (topY - bottomY) * t;
+      // Volume: ela é a mais cheia das quatro. A onda tem amplitude
+      // `0,16` contra os `0,08` do Fluxo, e isso é deliberado — com
+      // amplitude pequena a oscilação some a três metros e sobra um
+      // cabelo liso e escuro, que é um borrão.
+      // E ela não afunila. A primeira versão ia de `1,18·R` na
+      // calota a `0,58·R` na ponta: de costas, isso é um balão —
+      // largo no alto, fechando num bico na cintura. Cabelo comprido
+      // mantém corpo até perto da ponta e só então recolhe. Agora a
+      // largura é quase constante na descida (quem dá o movimento é
+      // a onda) e o recolhimento vive no fim. Esse recolhimento
+      // precisou de duas rodadas: com a ponta em 55% da largura o
+      // cabelo terminava num bloco aceso de fundo chato, que de
+      // costas parecia um babador luminoso. Em 28% ela fecha em
+      // ponta e o brilho vira mecha.
+      const rxOf = (t: number): number =>
+        R *
+        (0.96 + 0.1 * smoothstep(0.75, 1, t) + 0.16 * smoothstep(0.62, 0.2, t)) *
+        (1 - 0.72 * smoothstep(0.26, 0, t)) *
+        (1 - 0.14 * smoothstep(0.84, 1, t)) *
+        (1 + 0.16 * Math.sin(t * Math.PI * 3.1 + 0.9));
+      // Profundidade: curva de raiz, como a do Fluxo. A reta desenha
+      // uma tábua encostada nas costas — já custou uma rodada.
+      const rzBackOf = (t: number): number =>
+        R * (0.44 + 0.66 * t ** 0.8) * (1 - 0.24 * smoothstep(0.12, 0, t));
+      // Onde a queda mora em profundidade — a conta que decide se o
+      // cabelo volumoso é possível neste corpo.
+      //
+      // Alargar a queda sem recuá-la fez o cabelo **atravessar os
+      // braços**: medido, até quatro centímetros de interpenetração
+      // entre `y = 0,10` e `y = 0,35`, que é justamente a faixa das
+      // pontas acesas. Os braços caem em `x` de 0,13 a 0,28 e a sua
+      // face de trás fica em `z ≈ −0,05`; qualquer mecha mais larga
+      // que isso precisa passar atrás deles ou não passa.
+      //
+      // Então a metade de baixo recua para `−0,55·R` e só volta a
+      // encostar na cabeça depois de `t = 0,45`, onde ela tem de
+      // abraçar o crânio. É isto que permite cabelo largo aqui: ele
+      // não disputa espaço com o braço, ele passa por trás.
+      const zcOf = (t: number): number => -R * (0.55 - 0.47 * smoothstep(0.45, 1, t));
+
+      const fall: Ctl[] = [];
+      for (let i = 0; i < rings; i += 1) {
+        const t = i / (rings - 1);
+        // Onde o neon entra. A primeira versão abria o degradê no
+        // alto e chegava a noventa por cento de limão na altura do
+        // pescoço: de frente, a personagem ganhava um capuz verde
+        // que engolia o queixo e o ombro. A arte faz o contrário —
+        // a massa é escura, e a luz é **ponta**.
+        //
+        // Então o neon só começa abaixo da linha do ombro e cresce
+        // até as pontas, onde para em 0,88: mesmo na ponta sobra um
+        // fundo escuro por baixo do verde, que é o que diferencia
+        // mecha acesa de tinta chapada.
+      //
+      // A faixa acesa desceu mais uma vez depois do teste de frente:
+      // com o neon começando na altura da cintura, ele vazava pelo
+      // vão entre o braço e o tronco e virava uma mancha verde no
+      // quadril — de frente parecia defeito, não cabelo. Agora o
+      // brilho vive no terço final, que é onde a arte o põe.
+      const neon = smoothstep(0.36, 0, t);
+        // Dentro do neon, limão na transição e turquesa na ponta.
+      const matiz = tint(limao, turquesa, smoothstep(0.24, 0, t));
+        const cor = tint(hair, matiz, neon * 0.88);
+        fall.push({
+          y: yOf(t),
+          rx: rxOf(t),
+          rz: R * 0.2,
+          rzBack: rzBackOf(t),
+          z: zcOf(t),
+          color: cor,
+          // O neon emite; a raiz, não. O corte acompanha a rampa de
+          // cor — acender um anel que ainda está escuro produz uma
+          // faixa cinzenta brilhante no meio do cabelo, que é
+          // emenda, não degradê.
+          finish: neon > 0.3 ? Finish.Holo : Finish.Hair,
+          bone: Bone.Head,
+          bone2: Bone.Torso,
+          blend: 0.88 * (1 - smoothstep(cy - 0.54, cy - 0.1, yOf(t))),
+        });
+      }
+      b.loft(toStations(fall), { segments, capBottom: R * 0.07, capRings: 2 });
+
+      // O risco no alto da cabeça: sem ele a calota é uma superfície
+      // lisa e o penteado lê como touca. Vale para qualquer cabelo
+      // longo, e custou uma rodada no marco da Nexara.
+      if (detail.segments >= 14) b.feature([0, cy + 0.2, R * 0.1], [R * 0.1, R * 0.34, R * 1.0], -R * 0.08, [0, 1, 0]);
+
+      // As ranhuras entre as mechas: três canais verticais contínuos
+      // na face de trás. O número e o espaçamento não são estéticos —
+      // a face de trás tem dez vértices, um a cada dezoito graus, e
+      // um sulco precisa ser mais largo que esse passo para existir.
+      // Quatro canais se sobrepunham e afundavam as costas inteiras;
+      // três deixam crista entre um vinco e outro, que é o que faz
+      // uma mecha ser vista.
+      if (detail.segments >= 14) {
+        for (const base of [-0.88, 0, 0.88]) {
+          for (let t = 0.1; t <= 0.86; t += 0.095) {
+            const az = Math.PI + base * (1 + 0.22 * (1 - t));
+            const sx = Math.sin(az);
+            const sz = Math.cos(az);
+            const fade = smoothstep(0.06, 0.26, t) * (1 - smoothstep(0.72, 0.92, t));
+            b.feature(
+              [sx * rxOf(t), yOf(t), zcOf(t) + sz * rzBackOf(t)],
+              [R * 0.24, R * 0.5, R * 0.24],
+              -R * 0.16 * (0.45 + 0.55 * fade),
+              [sx, 0, sz],
+            );
+          }
+        }
+      }
+
+      buildSonicHeadset(b, detail, cy, R);
+      break;
+    }
     case 'rabo': {
       const tail: Ctl[] = [
         { y: cy - 0.17, rx: R * 0.1, rz: R * 0.1, z: -R * 1.42, color: dark, bone: Bone.Head },
@@ -1839,6 +2166,68 @@ function buildDiadem(b: SurfaceBuilder, detail: BodyDetail, cy: number, R: numbe
  * lêem como órbita — é o mesmo truque do átomo de livro escolar, e
  * funciona pela mesma razão.
  */
+/**
+ * Os fones de frequência da Lilly.
+ *
+ * Os fones são a assinatura dela desde sempre — e é justamente por
+ * isso que **não** foi o acessório `fones` que mudou. Aquele está em
+ * `CITIZEN_ACCESSORIES`: remasterizá-lo poria vidro aceso na cabeça
+ * de todo habitante que passa de fone na praça. O que é de uma deusa
+ * não pode estar no sorteio.
+ *
+ * Então existe este par, que é dela: arco de vidro, conchas com uma
+ * fresta acesa, presos ao osso da cabeça dentro da malha única. Vêm
+ * com o penteado, como o diadema da Suki-Chan vem com a Cascata e os
+ * anéis da Nexara vêm com o Fluxo.
+ */
+function buildSonicHeadset(b: SurfaceBuilder, detail: BodyDetail, cy: number, R: number): void {
+  const head: SkinBinding = { bone: Bone.Head };
+  const segs = Math.max(8, Math.round(detail.segments * 0.8));
+  const ciano = 0x29c8ff;
+
+  // Por que o fone é escuro.
+  //
+  // A primeira versão usou gelo (`0xdff3ff`) no arco e nas conchas.
+  // Renderizado: duas bolas brancas nas orelhas e uma tira branca no
+  // alto, a coisa mais clara da personagem inteira — num traje
+  // escuro, o acessório virou o assunto. O Criador pediu **vidro e
+  // luz**, e vidro escuro com uma fresta acesa é exatamente isso:
+  // o casco recua, e o que brilha é só o anel ciano.
+  const casco = 0x1b2030;
+
+  // O arco, por cima da calota. Meia volta basta: a outra metade
+  // ficaria enterrada no cabelo, custando triângulos que ninguém vê.
+  // Tubo fino — vidro grosso já foi reprovado por ler como aro de
+  // natação, no marco da Suki.
+  const band = new THREE.TorusGeometry(R * 1.14, R * 0.038, 4, segs, Math.PI);
+  b.addGeometry(band, { color: casco, finish: Finish.Glass, skin: head }, new THREE.Matrix4().makeTranslation(0, cy + 0.02, 0));
+
+  for (const side of [-1, 1]) {
+    // A concha: achatada contra a orelha, não uma lata pregada na
+    // cabeça. A orelha desta cabeça chega a `1,025·R` — medido no
+    // marco da Nexara —, então a concha começa fora disso.
+    const cup = new THREE.CylinderGeometry(R * 0.3, R * 0.27, R * 0.13, segs);
+    b.addGeometry(
+      cup,
+      { color: casco, finish: Finish.Glass, skin: head },
+      new THREE.Matrix4().makeRotationZ(Math.PI / 2).setPosition(side * R * 1.08, cy + 0.012, 0),
+    );
+    // A fresta acesa na face externa da concha: é o que transforma
+    // vidro em equipamento ligado. Um anel fino, só para fora, com
+    // raio menor que o da concha — assim sobra borda escura em
+    // volta e a luz fica contida, em vez de virar um disco aceso do
+    // tamanho da orelha.
+    if (detail.segments >= 14) {
+      const slit = new THREE.CylinderGeometry(R * 0.17, R * 0.17, R * 0.03, segs);
+      b.addGeometry(
+        slit,
+        { color: ciano, finish: Finish.Holo, skin: head },
+        new THREE.Matrix4().makeRotationZ(Math.PI / 2).setPosition(side * R * 1.15, cy + 0.012, 0),
+      );
+    }
+  }
+}
+
 function buildOrbitRings(b: SurfaceBuilder, detail: BodyDetail, cy: number, R: number): void {
   const head: SkinBinding = { bone: Bone.Head };
   const segs = Math.max(10, Math.round(detail.segments * 0.85));

@@ -6,7 +6,7 @@ import { type Rng, clamp, pick } from '../utils/math';
  * valores desconhecidos são substituídos pelo padrão em `sanitizeAppearance`.
  */
 
-export const HAIR_STYLES = ['curto', 'longo', 'ondulado', 'cascata', 'fluxo', 'rabo', 'coque', 'cacheado', 'espetado', 'careca'] as const;
+export const HAIR_STYLES = ['curto', 'longo', 'ondulado', 'cascata', 'fluxo', 'onda', 'rabo', 'coque', 'cacheado', 'espetado', 'careca'] as const;
 export type HairStyle = (typeof HAIR_STYLES)[number];
 export const HAIR_LABELS: Record<HairStyle, string> = {
   curto: 'Curto',
@@ -14,6 +14,7 @@ export const HAIR_LABELS: Record<HairStyle, string> = {
   ondulado: 'Longo ondulado',
   cascata: 'Cascata',
   fluxo: 'Fluxo',
+  onda: 'Onda',
   rabo: 'Rabo de cavalo',
   coque: 'Coque',
   cacheado: 'Cacheado',
@@ -33,10 +34,15 @@ export const HAIR_LABELS: Record<HairStyle, string> = {
  * os dois anéis de rede que orbitam a cabeça dela. Um habitante
  * qualquer com anéis orbitais não é um habitante com um penteado
  * bonito, é outra deusa.
+ *
+ * A Onda é da Lilly, e carrega os fones de frequência dela. O
+ * acessório `fones` comum continua no sorteio e continua sendo o
+ * mesmo de sempre — o que sai do sorteio é o par de vidro que acende,
+ * que é peça de deusa.
  */
-export const CITIZEN_HAIR_STYLES = HAIR_STYLES.filter((h) => h !== 'cascata' && h !== 'fluxo');
+export const CITIZEN_HAIR_STYLES = HAIR_STYLES.filter((h) => h !== 'cascata' && h !== 'fluxo' && h !== 'onda');
 
-export const OUTFITS = ['casual', 'aero', 'vestido', 'esportivo', 'praia', 'aurora', 'docente', 'rede'] as const;
+export const OUTFITS = ['casual', 'aero', 'vestido', 'esportivo', 'praia', 'aurora', 'docente', 'rede', 'sonora'] as const;
 export type Outfit = (typeof OUTFITS)[number];
 /**
  * O que um habitante qualquer pode vestir.
@@ -49,8 +55,12 @@ export type Outfit = (typeof OUTFITS)[number];
  * da Nexara pela mesma razão outra vez — este com um véu que acende
  * sozinho, o que o torna ainda mais difícil de confundir com roupa
  * de passante.
+ *
+ * O Traje Sonora da Lilly fecha a lista: ele traz um equalizador
+ * aceso em volta do quadril, e nada do que um habitante veste faz
+ * barulho de luz.
  */
-export const CITIZEN_OUTFITS = OUTFITS.filter((o) => o !== 'aurora' && o !== 'docente' && o !== 'rede');
+export const CITIZEN_OUTFITS = OUTFITS.filter((o) => o !== 'aurora' && o !== 'docente' && o !== 'rede' && o !== 'sonora');
 export const OUTFIT_LABELS: Record<Outfit, string> = {
   casual: 'Casual',
   aero: 'Traje Aero',
@@ -60,6 +70,7 @@ export const OUTFIT_LABELS: Record<Outfit, string> = {
   aurora: 'Manto Aurora',
   docente: 'Vestido Docente',
   rede: 'Traje Rede',
+  sonora: 'Traje Sonora',
 };
 
 export const ACCESSORIES = ['nenhum', 'oculos', 'fones', 'chapeu', 'flor', 'cristal', 'aureola', 'lentes'] as const;

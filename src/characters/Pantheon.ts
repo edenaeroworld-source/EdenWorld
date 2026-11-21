@@ -698,15 +698,22 @@ const LILLY: EdenCharacter = {
   name: 'Lilly',
   title: 'Deusa da Música e da Vibração',
   domain: ['Música', 'Som', 'Cultura musical', 'Vibração', 'Tecnologia de áudio'],
-  colors: ['#8fd6ff', '#5a3fe0'],
+  colors: ['#2ee8c0', '#9dfb57'],
   tagline: 'Afina Aurora City pelo Palco Aurora.',
   bio: [
     'Lilly cuida de tudo que vibra: música, som, acústica das praças, shows.',
     'Divide o calendário do Éden entre Bitnara, a capital do K-pop, e SkyStones, a capital do rock — e passa em Aurora City sempre que há palco livre.',
   ],
   place: { x: 90, z: 160, heading: facing(90, 160, 0, 0), label: 'Palco Aurora' },
-  appearance: look('#cf8f63', 'rabo', '#7fd6ff', '#7a5cc9', 'esportivo', '#1b82ea', '#2e3a4f', '#29c8ff', 'fones', 1.0),
-  aura: 0x8fd6ff,
+  // Lilly 2.0. A pele e os olhos são os de sempre — remasterizar não
+  // é trocar de pessoa —, e o violeta dos olhos é o que a ficha já
+  // trazia, agora mais luminoso.
+  //
+  // `accessory: 'nenhum'` não é descuido: os fones dela vêm com o
+  // penteado Onda, em vidro e luz. O acessório `fones` comum continua
+  // existindo, intocado, para quem quiser na praça.
+  appearance: look('#cf8f63', 'onda', '#161b2a', '#b98cff', 'sonora', '#171a26', '#121520', '#29c8ff', 'nenhum', 1.0),
+  aura: 0x2ee8c0,
   contact: {
     handle: '@lilly',
     status: 'Som na caixa, coração no peito.',
