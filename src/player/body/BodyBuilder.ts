@@ -148,11 +148,21 @@ export function buildBodyGeometry(a: AvatarAppearance, p: BodyProportions, m: Bo
   // pano opaco em cima, luz embaixo —, e é também o que a separa das
   // outras três deusas, todas claras da cabeça aos pés.
   const sonora = outfit === 'sonora';
-  const longSleeves = outfit === 'aero' || aurora || rede || sonora;
+  // O Traje Cosplay, da Akemi-Chan: uniforme marinheiro — gola, laço
+  // grande e saia plissada curta — sob um haori longo e aberto. Duas
+  // camadas, como a arte dela mostra, e é a primeira vez que um traje
+  // do Éden tem camada sobre camada.
+  //
+  // A saia fica **curta**: ela não entra na lista de barra longa
+  // logo abaixo, e é isso que a separa do Manto Aurora e do Sonora.
+  // A silhueta dela é ampla em cima (cachos) e leve embaixo, e saia
+  // longa inverteria exatamente essa leitura.
+  const cosplay = outfit === 'cosplay';
+  const longSleeves = outfit === 'aero' || aurora || rede || sonora || cosplay;
   const bareArms = outfit === 'esportivo' || outfit === 'vestido';
   const longPants = outfit === 'casual' || outfit === 'aero' || rede;
-  const bareLegs = outfit === 'vestido' || docente;
-  const dress = outfit === 'vestido' || aurora || docente || sonora;
+  const bareLegs = outfit === 'vestido' || docente || cosplay;
+  const dress = outfit === 'vestido' || aurora || docente || sonora || cosplay;
   // Dois acabamentos, e a diferença entre eles é deliberada.
   //
   // `cloth` é o que vale para o que se **acrescenta** por cima do
@@ -168,6 +178,19 @@ export function buildBodyGeometry(a: AvatarAppearance, p: BodyProportions, m: Bo
   // O Sonora segue o Manto Aurora e pela mesma lógica invertida: a
   // saia é vidro porque é camada de som, e a jaqueta é pano porque é
   // jaqueta. Um traje inteiro de vidro escuro vira plástico.
+  // O Cosplay entra em vidro pelo haori: a arte mostra um casaco que
+  // deixa ver o uniforme por baixo. Translucidez de verdade não
+  // existe aqui — não há `transmission` em nenhuma das sete tabelas
+  // de acabamento —, então o que sugere a camada é o reflexo do
+  // vidro, como foi feito na saia da Lilly.
+  // O Cosplay **não** entra aqui, e isso é uma correção.
+  //
+  // `cloth` é o acabamento de base do traje inteiro — torso, braços e
+  // pernas. Pôr o Cosplay em vidro marcou a perna toda como `Glass`,
+  // e o `subdivideProfile` (que descarta `finish` e trava o anel na
+  // estação mais próxima) espalhou isso até sobre a pele: a coxa nua
+  // renderizava envernizada. O vidro do haori é pedido peça a peça,
+  // onde ele de fato existe, e a base continua sendo pano.
   const cloth: FinishId = aurora || rede || sonora ? Finish.Glass : Finish.Cloth;
   const suit: FinishId = rede ? Finish.Glass : Finish.Cloth;
 
@@ -187,7 +210,7 @@ export function buildBodyGeometry(a: AvatarAppearance, p: BodyProportions, m: Bo
   // A barra longa é a mesma do Manto Aurora: abaixo de `GOWN_HEM_Y` a
   // saia deixa de abrir como cone e vira coluna, que é o que separa
   // um vestido longo de uma tenda.
-  if (dress) buildSkirt(b, m, detail, dress && sonora ? bottom : top, origins, aurora || docente || sonora ? GOWN_HEM_Y : SKIRT_HEM_Y);
+  if (dress) buildSkirt(b, m, detail, dress && (sonora || cosplay) ? bottom : top, origins, cosplay ? COSPLAY_HEM_Y : aurora || docente || sonora ? GOWN_HEM_Y : SKIRT_HEM_Y);
 
   // A oclusão é a última coisa antes de fechar a malha: ela precisa do
   // corpo inteiro montado para saber o que esconde o quê. É daqui que
@@ -310,6 +333,9 @@ function buildTorso(b: SurfaceBuilder, ctx: TorsoCtx): void {
   }
   if (outfit === 'sonora') {
     buildSonoraSuit(b, m, detail, top, accent, torso, hip);
+  }
+  if (outfit === 'cosplay') {
+    buildCosplaySuit(b, m, detail, top, accent, torso, hip);
   }
 
   if (outfit === 'aero') {
@@ -457,6 +483,202 @@ function buildNetSuit(
  * entram por `addGeometry` na malha única, presos ao osso do quadril
  * e do tronco, e acompanham a animação sem uma linha de código.
  */
+/**
+ * O Traje Cosplay, da Akemi-Chan — uniforme marinheiro sob um haori.
+ *
+ * Duas camadas, que é o que a arte dela mostra e o que nenhum outro
+ * traje do Éden tinha: por baixo um uniforme escolar com gola
+ * marinheira e laço; por cima um casaco longo, aberto, de mangas
+ * largas.
+ *
+ * O haori é a peça difícil. Na arte ele é translúcido, e translúcido
+ * aqui não existe — não há `transmission`, `transparent` nem
+ * `opacity` em nenhuma das sete tabelas de acabamento. O que o faz
+ * ler como casaco por cima, e não como pintura no tronco, é a
+ * **borda**: duas lapelas que descem do ombro à barra, afastadas do
+ * corpo o suficiente para pegarem luz pela aresta. A silhueta faz o
+ * trabalho que a transparência faria.
+ */
+function buildCosplaySuit(
+  b: SurfaceBuilder,
+  m: BodyMetrics,
+  detail: BodyDetail,
+  top: Hex,
+  accent: Hex,
+  torso: readonly [number, number, number],
+  hip: readonly [number, number, number],
+): void {
+  const chest = { skin: { bone: Bone.Torso }, zone: MorphZone.Bust, origin: torso } as const;
+  const lilas = 0xc9a7ff;
+  const rosa = 0xffc1d6;
+  // O magenta canônico da ficha dela. A gola saiu branca na primeira
+  // captura, sobre um torso branco: sumiu. Gola marinheira só existe
+  // por contraste — é a cor dela que diz o que a peça é.
+  const magenta = 0xe0417f;
+
+  // --- a gola marinheira ---
+  //
+  // Ela é uma placa quadrada caída nas costas, não um anel: gola de
+  // marinheiro é justamente isso, e um anel no pescoço já existe no
+  // Aurora e no Rede. Três faixas achatadas, descendo do ombro.
+  const golaY = m.waist + m.shoulderY - 0.035;
+  b.addGeometry(
+    new THREE.BoxGeometry(m.shoulderX * 1.42, 0.085, 0.012),
+    { color: lilas, finish: Finish.Cloth, ...chest },
+    new THREE.Matrix4().makeRotationX(-0.22).setPosition(0, golaY - 0.03, -m.waistWidth * WAIST_DEPTH - 0.008),
+  );
+  for (const side of [1, -1]) {
+    // A tira que passa por cima do ombro.
+    //
+    // Sem ela a gola eram duas placas soltas grudadas no peito, que
+    // foi exatamente como a captura leu: remendo, não gola. Gola
+    // marinheira é **uma peça só** que desce das costas, cruza o
+    // ombro e termina na frente — e é esse caminho contínuo que o
+    // olho reconhece.
+    b.addGeometry(
+      new THREE.BoxGeometry(0.085, 0.013, 0.175),
+      { color: lilas, finish: Finish.Cloth, ...chest },
+      new THREE.Matrix4().makeRotationZ(side * 0.14).setPosition(side * 0.088, golaY + 0.012, -0.012),
+    );
+    // As duas pontas que caem na frente, convergindo para o laço: é
+    // o V que fecha o desenho.
+    b.addGeometry(
+      new THREE.BoxGeometry(0.062, 0.145, 0.011),
+      { color: lilas, finish: Finish.Cloth, ...chest },
+      new THREE.Matrix4().makeRotationZ(-side * 0.38).setPosition(side * 0.064, golaY - 0.05, 0.113),
+    );
+  }
+  // A listra da gola, que é o que diz "marinheiro" e não "colarinho".
+  b.addGeometry(
+    new THREE.BoxGeometry(m.shoulderX * 1.3, 0.014, 0.013),
+    { color: magenta, finish: Finish.Cloth, ...chest },
+    new THREE.Matrix4().makeRotationX(-0.22).setPosition(0, golaY - 0.062, -m.waistWidth * WAIST_DEPTH - 0.012),
+  );
+
+  // --- o laço ---
+  //
+  // Grande de propósito: na arte ele é o centro do peito, e é o que
+  // o olho acha primeiro num traje claro. Duas alças e um nó.
+  //
+  // De perto ele é redondo; de longe, três caixas. Três `ball` de
+  // cinco anéis custam mais de trezentos triângulos, e a silhueta de
+  // um laço a três metros é a mesma com caixa ou com bola.
+  // O peito dela tem frente em `z ≈ 0,111` nessa altura, medido na
+  // malha. A primeira versão pôs o laço em `0,082`: ele existia,
+  // ocupava triângulos e estava **enterrado dentro do torso**. Toda
+  // cota aqui é maior que a frente medida, de propósito.
+  const lacoY = golaY - 0.085;
+  if (detail.segments >= 14) {
+    for (const side of [1, -1]) {
+      b.ball([side * 0.046, lacoY, 0.121], [0.04, 0.029, 0.017], { color: magenta, finish: Finish.Cloth, ...chest }, 5);
+    }
+    b.ball([0, lacoY, 0.132], [0.021, 0.021, 0.015], { color: top, finish: Finish.Cloth, ...chest }, 5);
+  } else {
+    for (const side of [1, -1]) {
+      b.addGeometry(
+        new THREE.BoxGeometry(0.07, 0.05, 0.03),
+        { color: magenta, finish: Finish.Cloth, ...chest },
+        new THREE.Matrix4().makeTranslation(side * 0.046, lacoY, 0.121),
+      );
+    }
+    b.addGeometry(
+      new THREE.BoxGeometry(0.034, 0.034, 0.026),
+      { color: top, finish: Finish.Cloth, ...chest },
+      new THREE.Matrix4().makeTranslation(0, lacoY, 0.132),
+    );
+  }
+
+  // --- o haori ---
+  //
+  // Duas lapelas longas, do ombro à barra da saia, afastadas do
+  // tronco. Em vidro: é a camada de cima, e é ela que reflete.
+  for (const side of [1, -1]) {
+    // Largas e para fora: em `waistWidth * 1,02` elas corriam por
+    // dentro do contorno do tronco e liam como suspensório. O casaco
+    // só existe como casaco quando **ultrapassa** a silhueta do
+    // corpo — é a borda dele contra o fundo que conta a peça.
+    const lapela = new THREE.BoxGeometry(0.085, 0.54, 0.014);
+    b.addGeometry(
+      lapela,
+      { color: lilas, finish: Finish.Glass, ...chest },
+      new THREE.Matrix4().makeRotationZ(side * 0.055).setPosition(side * (m.waistWidth * 1.38), 0.11, m.waistWidth * WAIST_DEPTH * 0.62),
+    );
+    // A barra do haori, atrás, onde o casaco abre.
+    b.addGeometry(
+      new THREE.BoxGeometry(0.09, 0.48, 0.013),
+      { color: lilas, finish: Finish.Glass, ...chest },
+      new THREE.Matrix4().makeRotationZ(side * 0.09).setPosition(side * (m.waistWidth * 1.42), 0.08, -m.waistWidth * WAIST_DEPTH * 0.72),
+    );
+  }
+
+  // --- a faixa da cintura ---
+  const faixa = flatRing(m.waistWidth * 1.06, WAIST_DEPTH, 0.022, Math.max(12, detail.segments));
+  b.addGeometry(faixa, { color: accent, finish: Finish.Cloth, ...chest }, new THREE.Matrix4().makeRotationX(Math.PI / 2).setPosition(0, 0.14, 0));
+
+  if (detail.segments < 14) return;
+
+  // --- o plissado da saia ---
+  //
+  // Relevo, não geometria: a saia é compartilhada com o vestido comum
+  // e não pode ser alterada, mas `feature()` empurra vértices que já
+  // existem. Custa zero triângulo e é o que separa uma saia plissada
+  // de um cone liso.
+  //
+  // O vinco precisa cair **sobre** o cone, e o cone muda de raio a
+  // cada altura. A primeira versão usou um raio fixo (`hipWidth`
+  // vezes 1,6 em x e 1,45 em z): na barra ficava para dentro do
+  // tecido, no alto ficava para fora, e o plissado não apareceu em
+  // lugar nenhum. Aqui o raio é recalculado por altura com a mesma
+  // conta do `buildSkirt`, então o vinco acompanha a abertura.
+  void hip;
+  const hemRx = m.hipWidth * 1.9;
+  const cintura = m.waistWidth * 1.04;
+  const raioEm = (y: number): number => {
+    const t = Math.max(0, Math.min(1, (y - COSPLAY_HEM_Y) / (0.09 - COSPLAY_HEM_Y)));
+    return cintura + (hemRx - cintura) * (1 - t) ** 1.45;
+  };
+  const pregas = detail.segments >= 26 ? 18 : 10;
+  for (let i = 0; i < pregas; i += 1) {
+    const az = (i / pregas) * Math.PI * 2;
+    for (let yy = -0.25; yy <= -0.07; yy += 0.04) {
+      const r = raioEm(yy);
+      b.feature([Math.sin(az) * r, yy, Math.cos(az) * r * 0.94], [0.021, 0.08, 0.021], -0.024);
+    }
+  }
+
+  // --- os cartões holográficos ---
+  //
+  // Os mundos que a arte põe ao redor dela. Não viram anéis: anel
+  // orbitando o corpo já é a assinatura da Nexara, e repetir o
+  // recurso faria as duas lerem igual. Viram **cartões achatados**,
+  // que é a outra coisa que a arte mostra flutuando ao lado dela —
+  // painéis de interface com retratos e glifos.
+  //
+  // Abertos em leque atrás dos ombros e presos ao tronco: acompanham
+  // a personagem, não flutuam soltos, e não custam chamada de
+  // desenho porque são geometria mesclada no corpo.
+  // Em leque atrás dos ombros eles ficavam **invisíveis**: o corpo
+  // tapa de frente e a juba tapa o resto. Um detalhe que só existe
+  // em código não melhora personagem nenhuma. Agora o leque sobe ao
+  // lado dela, como uma mão de cartas aberta, onde a câmera o vê.
+  //
+  // Fora do corredor do braço de propósito: a varredura vai até
+  // `|x| = 0,28`, e o leque começa em `0,31`.
+  const cartoes = detail.segments >= 26 ? 5 : 3;
+  for (let i = 0; i < cartoes; i += 1) {
+    const t = i / (cartoes - 1);
+    const card = new THREE.BoxGeometry(0.072, 0.092, 0.005);
+    // Alterna a cor: um cartão rosa, um lilás. Dois tons bastam para
+    // o leque não ler como uma placa só.
+    const cor = i % 2 === 0 ? rosa : lilas;
+    const place = new THREE.Matrix4()
+      .makeRotationY(-0.55 - t * 0.3)
+      .multiply(new THREE.Matrix4().makeRotationZ(-0.22 - t * 0.26))
+      .setPosition(0.35 + t * 0.085, m.waist + 0.12 + t * 0.165, 0.045 - t * 0.02);
+    b.addGeometry(card, { color: cor, finish: Finish.Holo, ...chest }, place);
+  }
+}
+
 function buildSonoraSuit(
   b: SurfaceBuilder,
   m: BodyMetrics,
@@ -694,6 +916,17 @@ const PELVIS_PROFILE: readonly { y: number; w: number; rz: number; rzBack: numbe
 const HIP_JOINT_Y = -0.02;
 /** Onde a barra da saia termina — acima do joelho. */
 const SKIRT_HEM_Y = -0.36;
+/**
+ * A barra da saia do Traje Cosplay.
+ *
+ * Dez centímetros acima da saia curta comum. Não é capricho: a meia
+ * alta começa em `joelho + 0,10`, e com a barra em −0,36 a saia
+ * terminava **abaixo** do cano da meia. O resultado era perna
+ * inteiramente coberta — a silhueta sumia e a personagem lia como
+ * vestido comprido. Com a barra em −0,26 sobra um vão de pele entre
+ * a bainha e a meia, que é exatamente o que a arte mostra.
+ */
+const COSPLAY_HEM_Y = -0.26;
 /**
  * A barra do Manto Aurora, que é um vestido longo.
  *
@@ -1115,7 +1348,18 @@ function buildLeg(b: SurfaceBuilder, side: 1 | -1, ctx: LegCtx): void {
 
   const thighColor = bareLegs ? skin : bottom;
   const shortPants = !longPants && !bareLegs;
-  const kneeColor = longPants ? bottom : skin;
+  // A meia alta do Traje Cosplay.
+  //
+  // Ela não é geometria: a perna já é uma varredura com cor por anel,
+  // e a meia é um degrau nessa cor a partir do meio da coxa. Custa
+  // zero triângulo e zero chamada de desenho — e `withFinish`
+  // classifica sozinho, porque a cor deixa de ser a da pele e passa
+  // a contar como pano.
+  //
+  // A arte põe a barra da meia bem acima do joelho, logo abaixo da
+  // saia curta: é esse vão curto de pele que faz a silhueta dela.
+  const stocking = outfit === 'cosplay' ? 0xf7f3ff : undefined;
+  const kneeColor = stocking ?? (longPants ? bottom : skin);
   const r = m.legTop;
 
   const control: Ctl[] = [
@@ -1123,7 +1367,16 @@ function buildLeg(b: SurfaceBuilder, side: 1 | -1, ctx: LegCtx): void {
     { y: hipY - 0.02, rx: r * 1.02, rz: r, x, color: thighColor, bone: thighBone, zone: MorphZone.Thigh, origin: thighOrigin },
     { y: hipY - 0.1, rx: r * 0.96, rz: r * 0.95, x, color: thighColor, bone: thighBone, zone: MorphZone.Thigh, origin: thighOrigin },
     { y: (hipY + kneeY) * 0.5, rx: r * 0.86, rz: r * 0.86, x, color: shortPants ? thighColor : thighColor, bone: thighBone },
-    { y: kneeY + 0.1, rx: r * 0.78, rz: r * 0.78, x, color: shortPants ? skin : thighColor, bone: thighBone },
+    { y: kneeY + 0.1, rx: r * 0.78, rz: r * 0.78, x, color: shortPants && !stocking ? skin : thighColor, bone: thighBone },
+    // O cano da meia é um **degrau**, não um degradê. Entre a
+    // estação de coxa e a do joelho havia sete centímetros e meio de
+    // interpolação: a cor da pele virava a cor da meia aos poucos e
+    // a perna inteira lia como coberta. Duas estações a dois
+    // centímetros uma da outra dão a barra nítida que a arte tem.
+    // Só nasce no Traje Cosplay; nenhum outro traje ganha anel.
+    ...(stocking === undefined
+      ? []
+      : ([{ y: kneeY + 0.082, rx: r * 0.766, rz: r * 0.766, x, color: stocking, bone: thighBone }] as Ctl[])),
     { y: kneeY + 0.055, rx: r * 0.735, rz: r * 0.755, x, color: kneeColor, bone: thighBone },
     // A mesma rampa do cotovelo, no joelho.
     { y: kneeY + 0.028, rx: r * 0.725, rz: r * 0.745, x, color: kneeColor, bone: thighBone, bone2: shinBone, blend: 0.2 },
@@ -2034,6 +2287,172 @@ function buildHair(b: SurfaceBuilder, a: AvatarAppearance, m: BodyMetrics, detai
       buildSonicHeadset(b, detail, cy, R);
       break;
     }
+    case 'cachos': {
+      // A juba da Akemi-Chan — e por que ela não é feita de bolas.
+      //
+      // O `cacheado` compartilhado resolve cacho com doze esferas
+      // coladas na cabeça. Custa geometria e lê como amora. Aqui a
+      // queda é uma varredura contínua, como a das outras deusas, e
+      // o cacho é **relevo**: `feature()` empurra vértices que já
+      // existem, então o campo inteiro de cachos custa **zero
+      // triângulos**. Nenhuma outra deusa usa esse recurso.
+      //
+      // A silhueta é o oposto da Lilly de propósito: lá, massa
+      // estreita e comprida; aqui, massa **larga e curta**, parando
+      // no ombro. Ampla em cima e leve embaixo, que é a leitura da
+      // arte dela e o que a saia plissada curta completa.
+      const topY = cy + 0.1;
+      const bottomY = cy - 0.3;
+      const rings = segments >= 26 ? 22 : segments >= 14 ? 14 : 5;
+      const yOf = (t: number): number => bottomY + (topY - bottomY) * t;
+      // Larga: chega a `1,34·R`, contra `1,12·R` da Lilly. Cabelo
+      // cacheado ocupa espaço, e é o volume que diz "cacheado" antes
+      // de qualquer relevo.
+      const rxOf = (t: number): number =>
+        R * (1.34 - 0.3 * smoothstep(0.55, 1, t)) * (1 - 0.34 * smoothstep(0.2, 0, t));
+      const rzBackOf = (t: number): number => R * (0.72 + 0.44 * t ** 0.8);
+      const zcOf = (t: number): number => -R * (0.3 - 0.24 * smoothstep(0.45, 1, t));
+
+      const fall: Ctl[] = [];
+      for (let i = 0; i < rings; i += 1) {
+        const t = i / (rings - 1);
+        fall.push({
+          y: yOf(t),
+          rx: rxOf(t),
+          rz: R * 0.34,
+          rzBack: rzBackOf(t),
+          z: zcOf(t),
+          // Castanho da arte, clareando de leve na ponta — é luz
+          // batendo em cacho, não degradê de cor.
+          color: tint(dark, hair, smoothstep(0.75, 0.1, t)),
+          bone: Bone.Head,
+          bone2: Bone.Torso,
+          blend: 0.72 * (1 - smoothstep(cy - 0.26, cy + 0.02, yOf(t))),
+        });
+      }
+      // Sem `subdivideProfile`: ela trava a cor na estação mais
+      // próxima e descarta o acabamento. Lição do marco da Lilly.
+      b.loft(toStations(fall), { segments, capBottom: R * 0.12, capRings: 2 });
+
+      if (detail.segments >= 14) {
+        // O campo de cachos.
+        //
+        // O raio de cada bolha precisa ser maior que o vão entre
+        // vértices, senão o relevo não existe na tela — medido no
+        // marco da Nexara. Com `segments` anéis na volta e raio
+        // `1,3·R`, o passo lateral fica perto de `R·0,19`; as
+        // bolhas saem em `R·0,3`, com folga.
+        //
+        // As posições vêm de uma espiral, não de um sorteio: cacho
+        // sorteado agrupa e deixa calva. A espiral de ângulo áureo
+        // distribui sem repetir vizinho.
+        // O cacho precisa nascer **em cima da superfície**, e a
+        // superfície não é um círculo. A primeira versão espalhou as
+        // bolhas num círculo de raio `1,2·R` no plano XZ; a queda,
+        // porém, é uma elipse rasa — `rz` vale `0,34·R` na frente
+        // contra `1,16·R` atrás, e o centro dela ainda recua até
+        // `−0,3·R`. Metade das bolhas caiu no ar, longe de qualquer
+        // vértice, e o cabelo renderizou liso feito capacete. A
+        // captura mostrou isso antes de qualquer outra coisa.
+        //
+        // Agora cada bolha é avaliada na mesma parametrização do
+        // `loft`: escolhe-se o anel `t` e o azimute, e o ponto sai
+        // da própria elipse daquele anel.
+        // O relevo para antes da calota, e isso não é estética: é a
+        // condição para o crânio continuar redondo.
+        //
+        // `feature()` empurra **todo** vértice ao alcance, e alcance
+        // é três vezes o raio da bolha. No alto da queda o cabelo
+        // encosta na cabeça — em `t = 0,95` o perfil vale `1,05·R`
+        // contra um crânio de `0,90·R` a `1,01·R`, ou seja menos de
+        // um centímetro de folga. Bolha ali empurrava o osso junto:
+        // medidos 1 107 vértices de pele deslocados, calombo de até
+        // 35 mm, e a variação de raio do crânio saltando de 20 mm
+        // (normal) para 48 mm. A cabeça saía ovalada.
+        //
+        // Abaixo de `t = 0,74` a queda já se afastou: sobram mais de
+        // sete centímetros até o crânio, e com raio `0,22·R` o peso
+        // gaussiano que chega lá é da ordem de 0,007 — menos de um
+        // décimo de milímetro. A coroa fica lisa, que é como cabelo
+        // cacheado se comporta na raiz de todo modo.
+        //
+        // E limitar por altura não basta. A seção da queda é uma
+        // elipse **rasa na frente**: nos azimutes frontais o ponto da
+        // elipse cai dentro do crânio, não do lado de fora dele. Foi
+        // assim que uma bolha nasceu em `x = 0,162 · y = 0,692 ·
+        // z = 0,009` — a sete milímetros da orelha, com peso
+        // gaussiano de 0,96 — e empurrou a lateral da cabeça 28 mm
+        // para fora. A cabeça saía amassada de um lado.
+        //
+        // Então o critério não é altura nem azimute: é **distância
+        // ao crânio**. Cada bolha é testada contra o elipsoide da
+        // cabeça, medido na própria malha — meia-largura `1,05·R` de
+        // lado, `1,12·R` de altura e `1,15·R` de frente a trás. Só
+        // passa quem estiver a um quarto de raio da casca; mais perto
+        // que isso, o relevo do cabelo vira relevo de osso.
+        //
+        // A meia-largura é `1,05·R`, e não a do crânio (`0,85·R`),
+        // por causa da **orelha**: ela se projeta até `1,03·R` e foi
+        // o último vazamento a cair. Com o elipsoide estreito a bolha
+        // passava no teste e ainda assim parava a um centímetro da
+        // orelha, amassando-a em 19 mm. O preço é que na faixa da
+        // orelha não nasce cacho de lado — que é como cabelo se
+        // comporta ali de todo modo, preso atrás dela.
+        const dentro = (x: number, y: number, z: number): boolean => {
+          const dx = x / (R * 1.05);
+          const dy = (y - cy) / (R * 1.12);
+          const dz = z / (R * 1.15);
+          return Math.sqrt(dx * dx + dy * dy + dz * dz) < 1.25;
+        };
+        const bolhas = detail.segments >= 26 ? 38 : 22;
+        for (let i = 0; i < bolhas; i += 1) {
+          const t = 0.04 + ((i + 0.5) / bolhas) * 0.7;
+          const az = i * 2.39996;
+          const cz = Math.cos(az);
+          const px = Math.sin(az) * rxOf(t);
+          const py = yOf(t);
+          const pz = zcOf(t) + cz * (cz >= 0 ? R * 0.34 : rzBackOf(t));
+          if (dentro(px, py, pz)) continue;
+          b.feature([px, py, pz], [R * 0.22, R * 0.22, R * 0.22], R * 0.17);
+        }
+      }
+
+      buildAkemiGlasses(b, detail, cy, R);
+
+      // As flores, no alto à direita, como na arte. Elas nascem aqui
+      // e não no acessório `flor`, que é compartilhado com os
+      // habitantes e não pode mudar.
+      //
+      // E só existem de perto. Uma flor são cinco `ball`, e `ball` é
+      // caro: cada uma vira uma varredura de oito segmentos com duas
+      // calotas, perto de oitenta triângulos. Medido, uma flor só
+      // custava quatrocentos triângulos no LOD de longe — era ela,
+      // sozinha, que estourava o teto. A três metros de distância
+      // uma pétala de dois centímetros não chega a um pixel.
+      const flores: Array<[number, number, number, number]> = detail.segments < 14 ? [] : [
+        [0.62, 0.15, 0.3, 1.0],
+        [0.9, 0.04, 0.12, 0.78],
+        [0.5, 0.21, -0.1, 0.68],
+      ];
+      for (let f = 0; f < flores.length; f += 1) {
+        const [fx, fy, fz, esc] = flores[f];
+        const cx = R * fx;
+        const cyf = cy + fy;
+        const cz = R * fz;
+        const petalas = detail.segments >= 26 ? 5 : 4;
+        for (let i = 0; i < petalas; i += 1) {
+          const angle = (i / petalas) * TAU;
+          b.ball(
+            [cx + Math.cos(angle) * R * 0.13 * esc, cyf + Math.sin(angle) * R * 0.13 * esc, cz],
+            [R * 0.1 * esc, R * 0.1 * esc, R * 0.06 * esc],
+            { color: 0xfff4fb, finish: Finish.Cloth, skin: { bone: Bone.Head } },
+            4,
+          );
+        }
+        b.ball([cx, cyf, cz + R * 0.04], [R * 0.07 * esc, R * 0.07 * esc, R * 0.05 * esc], { color: 0xffd84a, finish: Finish.Holo, skin: { bone: Bone.Head } }, 4);
+      }
+      break;
+    }
     case 'rabo': {
       const tail: Ctl[] = [
         { y: cy - 0.17, rx: R * 0.1, rz: R * 0.1, z: -R * 1.42, color: dark, bone: Bone.Head },
@@ -2180,6 +2599,56 @@ function buildDiadem(b: SurfaceBuilder, detail: BodyDetail, cy: number, R: numbe
  * com o penteado, como o diadema da Suki-Chan vem com a Cascata e os
  * anéis da Nexara vêm com o Fluxo.
  */
+/**
+ * Os óculos da Akemi-Chan — e por que eles não são o acessório comum.
+ *
+ * `oculos` está em `CITIZEN_ACCESSORIES`: é armação que habitante
+ * herda. Remasterizá-la onde ela mora mudaria o rosto de todo
+ * habitante sorteado com óculos.
+ *
+ * E há um segundo motivo, que decide sozinho: `appearance.accessory`
+ * é **um campo só**. Ela usa óculos *e* flores no cabelo. Nem que os
+ * dois fossem exclusivos caberiam os dois ali. Nascendo no penteado,
+ * cabem.
+ *
+ * A armação é redonda e lilás, como a arte mostra, e a lente é
+ * **vazada** — o aro sem disco opaco dentro. O acessório comum põe
+ * uma bola dentro do aro e lê como óculos de natação; o `lentes` do
+ * Haru já tinha descoberto isso, e aqui a lição se aproveita.
+ */
+function buildAkemiGlasses(b: SurfaceBuilder, detail: BodyDetail, cy: number, R: number): void {
+  const head: SkinBinding = { bone: Bone.Head };
+  const segs = Math.max(8, Math.round(detail.segments * 0.6));
+  const armacao = 0xc9a7ff;
+
+  for (const side of [-1, 1]) {
+    // O aro. Tubo fino: vidro grosso vira aro de natação, reprovado
+    // no marco da Suki.
+    const ring = new THREE.TorusGeometry(R * 0.27, R * 0.028, 4, segs);
+    b.addGeometry(
+      ring,
+      { color: armacao, finish: Finish.Glass, skin: head },
+      new THREE.Matrix4().makeTranslation(side * R * 0.37, cy + 0.022, R * 0.95),
+    );
+  }
+  // A ponte entre os dois aros.
+  b.addGeometry(
+    new THREE.BoxGeometry(R * 0.22, R * 0.035, R * 0.035),
+    { color: armacao, finish: Finish.Glass, skin: head },
+    new THREE.Matrix4().makeTranslation(0, cy + 0.03, R * 0.95),
+  );
+  if (detail.segments < 14) return;
+  // As hastes, que só aparecem de perfil — e é de perfil que um
+  // óculos sem haste denuncia que está flutuando no rosto.
+  for (const side of [-1, 1]) {
+    b.addGeometry(
+      new THREE.BoxGeometry(R * 0.5, R * 0.03, R * 0.03),
+      { color: armacao, finish: Finish.Glass, skin: head },
+      new THREE.Matrix4().makeRotationY(side * 0.38).setPosition(side * R * 0.62, cy + 0.03, R * 0.68),
+    );
+  }
+}
+
 function buildSonicHeadset(b: SurfaceBuilder, detail: BodyDetail, cy: number, R: number): void {
   const head: SkinBinding = { bone: Bone.Head };
   const segs = Math.max(8, Math.round(detail.segments * 0.8));

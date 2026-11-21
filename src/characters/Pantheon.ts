@@ -807,7 +807,17 @@ const AKEMI: EdenCharacter = {
     'Sua casa é a Cidade da Liberdade, o distrito criativo do Éden Aero, mas ela monta banca no Mercado Éden sempre que pode.',
   ],
   place: inFrontOf('mercado-eden'),
-  appearance: look('#ffe0c8', 'rabo', '#ff8fc0', '#7a5cc9', 'vestido', '#ffffff', '#ff6f91', '#ffc1d6', 'chapeu', 0.96),
+  // Remaster 2.0. Pele, olhos e altura vêm da ficha e não se mexem;
+  // `colors` e `aura` também ficam como estavam, de propósito — o
+  // rosa canônico dela continua sendo o rosa dela, agora vivendo no
+  // traje e nos acentos em vez do cabelo.
+  //
+  // O cabelo vai para o castanho da arte oficial, no estilo `cachos`,
+  // exclusivo. E `accessory` fica em 'nenhum' porque os óculos e as
+  // flores nascem dentro do penteado: `oculos`, `flor` e `chapeu`
+  // são acessórios que habitante herda e não podem ser remasterizados
+  // onde moram.
+  appearance: look('#ffe0c8', 'cachos', '#7d5636', '#7a5cc9', 'cosplay', '#f7f3ff', '#d98ac0', '#ffc1d6', 'nenhum', 0.96),
   aura: 0xff9ec6,
   contact: {
     handle: '@akemichan',
