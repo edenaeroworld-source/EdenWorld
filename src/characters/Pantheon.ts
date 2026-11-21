@@ -1105,11 +1105,16 @@ const JUPITER: EdenCharacter = {
   tagline: 'Assina a identidade visual do Éden.',
   bio: [
     'Júpiter cuida da arte do Éden Aero: pintura, design, instalação, identidade visual.',
-    'Cabelo vermelho, pele parda, olhar de quem já está enquadrando a próxima obra.',
+    'Cabelo vermelho em ondas longas, pele parda, olhar de quem já está enquadrando a próxima obra.',
+    'Veste o Traje Lumen, que ela mesma desenhou: drapeado claro com fitas de cor enroladas no corpo.',
     'O Pavilhão Lumen, a galeria holográfica de Aurora City, é o espaço dela.',
   ],
   place: inFrontOf('pavilhao-lumen'),
-  appearance: look('#cf8f63', 'cacheado', '#c0392b', '#3b2a20', 'vestido', '#ff9f43', '#2e3a4f', '#f3ead6', 'nenhum', 1.0),
+  // O branco translúcido do Traje Lumen vem de `topColor`; a cor que
+  // conta é a das fitas, que o traje tira da paleta canônica acima.
+  // O `bottomColor` antigo (`#2e3a4f`) não aparecia em lugar nenhum
+  // da malha — era campo morto.
+  appearance: look('#cf8f63', 'pincelada', '#c0392b', '#3b2a20', 'lumen', '#f7f2ee', '#ffb199', '#f3ead6', 'atelie', 1.0),
   aura: 0xff9f6a,
   contact: {
     handle: '@jupiter',

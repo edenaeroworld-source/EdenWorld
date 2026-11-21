@@ -185,11 +185,15 @@ export function buildBodyGeometry(a: AvatarAppearance, p: BodyProportions, m: Bo
   // que varre o chão; a `SKIRT_HEM_Y` do `vestido` que ela usava
   // parava no joelho.
   const jardim = outfit === 'jardim';
+  // O Traje Lumen da Júpiter. Usa a barra curta `SKIRT_HEM_Y`, que é
+  // a do `vestido` que ela deixou — a saia dela para no joelho, como
+  // na arte, e não varre o chão como a da Maze.
+  const lumen = outfit === 'lumen';
   const longSleeves = outfit === 'aero' || aurora || rede || sonora || cosplay || sistema;
-  const bareArms = outfit === 'esportivo' || outfit === 'vestido' || guardia || jardim;
+  const bareArms = outfit === 'esportivo' || outfit === 'vestido' || guardia || jardim || lumen;
   const longPants = outfit === 'casual' || outfit === 'aero' || rede || sistema;
-  const bareLegs = outfit === 'vestido' || docente || cosplay || guardia || jardim;
-  const dress = outfit === 'vestido' || aurora || docente || sonora || cosplay || guardia || jardim;
+  const bareLegs = outfit === 'vestido' || docente || cosplay || guardia || jardim || lumen;
+  const dress = outfit === 'vestido' || aurora || docente || sonora || cosplay || guardia || jardim || lumen;
   // Dois acabamentos, e a diferença entre eles é deliberada.
   //
   // `cloth` é o que vale para o que se **acrescenta** por cima do
@@ -369,6 +373,9 @@ function buildTorso(b: SurfaceBuilder, ctx: TorsoCtx): void {
   }
   if (outfit === 'sistema') {
     buildSystemSuit(b, m, detail, torso, hip);
+  }
+  if (outfit === 'lumen') {
+    buildLumenSuit(b, m, detail, torso, hip);
   }
   if (outfit === 'jardim') {
     buildGardenSuit(b, m, detail, torso, hip);
@@ -1071,6 +1078,296 @@ function buildSystemSuit(
  * de circuito. Traço reto, placa e painel são vocabulário da Haru e
  * da Nexara, e não entram aqui.
  */
+/**
+ * O Traje Lumen — da Júpiter, Deusa da Arte e da Criação Estética.
+ *
+ * O nome vem do **Pavilhão Lumen**, a galeria holográfica dela, que
+ * já estava na ficha e no diário muito antes deste marco. O traje é
+ * a obra que ela veste.
+ *
+ * Ela usava o `vestido`, genérico, laranja chapado, com um
+ * `bottomColor` azul-escuro que **não aparecia em lugar nenhum da
+ * malha**. O `vestido` não foi tocado: é peça de habitante, e
+ * continua inteiro para quem o herda.
+ *
+ * Três camadas, nesta ordem: o drapeado claro, que é a tela; as
+ * **fitas de cor** enroladas no corpo, que são a assinatura escolhida
+ * pelo Criador, carregando o gradiente pêssego → laranja → vermelho
+ * da paleta canônica; e os fios de ouro que correm na borda delas.
+ *
+ * O ouro é fino por fronteira, não por gosto: ouro **em massa** —
+ * galhada, folha, pata — é da Saturno, a vizinha quente dela no
+ * elenco. Aqui ele é traço de tinta.
+ */
+function buildLumenSuit(
+  b: SurfaceBuilder,
+  _m: BodyMetrics,
+  detail: BodyDetail,
+  torso: readonly [number, number, number],
+  hip: readonly [number, number, number],
+): void {
+  const chest = { skin: { bone: Bone.Torso }, zone: MorphZone.Bust, origin: torso } as const;
+  const quadril = { skin: { bone: Bone.Hips }, zone: MorphZone.Curve, origin: hip } as const;
+  // O gradiente sai da paleta canônica da ficha (`colors`), não dos
+  // campos de roupa: é o que garante que ela siga sendo a deusa
+  // vermelha mesmo que alguém vista o traje noutra cor.
+  const pessego = 0xffb199;
+  const laranja = 0xff8a4a;
+  const vermelho = 0xc0392b;
+  const ouro = 0xf0c95a;
+  const gradiente = (t: number): Hex => (t < 0.4 ? pessego : t < 0.74 ? laranja : vermelho);
+
+  /**
+   * Uma fita enrolada no corpo.
+   *
+   * O primeiro esboço errou o eixo: pôs a largura da fita na tangente
+   * do anel **horizontal**, não na perpendicular ao caminho que ela
+   * percorre. Como o caminho desce em espiral, cada trecho projetava
+   * uma aba para o lado, e a bancada devolveu uma serrilha que lia
+   * como **folha de palmeira** — justamente a leitura que a fronteira
+   * com a Saturno proíbe. A torção também reiniciava em cada trecho,
+   * o que serrilhava as junções.
+   *
+   * Agora o perfil é carregado por um triedro montado no ponto: `T`
+   * na direção de avanço, `N` radial (para fora do corpo), `W` no
+   * plano tangente, perpendicular ao avanço. A torção gira `W` e `N`
+   * em torno de `T`, e é **contínua** em `t`, de modo que os cantos
+   * de um trecho são exatamente os do seguinte.
+   */
+  const fita = (
+    aIni: number,
+    yIni: number,
+    aFim: number,
+    yFim: number,
+    passos: number,
+    larg: number,
+    raioEm: (y: number, a: number) => number,
+    origem: typeof chest | typeof quadril,
+    /** Fita de ouro: lisa, fina, sem gradiente. */
+    ouroJunto: boolean,
+    giro = 0.7,
+    /** Deslocamento na direção da largura: põe o fio de ouro na borda da faixa. */
+    lateral = 0,
+    /** Cor própria, quando o gradiente de ponta a ponta não serve. */
+    corDe?: (t: number) => Hex,
+  ): void => {
+    const esp = 0.008;
+    const ponto = (t: number): readonly [number, number, number] => {
+      const a = aIni + (aFim - aIni) * t;
+      const y = yIni + (yFim - yIni) * t;
+      const r = raioEm(y, a);
+      return [Math.sin(a) * r, y, Math.cos(a) * r];
+    };
+    /** Os quatro cantos do perfil em `t` — só função de `t`, e por isso as junções fecham. */
+    const cantos = (t: number, meiaLarg: number, desloc: number): number[][] => {
+      const p = ponto(t);
+      const q = ponto(Math.min(1, t + 0.004));
+      const o = ponto(Math.max(0, t - 0.004));
+      // Avanço.
+      let tx = q[0] - o[0];
+      let ty = q[1] - o[1];
+      let tz = q[2] - o[2];
+      const tl = Math.hypot(tx, ty, tz) || 1;
+      tx /= tl;
+      ty /= tl;
+      tz /= tl;
+      // Radial, para fora do corpo.
+      const rl = Math.hypot(p[0], p[2]) || 1;
+      const nx = p[0] / rl;
+      const nz = p[2] / rl;
+      // Largura = N × T, no plano tangente.
+      let wx = -ty * nz;
+      let wy = nz * tx - nx * tz;
+      let wz = nx * ty;
+      const wl = Math.hypot(wx, wy, wz) || 1;
+      wx /= wl;
+      wy /= wl;
+      wz /= wl;
+      // A torção acumula ao longo da fita: ela vira de lado no meio do
+      // caminho, como tecido que escorrega no corpo.
+      const tw = Math.sin(t * Math.PI) * giro;
+      const c = Math.cos(tw);
+      const sn = Math.sin(tw);
+      const ux = wx * c + nx * sn;
+      const uy = wy * c;
+      const uz = wz * c + nz * sn;
+      const vx = -wx * sn + nx * c;
+      const vy = -wy * sn;
+      const vz = -wz * sn + nz * c;
+      return [
+        [-1, -1],
+        [1, -1],
+        [1, 1],
+        [-1, 1],
+      ].map(([u, w]) => [
+        p[0] + ux * (u * meiaLarg + lateral) + vx * (w * esp + desloc),
+        p[1] + uy * (u * meiaLarg + lateral) + vy * (w * esp + desloc),
+        p[2] + uz * (u * meiaLarg + lateral) + vz * (w * esp + desloc),
+      ]);
+    };
+
+    const tira = (meiaLarg: number, desloc: number, cor: (t: number) => Hex, acab: number): void => {
+      for (let i = 0; i < passos; i += 1) {
+        const t0 = i / passos;
+        const t1 = (i + 1) / passos;
+        const a = cantos(t0, meiaLarg, desloc);
+        const z = cantos(t1, meiaLarg, desloc);
+        const v: number[] = [];
+        for (const c of [...a, ...z]) v.push(c[0], c[1], c[2]);
+        const idx: number[] = [];
+        for (let k = 0; k < 4; k += 1) {
+          const k2 = (k + 1) % 4;
+          // Prisma fechado: as quatro faces laterais bastam, e a fita
+          // tem interior — não é um plano, que sob luz difusa leria
+          // como cartolina em vez de pano.
+          idx.push(k, k2, 4 + k2, k, 4 + k2, 4 + k);
+        }
+        // Tampas nas duas pontas, para a fita não mostrar o oco.
+        if (i === 0) idx.push(0, 2, 1, 0, 3, 2);
+        if (i === passos - 1) idx.push(4, 5, 6, 4, 6, 7);
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(v), 3));
+        g.setIndex(idx);
+        g.computeVertexNormals();
+        b.addGeometry(g, { color: cor(t0), finish: acab, ...origem }, new THREE.Matrix4());
+      }
+    };
+
+    if (ouroJunto) tira(larg, 0, () => ouro, Finish.Shine);
+    else tira(larg, 0, corDe ?? gradiente, Finish.Cloth);
+  };
+
+  // O torso do Éden é uma **elipse de 2,3 : 1** — varrido nesta malha
+  // vestida, `rx = 0,2485` contra `rz = 0,1002` na altura do busto. A
+  // primeira rodada usou raio circular, e a fita boiava à frente do
+  // peito e afundava no pano nas laterais. Daí o raio por azimute.
+  //
+  // O `rx` usado é bem menor que o do pano, de propósito: os braços
+  // caem ao lado do corpo em `|x| = 0,212`, e uma fita no raio real
+  // do torso atravessaria os dois. Por dentro deles, ela desaparece
+  // atrás do braço — que é o que o olho espera de uma fita enrolada.
+  const elipse = (rx: number, rz: number, a: number): number => {
+    const sx = Math.sin(a) / rx;
+    const sz = Math.cos(a) / rz;
+    return 1 / Math.sqrt(sx * sx + sz * sz);
+  };
+  const raioTronco = (y: number, a: number): number =>
+    elipse(0.175, 0.1135 - 0.026 * smoothstep(0.3, 0.45, y) - 0.012 * smoothstep(0.18, 0.1, y), a) + 0.011;
+  // A cintura é mais funda que o busto: 0,1484 contra 0,1002.
+  const raioCintura = (y: number, a: number): number => elipse(0.19, 0.152 + 0.02 * smoothstep(0.08, 0.0, y), a) + 0.012;
+  // Varrido na malha vestida, com a barra `SKIRT_HEM_Y`: o pano vai
+  // de `0,2328 × 0,2164` em `y = −0,12` a `0,3497 × 0,3287` na barra.
+  // Nunca tirar do perfil de controle de `buildSkirt`, que mente —
+  // foi assim que as folhas da Saturno nasceram dentro do pano.
+  const raioSaia = (y: number, a: number): number => {
+    const k = Math.min(1, Math.max(0, (y - -0.1) / (-0.34 - -0.1)));
+    return elipse(0.2328 + 0.1169 * k, 0.2164 + 0.1123 * k, a) + 0.006;
+  };
+  const passos = (n: number): number => Math.max(6, Math.round(n * Math.max(7, detail.segments * 0.34)));
+
+  // --- a faixa do ombro ---
+  //
+  // Larga, diagonal, do ombro esquerdo ao quadril direito. Larga é o
+  // que importa: na terceira rodada esta mesma diagonal tinha cinco
+  // centímetros e lia como **alça de bolsa a tiracolo**, com o fio de
+  // ouro correndo no meio dela a fazer de zíper.
+  //
+  // A quarta rodada tentou o oposto — uma espiral de duas voltas e
+  // meia, horizontal — e saiu pior: cintas paralelas ao chão leem
+  // como as argolas de um barril, e a deusa virou múmia. Era o risco
+  // nº 1 anotado no plano, e ele se confirmou na bancada.
+  // Termina em `y = 0,075`, **por baixo** da faixa de cintura: na
+  // nona rodada ela parava em −0,04, por cima de tudo, e a ponta
+  // ficava como um bloco vermelho solto na frente do quadril.
+  const ombroFim = 2.35;
+  fita(-0.85, 0.47, ombroFim, 0.075, passos(1.05), 0.052, raioTronco, chest, false, 0.45);
+
+  if (detail.segments < 14) return;
+
+  // --- a faixa de cintura ---
+  //
+  // Volta inteira, na emenda entre o corpete e a saia. Além de ser a
+  // peça que amarra o traje, ela esconde o degrau que o drapeado
+  // deixa ali.
+  // Altura constante e volta exata, para que o fim encoste no
+  // começo: na décima rodada ela descia enquanto girava, e as duas
+  // pontas não se encontravam — sobrava uma tampa vermelha solta na
+  // frente do quadril. A cor vai e volta pelo gradiente pelo mesmo
+  // motivo: assim a emenda não tem degrau de cor.
+  fita(0.2, 0.075, 0.2 + TAU, 0.075, passos(1.0), 0.032, raioCintura, chest, false, 0.18, 0, (t) =>
+    gradiente(0.42 + 0.46 * Math.sin(t * Math.PI)),
+  );
+
+  // --- as pontas soltas ---
+  //
+  // Caem da cintura pela saia. São elas que impedem o traje de ler
+  // como embalagem: alguma coisa tem de escapar do corpo. Cada uma
+  // afasta-se um pouco do pano ao descer, como tecido que não cola.
+  // Caem à frente e pelas costas, **nunca pelos lados**: ali é onde
+  // os braços descem e as mãos param, e a rodada anterior pôs duas
+  // abas de pano exatamente por cima delas.
+  for (const [az, alc, larg] of [
+    [0.33, -0.3, 0.021],
+    [-0.42, -0.23, 0.015],
+    [3.05, -0.27, 0.019],
+  ] as const) {
+    const solta = (y: number, a: number): number => raioSaia(y, a) + 0.014 * smoothstep(0.04, alc, y);
+    fita(az, 0.035, az + 0.5, alc, passos(0.85), larg, solta, quadril, false, 1.15);
+  }
+
+  if (detail.segments < 20) return;
+
+  // --- as fitas de ouro ---
+  //
+  // Finas por fronteira, não por gosto: ouro **em massa** — galhada,
+  // folha, pata — é da Saturno, a vizinha quente dela no elenco.
+  // Aqui ele é traço de tinta.
+  // Debrum: o fio corre nas **bordas** da faixa, não no meio dela.
+  // Na terceira rodada ele nascia no centro e lia como o zíper de uma
+  // bolsa; na quinta, ainda era uma listra solta sobre o pano.
+  for (const lado of [-1, 1]) {
+    fita(-0.85, 0.47, ombroFim, 0.075, passos(1.05), 0.0055, raioTronco, chest, true, 0.45, lado * 0.0495);
+  }
+  fita(0.2, 0.075, 0.2 + TAU, 0.075, passos(1.0), 0.005, raioCintura, chest, true, 0.18, 0.0295);
+
+  // --- as pregas da saia ---
+  //
+  // Relevo, que custa **zero** triângulo: `feature()` empurra
+  // vértices que já existem. Sem elas o drapeado branco lê como um
+  // abajur — superfície larga e lisa, sob luz difusa, não tem como
+  // dizer que é pano.
+  //
+  // Ficam todas acima de `|x| = 0,2`, bem longe das pernas, que
+  // correm em torno do eixo: na Akemi um campo de relevo largo
+  // demais empurrou a cabeça 35 mm para fora.
+  for (let i = 0; i < 14; i += 1) {
+    const a = (i / 14) * TAU + 0.26;
+    for (const y of [-0.13, -0.22, -0.31]) {
+      const r = raioSaia(y, a) - 0.008;
+      // Amplitude de 2,4 cm: o empurrão de `feature()` é pesado por
+      // `exp(-d²·1,4)`, e a primeira tentativa, de 1,2 cm, não
+      // apareceu em captura nenhuma.
+      b.feature([Math.sin(a) * r, y, Math.cos(a) * r], [0.05, 0.09, 0.05], 0.024, [Math.sin(a), 0, Math.cos(a)]);
+    }
+  }
+
+  // --- as nervuras de luz ---
+  //
+  // Curtas e poucas. É o que faz o traje acender à noite — a galeria
+  // dela muda com a luz do dia, e a roupa faz o mesmo — sem virar
+  // pisca-pisca.
+  for (let i = 0; i < 5; i += 1) {
+    const a = -0.75 + (i / 4) * 2.7;
+    const y = 0.4 - (i / 4) * 0.22;
+    const r = raioTronco(y, a) * 1.02;
+    b.addGeometry(
+      new THREE.BoxGeometry(0.045, 0.004, 0.005),
+      { color: 0xffd1a8, finish: Finish.Holo, ...chest },
+      new THREE.Matrix4().makeRotationY(a).setPosition(Math.sin(a) * r, y, Math.cos(a) * r),
+    );
+  }
+}
+
 function buildGardenSuit(
   b: SurfaceBuilder,
   m: BodyMetrics,
@@ -3804,6 +4101,163 @@ function buildHair(b: SurfaceBuilder, a: AvatarAppearance, m: BodyMetrics, detai
       }
       break;
     }
+    case 'pincelada': {
+      // A juba da Júpiter — Pincelada.
+      //
+      // O nome é literal. Ela é a Deusa da Arte, e a arte de
+      // referência mostra o cabelo como um traço de tinta vermelha
+      // suspenso no ar: longo, ondulado, com movimento.
+      //
+      // A ficha dizia `cacheado`, que na malha é um capacete de oito
+      // a doze esferas de subdivisão **fixa** — 1 170 triângulos no
+      // LOD baixo, três vezes a média do catálogo, e só 4 284 em
+      // ultra: caro de longe, pobre de perto. Ele não foi corrigido,
+      // porque é penteado de habitante e continua inteiro para quem o
+      // herda. A Júpiter é que saiu dele.
+      const bottomY = cy - 0.6;
+      // O topo vai até o alto do crânio de propósito. `buildHair`
+      // desenha uma calota antes do `switch`, comum aos treze
+      // penteados, e a primeira rodada de bancada deixou essa calota
+      // à mostra: uma cúpula lisa e polida no alto da cabeça, sem
+      // onda nenhuma. A queda agora passa por cima dela. Cobrir,
+      // nunca alterar — a calota é de todo mundo.
+      const topY = cy + R * 0.99;
+      const rings = segments >= 26 ? 12 : segments >= 14 ? 9 : 6;
+      // Ruído determinístico: as ondas da primeira rodada tinham
+      // todas a mesma amplitude e, de perfil, o cabelo lia como uma
+      // escada de costelas. Cabelo de verdade é irregular.
+      const sz2 = (a: number): number => Math.cos(a);
+      const ruido = (n: number): number => {
+        const v = Math.sin(n * 12.9898) * 43758.5453;
+        return v - Math.floor(v);
+      };
+      /** Perfil do volume em cada altura, já com a ondulação da queda. */
+      const perfil = (y: number): number => {
+        if (y >= cy) {
+          // Domo: acompanha o crânio um fio por fora, afinando no alto.
+          const k = Math.min(1, (y - cy) / (R * 0.99));
+          return Math.max(R * 0.13, R * 1.02 * Math.sqrt(Math.max(0, 1 - k * k)));
+        }
+        const d = cy - y;
+        // Abre no ombro, afina na ponta — e ondula no caminho.
+        // Abre no ombro, afina na ponta. A quarta rodada abriu até
+        // `R · 1,40` e, de costas, a massa lia como uma **colmeia**.
+        // A ponta não pode afinar demais: na oitava rodada ela
+        // fechava em `R · 0,60` e, apesar de a sonda medir cabelo até
+        // `y = 0,158` — quase na cintura —, nas capturas a deusa
+        // parecia de cabelo curto. Comprimento que não se vê não é
+        // comprimento.
+        const base = R * (1.0 + 0.2 * smoothstep(0, 0.16, d) - 0.34 * smoothstep(0.26, 0.6, d));
+        return base * (1 + 0.09 * Math.sin(d * 19 + 0.7));
+      };
+      // Rasa na linha do olhar: cabelo que avança ali engole o rosto.
+      // Medido nesta malha, a frente do rosto está em `z = 0,2089`.
+      const frente = (y: number): number => perfil(y) * (0.26 + 0.62 * smoothstep(cy - 0.04, cy + 0.22, y));
+      const zcOf = (y: number): number => -R * (0.3 - 0.16 * smoothstep(cy - 0.5, cy, y));
+
+      const fall: Ctl[] = [];
+      for (let i = 0; i < rings; i += 1) {
+        const t = i / (rings - 1);
+        // Anéis um pouco mais juntos na ponta, onde a silhueta
+        // fecha; o domo já é curto e não precisa de muitos.
+        const y = bottomY + (topY - bottomY) * Math.pow(t, 0.85);
+        fall.push({
+          y,
+          rx: perfil(y),
+          rz: frente(y),
+          rzBack: perfil(y) * 1.04,
+          z: zcOf(y),
+          // O vermelho não é chapado: escurece na raiz e acende na
+          // ponta, como tinta que seca mais fina na borda.
+          color: tint(dark, hair, smoothstep(cy - 0.48, cy - 0.04, y) * 0.85),
+          bone: Bone.Head,
+          bone2: Bone.Torso,
+          blend: 0.6 * (1 - smoothstep(cy - 0.38, cy - 0.04, y)),
+        });
+      }
+      b.loft(subdivideProfile(toStations(fall), detail.steps), { segments, capBottom: R * 0.14, capRings: 2 });
+
+      if (detail.segments >= 14) {
+        // --- as ondas ---
+        //
+        // Relevo, que custa **zero** triângulo: `feature()` empurra
+        // vértices que já existem. A amplitude é aritmética, não
+        // gosto: o empurrão é pesado por `exp(-d²·1,4)`, então o valor
+        // pedido é o pico. No marco da Maze um relevo de `R · 0,055`
+        // — onze milímetros — simplesmente não apareceu.
+        //
+        // A bolha é pequena porque `feature()` varre a geometria
+        // **inteira**, inclusive o crânio que já está lá: na Akemi um
+        // campo de relevo de cabelo empurrou a cabeça 35 mm para fora.
+        // Daí o `longeDaCabeca`, que é a cerca.
+        const longeDaCabeca = (x: number, y: number, z: number): boolean => {
+          const dx = x / (R * 1.06);
+          const dy = (y - cy) / (R * 1.1);
+          const dz = z / (R * 1.16);
+          return Math.sqrt(dx * dx + dy * dy + dz * dz) >= 1.1;
+        };
+        for (let anel = 0; anel < 10; anel += 1) {
+          const n = 7;
+          for (let i = 0; i < n; i += 1) {
+            // Cada onda sobe ou desce um pouco em relação às vizinhas.
+            // Sem isso elas formam anéis fechados em volta da cabeça, e
+            // de costas o cabelo lê como uma colmeia — foi o que a
+            // sétima rodada devolveu.
+            const y = cy + R * 0.5 - anel * 0.064 - ruido(anel * 13 + i * 5) * 0.045;
+            // Deslocamento por anel: ondas alinhadas em colunas leem
+            // como as pregas de um abajur.
+            const az = (i / n) * TAU + anel * 0.72 + ruido(anel * 3 + i) * 0.5;
+            const sx = Math.sin(az);
+            const sz = Math.cos(az);
+            const raio = sz < 0 ? perfil(y) * 1.04 : frente(y);
+            const px = sx * perfil(y);
+            const pz = zcOf(y) + sz * raio;
+            if (!longeDaCabeca(px, y, pz)) continue;
+            const amp = R * (0.15 + 0.13 * ruido(anel * 7 + i * 2));
+            b.feature([px, y, pz], [R * 0.3, R * 0.19, R * 0.3], amp, [sx, 0.12, sz]);
+          }
+        }
+      }
+
+      if (detail.segments >= 20) {
+        // --- o volume do alto ---
+        //
+        // Sem isto o alto da cabeça lê como uma **touca**: a calota
+        // que `buildHair` desenha antes do `switch` é lisa, e a queda
+        // passa por cima dela igualmente lisa. As bolhas aqui são
+        // pequenas e ficam todas acima de `cy + R · 0,3` — o
+        // empurrão alcança o topo do crânio, que está coberto, e
+        // nunca o rosto, que é o erro que deformou a Akemi.
+        for (let anel = 0; anel < 3; anel += 1) {
+          const y = cy + R * (0.42 + anel * 0.22);
+          const n = anel === 2 ? 4 : 6;
+          for (let i = 0; i < n; i += 1) {
+            const az = (i / n) * TAU + anel * 0.8;
+            const r = perfil(y) * (sz2(az) < 0 ? 1.1 : 1.0);
+            b.feature(
+              [Math.sin(az) * r, y, zcOf(y) + Math.cos(az) * r],
+              [R * 0.34, R * 0.26, R * 0.34],
+              // A amplitude é aritmética, não gosto: o empurrão é
+              // pesado por `exp(-d²·1,4)`, e no marco da Maze um
+              // relevo de `R · 0,055` — onze milímetros — não
+              // apareceu na captura. Este é o triplo disso.
+              R * (0.17 + 0.07 * ruido(anel * 11 + i)),
+              [Math.sin(az), 0.3, Math.cos(az)],
+            );
+          }
+        }
+
+        // As **mechas douradas** foram tentadas duas vezes e saíram
+        // nas duas. Na primeira, plantadas em toda a volta, uma
+        // atravessou a boca — o raio da frente é raso de propósito na
+        // altura do rosto, e o que nasce ali nasce dentro da cara. Na
+        // segunda, recuadas para os lados e para trás, apareceram nas
+        // capturas como riscos **esverdeados** sobre o vermelho, que é
+        // cor proibida pela fronteira com a Saturno. O ouro dela vive
+        // no traje e no acessório, onde tem superfície para brilhar.
+      }
+      break;
+    }
     case 'espetado': {
       const spikes: [number, number, number, number, number][] = [
         [0, 0.2, 0.04, 0.5, 0],
@@ -4265,6 +4719,62 @@ function buildAccessory(b: SurfaceBuilder, a: AvatarAppearance, m: BodyMetrics, 
         b.ball([side * R * 0.37, cy + 0.022, R * 0.93], [R * 0.24, R * 0.24, R * 0.012], { color: 0xbfeaff, skin: head }, 5);
       }
       b.addGeometry(new THREE.BoxGeometry(R * 0.26, 0.007, 0.007), { color: 0x24323f, skin: head }, new THREE.Matrix4().makeTranslation(0, cy + 0.028, R * 0.97));
+      break;
+    }
+    case 'atelie': {
+      // O Ouro do Ateliê — da Júpiter, e só dela.
+      //
+      // A arte mostra gargantilha, braceletes e brincos. O campo de
+      // acessório dela estava **livre** (`nenhum`), ao contrário do
+      // da Maze, que estava ocupado pela `flor` — então aqui o ouro
+      // pôde morar onde é o lugar dele, em vez de ser enfiado dentro
+      // do penteado.
+      //
+      // Tudo é fio fino. Ouro em massa — galhada, folha, pata — é da
+      // Saturno.
+      const ouro = 0xf0c95a;
+      // A gargantilha é um **anel completo**. Peça só na frente do
+      // pescoço não lê como colar: foi a lição do marco da Lilly, e
+      // o primeiro esboço da Saturno repetiu o erro ao contrário,
+      // pondo tudo nas costas.
+      b.addGeometry(
+        new THREE.TorusGeometry(m.neckR * 1.12, 0.0075, 5, Math.max(10, segs)),
+        { color: ouro, finish: Finish.Shine, skin: { bone: Bone.Torso } },
+        new THREE.Matrix4().makeRotationX(Math.PI / 2).setPosition(0, m.neckY - 0.028, 0),
+      );
+      if (detail.segments >= 14) {
+        // Os braceletes.
+        //
+        // A posição sai das **mesmas fórmulas de `buildArm`** —
+        // `x = side · shoulderX`, e o punho em
+        // `waist + shoulderY − upperArm − forearm`. A primeira versão
+        // chutou o lugar a partir de `m.legX`, que é a abertura das
+        // **pernas**, e o resultado só apareceu na captura com a
+        // deusa andando: um aro dourado solto no meio da saia.
+        //
+        // O par de ossos também segue `buildArm`: lá, `side > 0` é o
+        // braço **esquerdo**. Trocar os dois faz o bracelete cruzar
+        // para o outro lado assim que ela gesticula.
+        const pulsoY = m.waist + m.shoulderY - m.upperArm - m.forearm;
+        for (const side of [-1, 1] as const) {
+          b.addGeometry(
+            new THREE.TorusGeometry(m.armWrist * 1.22, 0.0065, 5, Math.max(8, Math.round(segs * 0.7))),
+            { color: ouro, finish: Finish.Shine, skin: { bone: side > 0 ? Bone.ForeL : Bone.ForeR } },
+            new THREE.Matrix4().makeRotationX(Math.PI / 2).setPosition(side * m.shoulderX, pulsoY + 0.035, 0),
+          );
+        }
+      }
+      if (detail.segments >= 20) {
+        // Os brincos: curtos, rente à orelha, que a malha põe em
+        // `|x| = 0,1804` na altura `y = 0,6820`.
+        for (const side of [-1, 1]) {
+          b.addGeometry(
+            new THREE.BoxGeometry(0.006, 0.03, 0.006),
+            { color: ouro, finish: Finish.Shine, skin: head },
+            new THREE.Matrix4().makeTranslation(side * R * 0.98, cy - 0.072, R * 0.06),
+          );
+        }
+      }
       break;
     }
     case 'lentes': {

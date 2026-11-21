@@ -6,7 +6,7 @@ import { type Rng, clamp, pick } from '../utils/math';
  * valores desconhecidos são substituídos pelo padrão em `sanitizeAppearance`.
  */
 
-export const HAIR_STYLES = ['curto', 'longo', 'ondulado', 'cascata', 'fluxo', 'onda', 'rabo', 'coque', 'cacheado', 'cachos', 'silvestre', 'fibra', 'copa', 'espetado', 'careca'] as const;
+export const HAIR_STYLES = ['curto', 'longo', 'ondulado', 'cascata', 'fluxo', 'onda', 'rabo', 'coque', 'cacheado', 'cachos', 'silvestre', 'fibra', 'copa', 'pincelada', 'espetado', 'careca'] as const;
 export type HairStyle = (typeof HAIR_STYLES)[number];
 export const HAIR_LABELS: Record<HairStyle, string> = {
   curto: 'Curto',
@@ -22,6 +22,7 @@ export const HAIR_LABELS: Record<HairStyle, string> = {
   silvestre: 'Silvestre',
   fibra: 'Fibra Óptica',
   copa: 'Copa de Árvore',
+  pincelada: 'Pincelada',
   espetado: 'Espetado',
   careca: 'Sem cabelo',
 };
@@ -44,9 +45,9 @@ export const HAIR_LABELS: Record<HairStyle, string> = {
  * mesmo de sempre — o que sai do sorteio é o par de vidro que acende,
  * que é peça de deusa.
  */
-export const CITIZEN_HAIR_STYLES = HAIR_STYLES.filter((h) => h !== 'cascata' && h !== 'fluxo' && h !== 'onda' && h !== 'cachos' && h !== 'silvestre' && h !== 'fibra' && h !== 'copa');
+export const CITIZEN_HAIR_STYLES = HAIR_STYLES.filter((h) => h !== 'cascata' && h !== 'fluxo' && h !== 'onda' && h !== 'cachos' && h !== 'silvestre' && h !== 'fibra' && h !== 'copa' && h !== 'pincelada');
 
-export const OUTFITS = ['casual', 'aero', 'vestido', 'esportivo', 'praia', 'aurora', 'docente', 'rede', 'sonora', 'cosplay', 'guardia', 'sistema', 'jardim'] as const;
+export const OUTFITS = ['casual', 'aero', 'vestido', 'esportivo', 'praia', 'aurora', 'docente', 'rede', 'sonora', 'cosplay', 'guardia', 'sistema', 'jardim', 'lumen'] as const;
 export type Outfit = (typeof OUTFITS)[number];
 /**
  * O que um habitante qualquer pode vestir.
@@ -64,7 +65,7 @@ export type Outfit = (typeof OUTFITS)[number];
  * aceso em volta do quadril, e nada do que um habitante veste faz
  * barulho de luz.
  */
-export const CITIZEN_OUTFITS = OUTFITS.filter((o) => o !== 'aurora' && o !== 'docente' && o !== 'rede' && o !== 'sonora' && o !== 'cosplay' && o !== 'guardia' && o !== 'sistema' && o !== 'jardim');
+export const CITIZEN_OUTFITS = OUTFITS.filter((o) => o !== 'aurora' && o !== 'docente' && o !== 'rede' && o !== 'sonora' && o !== 'cosplay' && o !== 'guardia' && o !== 'sistema' && o !== 'jardim' && o !== 'lumen');
 export const OUTFIT_LABELS: Record<Outfit, string> = {
   casual: 'Casual',
   aero: 'Traje Aero',
@@ -79,9 +80,10 @@ export const OUTFIT_LABELS: Record<Outfit, string> = {
   guardia: 'Traje Guardiã',
   sistema: 'Traje EdenOS',
   jardim: 'Traje Jardim',
+  lumen: 'Traje Lumen',
 };
 
-export const ACCESSORIES = ['nenhum', 'oculos', 'fones', 'chapeu', 'flor', 'cristal', 'aureola', 'lentes'] as const;
+export const ACCESSORIES = ['nenhum', 'oculos', 'fones', 'chapeu', 'flor', 'cristal', 'aureola', 'lentes', 'atelie'] as const;
 export type Accessory = (typeof ACCESSORIES)[number];
 export const ACCESSORY_LABELS: Record<Accessory, string> = {
   nenhum: 'Nenhum',
@@ -92,6 +94,7 @@ export const ACCESSORY_LABELS: Record<Accessory, string> = {
   cristal: 'Brincos de cristal',
   aureola: 'Auréola',
   lentes: 'Óculos de lente de vidro',
+  atelie: 'Ouro do Ateliê',
 };
 
 /**
@@ -102,7 +105,7 @@ export const ACCESSORY_LABELS: Record<Accessory, string> = {
  * vazada é dela, e mexer no acessório compartilhado mudaria o rosto
  * de quem nunca pediu.
  */
-export const CITIZEN_ACCESSORIES = ACCESSORIES.filter((a) => a !== 'lentes');
+export const CITIZEN_ACCESSORIES = ACCESSORIES.filter((a) => a !== 'lentes' && a !== 'atelie');
 
 export const SKIN_TONES = ['#ffe0c8', '#f6c9a4', '#e8ab82', '#cf8f63', '#a96c45', '#7d4a2c', '#5a3320', '#f3d2c1'] as const;
 export const HAIR_COLORS = ['#2b1d16', '#5a3a22', '#8a5a2b', '#d9a441', '#f3e3a6', '#c0392b', '#ff8fc0', '#7fd6ff', '#9a7bff', '#a855f7', '#f4f6fb'] as const;
