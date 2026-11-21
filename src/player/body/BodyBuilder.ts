@@ -158,11 +158,20 @@ export function buildBodyGeometry(a: AvatarAppearance, p: BodyProportions, m: Bo
   // A silhueta dela é ampla em cima (cachos) e leve embaixo, e saia
   // longa inverteria exatamente essa leitura.
   const cosplay = outfit === 'cosplay';
+  // O Traje Guardiã, da Saturno: túnica dourada de base com um manto
+  // de folhas de **vidro verde** nos ombros e nas costas, faixa de
+  // cintura e saia longa aberta. No peito, o emblema de pata da Casa
+  // EdenPawl, que é a casa dela.
+  //
+  // Braços nus de propósito: ela é a única deusa que trabalha com as
+  // mãos — resgata bicho — e manga comprida esconderia justamente
+  // isso. Também é o que mais a separa das outras, todas de manga.
+  const guardia = outfit === 'guardia';
   const longSleeves = outfit === 'aero' || aurora || rede || sonora || cosplay;
-  const bareArms = outfit === 'esportivo' || outfit === 'vestido';
+  const bareArms = outfit === 'esportivo' || outfit === 'vestido' || guardia;
   const longPants = outfit === 'casual' || outfit === 'aero' || rede;
-  const bareLegs = outfit === 'vestido' || docente || cosplay;
-  const dress = outfit === 'vestido' || aurora || docente || sonora || cosplay;
+  const bareLegs = outfit === 'vestido' || docente || cosplay || guardia;
+  const dress = outfit === 'vestido' || aurora || docente || sonora || cosplay || guardia;
   // Dois acabamentos, e a diferença entre eles é deliberada.
   //
   // `cloth` é o que vale para o que se **acrescenta** por cima do
@@ -210,7 +219,7 @@ export function buildBodyGeometry(a: AvatarAppearance, p: BodyProportions, m: Bo
   // A barra longa é a mesma do Manto Aurora: abaixo de `GOWN_HEM_Y` a
   // saia deixa de abrir como cone e vira coluna, que é o que separa
   // um vestido longo de uma tenda.
-  if (dress) buildSkirt(b, m, detail, dress && (sonora || cosplay) ? bottom : top, origins, cosplay ? COSPLAY_HEM_Y : aurora || docente || sonora ? GOWN_HEM_Y : SKIRT_HEM_Y);
+  if (dress) buildSkirt(b, m, detail, dress && (sonora || cosplay || guardia) ? bottom : top, origins, cosplay ? COSPLAY_HEM_Y : aurora || docente || sonora || guardia ? GOWN_HEM_Y : SKIRT_HEM_Y);
 
   // A oclusão é a última coisa antes de fechar a malha: ela precisa do
   // corpo inteiro montado para saber o que esconde o quê. É daqui que
@@ -336,6 +345,9 @@ function buildTorso(b: SurfaceBuilder, ctx: TorsoCtx): void {
   }
   if (outfit === 'cosplay') {
     buildCosplaySuit(b, m, detail, top, accent, torso, hip);
+  }
+  if (outfit === 'guardia') {
+    buildGuardiaSuit(b, m, detail, top, accent, torso, hip);
   }
 
   if (outfit === 'aero') {
@@ -676,6 +688,186 @@ function buildCosplaySuit(
       .multiply(new THREE.Matrix4().makeRotationZ(-0.22 - t * 0.26))
       .setPosition(0.35 + t * 0.085, m.waist + 0.12 + t * 0.165, 0.045 - t * 0.02);
     b.addGeometry(card, { color: cor, finish: Finish.Holo, ...chest }, place);
+  }
+}
+
+/**
+ * O Traje Guardiã, da Saturno — e por que ele não é verde de pano.
+ *
+ * A Maze é a Deusa da Natureza e ainda não foi remasterizada. Se a
+ * Saturno virar uma figura de folhagem verde, as duas passam a ler
+ * igual e a Maze perde o território dela antes de existir. A divisão
+ * que este traje sustenta: **a Maze terá vegetação de pano; a
+ * Saturno tem folha de vidro sobre ouro.** O verde entra como
+ * material translúcido e luminoso — nunca como o tecido da peça.
+ *
+ * A primeira versão errou exatamente isso: a saia saiu com o
+ * verde-limão da ficha e a figura virou uma deusa-da-vegetação
+ * genérica, que é o que o briefing proíbe. O ouro é o pano; o verde
+ * é o vidro.
+ *
+ * A base é dourada e de **pano**. Isso é lição paga caro no marco da
+ * Akemi: pôr o traje inteiro em `Finish.Glass` marcou a perna toda
+ * como vidro, porque `subdivideProfile` descarta o acabamento e
+ * trava o anel na estação mais próxima — a coxa nua renderizava
+ * envernizada. Aqui o vidro é pedido peça a peça, onde ele existe.
+ */
+function buildGuardiaSuit(
+  b: SurfaceBuilder,
+  m: BodyMetrics,
+  detail: BodyDetail,
+  top: Hex,
+  accent: Hex,
+  torso: readonly [number, number, number],
+  hip: readonly [number, number, number],
+): void {
+  const chest = { skin: { bone: Bone.Torso }, zone: MorphZone.Bust, origin: torso } as const;
+  const quadril = { skin: { bone: Bone.Hips }, zone: MorphZone.Curve, origin: hip } as const;
+  const ouro = 0xe0a83a;
+  // Os dois verdes não são escolha livre. O `#9df0b0`/`#1fae6b` é da
+  // Maze; um verde puro aqui encostaria no dela. Este par foge para
+  // os lados: um verde-amarelado que faz ponte com o ouro e um
+  // verde-azulado que traz o **aqua** pedido no briefing.
+  const folha = 0xa8e86a;
+  const folhaFunda = 0x5fcf9b;
+  // O emblema é creme luminoso, não o ciano do `accent`: `accent` é
+  // `0x29c8ff` para todo o elenco, e uma pata azul-piscina no peito
+  // de uma deusa dourada lê como adesivo de outra personagem.
+  const creme = 0xfff4dc;
+  void accent;
+
+  // --- a faixa de cintura ---
+  //
+  // Dourada e larga. É ela que separa a túnica da saia e desenha a
+  // cintura: sem isso a peça lê como um saco comprido.
+  b.addGeometry(
+    flatRing(m.waistWidth * 1.07, WAIST_DEPTH, 0.028, Math.max(12, detail.segments)),
+    { color: ouro, finish: Finish.Cloth, ...chest },
+    new THREE.Matrix4().makeRotationX(Math.PI / 2).setPosition(0, 0.13, 0),
+  );
+  b.addGeometry(
+    new THREE.BoxGeometry(0.052, 0.044, 0.016),
+    { color: top, finish: Finish.Shine, ...chest },
+    new THREE.Matrix4().makeTranslation(0, 0.13, m.waistWidth * WAIST_DEPTH + 0.012),
+  );
+
+  // --- o emblema de pata da Casa EdenPawl ---
+  //
+  // A marca dela, e o que diz "animais" sem depender de folha
+  // nenhuma. Uma almofada e quatro dedos, em `Holo`: aceso.
+  //
+  // A frente do peito está em `z ≈ 0,111` nessa altura, medido na
+  // malha antes de escrever esta linha. Na Akemi o laço foi parar em
+  // `0,082` e ficou **enterrado dentro do torso** — existia, custava
+  // triângulos e não aparecia. Toda cota aqui é maior que a medida.
+  const pataY = 0.3;
+  const pataZ = 0.1225;
+  b.ball([0, pataY, pataZ], [0.039, 0.032, 0.013], { color: creme, finish: Finish.Holo, ...chest }, 5);
+  if (detail.segments >= 14) {
+    for (let i = 0; i < 4; i += 1) {
+      const ang = -1.15 + (i / 3) * 2.3;
+      b.ball(
+        [Math.sin(ang) * 0.052, pataY + 0.05 + Math.cos(ang) * 0.022, pataZ - 0.004],
+        [0.016, 0.018, 0.01],
+        { color: creme, finish: Finish.Holo, ...chest },
+        4,
+      );
+    }
+  }
+
+  if (detail.segments < 14) return;
+
+  /** Uma folha pontuda: pirâmide de base losangular, achatada. */
+  const folhaPontuda = (largura: number, comprimento: number): THREE.BufferGeometry => {
+    const g = new THREE.ConeGeometry(largura * 0.5, comprimento, 4);
+    g.scale(1, 1, 0.16);
+    // Ponta para baixo: folha pendurada, presa pela base.
+    g.rotateX(Math.PI);
+    return g;
+  };
+
+  // --- a gola de folhas de vidro ---
+  //
+  // A camada Frutiger Aero da personagem, e o lugar onde o verde
+  // ganha pé de igualdade com o ouro.
+  //
+  // Duas tentativas antes desta falharam na bancada e as duas pelo
+  // mesmo motivo: folha espalhada pelo torso não lê como peça. A
+  // primeira pôs folhas só nas costas e elas viraram lascas verdes
+  // nas laterais; a segunda cruzou o ombro e virou ombreira. O que
+  // lê é uma **gola fechada** — anel completo na linha do pescoço,
+  // folhas quase deitadas sobre o peito e os ombros, como uma coroa
+  // de louros usada no colo.
+  //
+  // Anel completo, inclusive atrás, mesmo com o cabelo cobrindo as
+  // costas: a parte de trás é o que fecha a silhueta quando ela gira
+  // e quando o cabelo balança.
+  const folhas = detail.segments >= 26 ? 16 : 11;
+  for (let i = 0; i < folhas; i += 1) {
+    const az = (i / folhas) * Math.PI * 2;
+    // Elipse colada no tronco na altura do colo. Medido na malha:
+    // a frente do torso está em `z ≈ 0,085` nessa altura.
+    const rx = 0.112;
+    const rz = 0.082;
+    b.addGeometry(
+      folhaPontuda(0.062, 0.125),
+      { color: i % 2 === 0 ? folha : folhaFunda, finish: Finish.Glass, ...chest },
+      new THREE.Matrix4()
+        .makeRotationY(az)
+        // Quase deitada: é o que transforma espeto em pétala pousada.
+        .multiply(new THREE.Matrix4().makeRotationX(-1.15))
+        .setPosition(Math.sin(az) * rx, 0.425, Math.cos(az) * rz),
+    );
+  }
+  for (const side of [1, -1]) {
+    // A presilha dourada que prende a gola no ombro.
+    b.addGeometry(
+      new THREE.BoxGeometry(0.038, 0.038, 0.016),
+      { color: ouro, finish: Finish.Shine, ...chest },
+      new THREE.Matrix4().makeRotationZ(side * 0.32).setPosition(side * 0.125, 0.4, 0.052),
+    );
+  }
+
+  // --- a barra de folhas de vidro ---
+  //
+  // Duas fileiras sobrepostas de folhas pontudas no terço de baixo
+  // da saia. É aqui que o verde alcança o ouro em área, que foi o
+  // pedido do Criador, e é o que dá à barra uma borda recortada —
+  // silhueta, coisa que relevo não faz.
+  //
+  // Duas tentativas anteriores morreram na bancada. A primeira pôs
+  // placas retangulares espetadas para fora e saiu como abas de
+  // papel. A segunda levou lâminas do cós até a barra e a figura
+  // virou um poste listrado de carnaval: faixa comprida sobre pano
+  // liso lê como fita, não como folha. O que lê é folha **curta,
+  // pontuda e sobreposta**, agrupada só onde a saia já é larga.
+  //
+  // Os raios são **medidos na malha**, não calculados. O perfil de
+  // controle de `buildSkirt` diz que a barra está em 0,193; a saia
+  // que sai do forno mede 0,41. A primeira versão confiou na fórmula
+  // e enterrou as folhas dentro do pano — invisíveis e pagas. É o
+  // mesmo erro do laço da Akemi, e o motivo de toda cota de adereço
+  // deste arquivo sair de uma sonda.
+
+  const porFileira = detail.segments >= 26 ? 16 : 11;
+  for (const [fileira, raio, altura, largura, comprimento] of [
+    [0, 0.362, -0.345, 0.088, 0.175],
+    [1, 0.404, -0.425, 0.095, 0.2],
+  ] as const) {
+    for (let i = 0; i < porFileira; i += 1) {
+      // A fileira de cima sai meio passo torta em relação à de
+      // baixo: é a defasagem que faz as folhas se sobreporem em vez
+      // de formarem duas cercas paralelas.
+      const az = ((i + fileira * 0.5) / porFileira) * Math.PI * 2;
+      b.addGeometry(
+        folhaPontuda(largura, comprimento),
+        { color: i % 2 === 0 ? folha : folhaFunda, finish: Finish.Glass, ...quadril },
+        new THREE.Matrix4()
+          .makeRotationY(az)
+          .multiply(new THREE.Matrix4().makeRotationX(-0.45))
+          .setPosition(Math.sin(az) * raio, altura, Math.cos(az) * raio),
+      );
+    }
   }
 }
 
@@ -2453,6 +2645,87 @@ function buildHair(b: SurfaceBuilder, a: AvatarAppearance, m: BodyMetrics, detai
       }
       break;
     }
+    case 'silvestre': {
+      // A queda da Saturno — longa, pesada e dourada na ponta.
+      //
+      // Ela é a Defensora dos Animais, e a arte de referência mostra
+      // uma figura de floresta. O risco não é estético, é de elenco:
+      // a Maze é a Deusa da Natureza e ainda não foi remasterizada.
+      // Por isso o que esta personagem carrega de distintivo não é
+      // folha — é **galhada**. Folha ela tem de vidro, no traje.
+      //
+      // A silhueta: mais longa que a da Akemi (que para no ombro) e
+      // mais curta que a `cascata` da Suki (que vai à junta do
+      // quadril). Esta morre no meio das costas.
+      const topY = cy + 0.05;
+      const bottomY = cy - 0.52;
+      const rings = segments >= 26 ? 14 : segments >= 14 ? 10 : 5;
+      // `t` 0 na ponta, 1 no couro cabeludo, como em `cascata`.
+      const yOf = (t: number): number => bottomY + (topY - bottomY) * t;
+      // Afunilamento contínuo, sem patamar: trecho de largura
+      // constante desenha um cilindro, e cilindro com fundo abaulado
+      // vira urna. Foi o que a bancada mostrou no marco da Suki, e
+      // não há razão para redescobrir isso aqui.
+      const rxOf = (t: number): number => R * (0.66 + 0.42 * t) * (1 - 0.26 * smoothstep(0.1, 0, t));
+      const rzBackOf = (t: number): number => R * (0.6 + 0.48 * t ** 0.75);
+      const zcOf = (t: number): number => -R * (0.26 - 0.2 * smoothstep(0.4, 1, t));
+
+      const fall: Ctl[] = [];
+      for (let i = 0; i < rings; i += 1) {
+        const t = i / (rings - 1);
+        fall.push({
+          y: yOf(t),
+          rx: rxOf(t),
+          rz: R * 0.36,
+          rzBack: rzBackOf(t),
+          z: zcOf(t),
+          // Castanho na raiz, dourado na ponta. O dourado é o da
+          // ficha dela, não um amarelo qualquer: é a mesma cor da
+          // aura e da faixa do traje, e é o que amarra a figura.
+          color: tint(tint(dark, hair, smoothstep(0.0, 0.5, t)), 0xe0a83a, 0.52 * (1 - smoothstep(0.08, 0.62, t))),
+          bone: Bone.Head,
+          bone2: Bone.Torso,
+          blend: 0.8 * (1 - smoothstep(cy - 0.46, cy - 0.04, yOf(t))),
+        });
+      }
+      // Sem `subdivideProfile`: ela trava a cor na estação mais
+      // próxima e descarta o acabamento, e o degradê é por anel.
+      b.loft(toStations(fall), { segments, capBottom: R * 0.12, capRings: 2 });
+
+      if (detail.segments >= 14) {
+        // As mechas trançadas, em relevo. Custo zero em triângulos.
+        //
+        // O guarda de elipsoide abaixo não é zelo excessivo: no marco
+        // da Akemi um campo de relevo empurrou o crânio 35 mm para
+        // fora e a cabeça saiu amassada. `feature()` não sabe o que é
+        // cabelo — empurra todo vértice ao alcance, e alcance é três
+        // vezes o raio. Bolha que nasça perto do osso esculpe o osso.
+        const longeDaCabeca = (x: number, y: number, z: number): boolean => {
+          const dx = x / (R * 1.05);
+          const dy = (y - cy) / (R * 1.12);
+          const dz = z / (R * 1.15);
+          return Math.sqrt(dx * dx + dy * dy + dz * dz) >= 1.25;
+        };
+        for (const base of [-0.95, -0.32, 0.32, 0.95]) {
+          for (let t = 0.08; t <= 0.9; t += 0.085) {
+            const az = Math.PI + base * (1 + 0.18 * (1 - t));
+            const sx = Math.sin(az);
+            const sz = Math.cos(az);
+            const px = sx * rxOf(t);
+            const pz = zcOf(t) + sz * rzBackOf(t);
+            const py = yOf(t);
+            if (!longeDaCabeca(px, py, pz)) continue;
+            // Alterna vinco e crista: é o que faz trança em vez de
+            // ranhura solta.
+            const trancado = Math.sin(t * 26) * 0.5 + 0.5;
+            b.feature([px, py, pz], [R * 0.22, R * 0.42, R * 0.22], -R * (0.07 + 0.1 * trancado), [sx, 0, sz]);
+          }
+        }
+      }
+
+      buildAntlers(b, detail, cy, R);
+      break;
+    }
     case 'rabo': {
       const tail: Ctl[] = [
         { y: cy - 0.17, rx: R * 0.1, rz: R * 0.1, z: -R * 1.42, color: dark, bone: Bone.Head },
@@ -2646,6 +2919,90 @@ function buildAkemiGlasses(b: SurfaceBuilder, detail: BodyDetail, cy: number, R:
       { color: armacao, finish: Finish.Glass, skin: head },
       new THREE.Matrix4().makeRotationY(side * 0.38).setPosition(side * R * 0.62, cy + 0.03, R * 0.68),
     );
+  }
+}
+
+/**
+ * A galhada da Saturno — a assinatura dela, e a razão de existir.
+ *
+ * Ela é a **Defensora dos Animais**. A Maze é a Deusa da Natureza e
+ * ainda não foi remasterizada: se a Saturno virar uma figura de
+ * folhagem, as duas leem igual e a Maze perde o território antes de
+ * ter vez. Galhada resolve isso numa peça só — é inequivocamente
+ * animal, vem do cervo, e nenhuma outra figura do Panteão tem nada
+ * parecido.
+ *
+ * Nasce **dentro do penteado**, não como acessório, e por dois
+ * motivos. `flor`, `chapeu` e `oculos` são acessórios que os
+ * habitantes herdam — mexer neles mexe em gente sorteada pelo mundo
+ * todo, e a `flor` ainda é da Maze. E `appearance.accessory` é um
+ * campo só: pelo caminho do acessório ela não poderia ter galhada e
+ * mais nada.
+ *
+ * Em vidro dourado: é a leitura Frutiger Aero pedida para o marco —
+ * chifre que é ao mesmo tempo osso e luz.
+ */
+function buildAntlers(b: SurfaceBuilder, detail: BodyDetail, cy: number, R: number): void {
+  // A galhada é detalhe de perto. No LOD de longe ela não existe, e
+  // isso não é preguiça: a Saturno **já chegava estourada** no teto
+  // do nível baixo — 7 630 triângulos contra 7 145,6 — por causa de
+  // duas peças compartilhadas que nunca cortaram por LOD.
+  if (detail.segments < 14) return;
+
+  const material = { color: 0xffd98a, finish: Finish.Glass, skin: { bone: Bone.Head } };
+  const cheia = detail.segments >= 20;
+
+  /**
+   * Um ramo **entre dois pontos**.
+   *
+   * A primeira versão posicionava cada galho por ângulo e
+   * comprimento, e na bancada a galhada saiu **solta no ar, acima da
+   * cabeça**: a base caía em `x = 0,134` numa altura onde o crânio
+   * mede `0,105` de raio. Ligar ponta a ponta tira o arbítrio da
+   * conta — se o primeiro ponto está dentro do couro cabeludo, o
+   * ramo nasce dentro do couro cabeludo.
+   */
+  const ramo = (a: THREE.Vector3, c: THREE.Vector3, grossura: number): void => {
+    const eixo = new THREE.Vector3().subVectors(c, a);
+    const comprimento = eixo.length();
+    const giro = new THREE.Quaternion().setFromUnitVectors(
+      new THREE.Vector3(0, 1, 0),
+      eixo.clone().normalize(),
+    );
+    b.addGeometry(
+      new THREE.BoxGeometry(grossura, comprimento, grossura),
+      material,
+      new THREE.Matrix4().compose(
+        new THREE.Vector3().addVectors(a, c).multiplyScalar(0.5),
+        giro,
+        new THREE.Vector3(1, 1, 1),
+      ),
+    );
+  };
+
+  for (const side of [1, -1]) {
+    const v = (x: number, y: number, z: number): THREE.Vector3 =>
+      new THREE.Vector3(side * R * x, cy + y, R * z);
+
+    // A haste, em três trechos que vão endireitando conforme sobem.
+    // É a curva que faz galhada: a versão reta anterior saiu de
+    // perfil como dois gravetos de capim espetados no crânio.
+    const base = v(0.46, 0.07, -0.07);
+    const p1 = v(0.78, 0.2, -0.13);
+    const p2 = v(0.93, 0.35, -0.17);
+    const p3 = v(1.0, 0.47, -0.19);
+    // Grossa na base e afinando: galhada é osso, não arame. A
+    // primeira versão tinha 19 mm na base e sumia de perfil.
+    ramo(base, p1, 0.032);
+    ramo(p1, p2, 0.024);
+    ramo(p2, p3, 0.017);
+
+    // As pontas, que são o que distingue galhada de chifre.
+    ramo(p1.clone().lerp(p2, 0.2), v(1.46, 0.27, 0.1), 0.019);
+    if (cheia) {
+      ramo(p2, v(1.52, 0.46, -0.12), 0.015);
+      ramo(p2.clone().lerp(p3, 0.4), v(0.62, 0.5, -0.78), 0.013);
+    }
   }
 }
 
