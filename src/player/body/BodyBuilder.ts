@@ -167,9 +167,18 @@ export function buildBodyGeometry(a: AvatarAppearance, p: BodyProportions, m: Bo
   // mãos — resgata bicho — e manga comprida esconderia justamente
   // isso. Também é o que mais a separa das outras, todas de manga.
   const guardia = outfit === 'guardia';
-  const longSleeves = outfit === 'aero' || aurora || rede || sonora || cosplay;
+  // O Traje EdenOS, da Haru: macacão grafite de base com traços de
+  // circuito acesos no tronco e nos braços, painéis prateados e o
+  // emblema do infinito no peito.
+  //
+  // Manga e calça compridas, como no `aero` que ela usava: é uma
+  // engenheira de sistemas, e perna de fora contaria outra história.
+  // O que muda não é o corte — é que agora o pano é escuro e a luz
+  // vem da emissão, o que a separa da Nexara, que é clara.
+  const sistema = outfit === 'sistema';
+  const longSleeves = outfit === 'aero' || aurora || rede || sonora || cosplay || sistema;
   const bareArms = outfit === 'esportivo' || outfit === 'vestido' || guardia;
-  const longPants = outfit === 'casual' || outfit === 'aero' || rede;
+  const longPants = outfit === 'casual' || outfit === 'aero' || rede || sistema;
   const bareLegs = outfit === 'vestido' || docente || cosplay || guardia;
   const dress = outfit === 'vestido' || aurora || docente || sonora || cosplay || guardia;
   // Dois acabamentos, e a diferença entre eles é deliberada.
@@ -317,7 +326,7 @@ function buildTorso(b: SurfaceBuilder, ctx: TorsoCtx): void {
   b.feature([0, 0.285, 0.09], [0.11, 0.07, 0.07], 0.01, [0, 0, 1]);
   b.feature([0, 0.3, -0.09], [0.12, 0.06, 0.06], 0.006, [0, 0, -1]);
 
-  if (outfit === 'aurora' || outfit === 'rede' || outfit === 'sonora') {
+  if (outfit === 'aurora' || outfit === 'rede' || outfit === 'sonora' || outfit === 'sistema') {
     // Gola alta: o manto fecha no pescoço, como na arte oficial. Sobe
     // pelo próprio pescoço, sem folga, para não flutuar quando a
     // cabeça gira — pertence ao osso da cabeça, como a gola Aero.
@@ -348,6 +357,9 @@ function buildTorso(b: SurfaceBuilder, ctx: TorsoCtx): void {
   }
   if (outfit === 'guardia') {
     buildGuardiaSuit(b, m, detail, top, accent, torso, hip);
+  }
+  if (outfit === 'sistema') {
+    buildSystemSuit(b, m, detail, torso, hip);
   }
 
   if (outfit === 'aero') {
@@ -869,6 +881,153 @@ function buildGuardiaSuit(
       );
     }
   }
+}
+
+/**
+ * O Traje EdenOS, da Haru — e por que o pano é escuro.
+ *
+ * A Nexara é a Deusa da Internet e já foi entregue: branca, lilás,
+ * com anéis orbitando a cabeça. As duas são "deusas digitais" e o
+ * risco de lerem igual é real. A separação que este traje sustenta:
+ * **a Nexara é clara e flutua; a Haru é maquinário aceso.** O pano
+ * dela é grafite justamente para que a emissão seja a luz — num
+ * tecido branco, circuito ciano some.
+ *
+ * O traje que ela usava era o `aero`, e `aero` é dividido com o
+ * **Aérion, o Criador do Éden Aero**, e com a Amara. Os três
+ * desenhavam exatamente o mesmo número de triângulos. Remasterizar
+ * o `aero` onde ele mora teria mudado o Criador junto — por isso
+ * este arquivo existe e `aero` sai do marco intocado.
+ *
+ * A base é **pano**. Lição paga caro no marco da Akemi: pôr o traje
+ * inteiro em `Finish.Glass` marcou a perna toda como vidro, porque
+ * `subdivideProfile` descarta o acabamento e trava o anel na estação
+ * mais próxima. Aqui o vidro e o holograma entram peça a peça.
+ */
+function buildSystemSuit(
+  b: SurfaceBuilder,
+  m: BodyMetrics,
+  detail: BodyDetail,
+  torso: readonly [number, number, number],
+  hip: readonly [number, number, number],
+): void {
+  const chest = { skin: { bone: Bone.Torso }, zone: MorphZone.Bust, origin: torso } as const;
+  const quadril = { skin: { bone: Bone.Hips }, zone: MorphZone.Curve, origin: hip } as const;
+  const prata = 0xc9d8e8;
+  const ciano = 0x45e7ff;
+  // Azul fundo tirado da paleta canônica dela (`colors[1]`), não
+  // inventado: é o que amarra o traje à ficha.
+  const azul = 0x1b82ea;
+
+  // --- o emblema do infinito ---
+  //
+  // A Haru é a primeira deusa autista do Panteão. O símbolo é o
+  // **infinito**, que é o endossado pela comunidade autista. A peça
+  // de quebra-cabeça não é usada aqui e não deve ser: boa parte da
+  // comunidade a rejeita por associação histórica a campanhas de
+  // "cura", e estampá-la numa personagem seria o oposto de
+  // respeitoso.
+  //
+  // Discreto, do tamanho de um distintivo, e **vivo em todos os
+  // níveis de LOD** — é marca de identidade, não ornamento, e segue
+  // a mesma regra da pata da Saturno.
+  //
+  // Medido na malha: a frente do torso chega a `z = 0,1114` nesta
+  // altura. No marco da Akemi o laço foi parar em `0,082` e ficou
+  // enterrado dentro do tronco: existia, custava triângulos e não
+  // aparecia. A cota abaixo sai da sonda, não de uma conta.
+  // Fica **alto**, na linha da clavícula, como um distintivo de
+  // uniforme. A primeira versão o pôs no meio do peito com traços de
+  // circuito em volta, e o conjunto leu como uma carinha: os dois
+  // aros viraram olhos e o traço horizontal virou boca.
+  const emblemaY = 0.352;
+  const emblemaZ = 0.1;
+  const aro = Math.max(6, Math.round(detail.segments * 0.4));
+  for (const side of [-1, 1]) {
+    const anel = new THREE.TorusGeometry(0.019, 0.006, 4, aro);
+    b.addGeometry(
+      anel,
+      { color: ciano, finish: Finish.Holo, ...chest },
+      new THREE.Matrix4().makeTranslation(side * 0.017, emblemaY, emblemaZ),
+    );
+  }
+
+  if (detail.segments < 14) return;
+
+  // --- as ombreiras prateadas ---
+  //
+  // Dão a superfície dura de equipamento e impedem que o grafite
+  // leia como moletom. Havia também uma placa no peito, removida: ela
+  // atravessava o tronco de ombro a ombro e lia como babador.
+  for (const side of [-1, 1]) {
+    b.addGeometry(
+      new THREE.BoxGeometry(0.075, 0.055, 0.095),
+      { color: prata, finish: Finish.Shine, ...chest },
+      new THREE.Matrix4().makeRotationZ(side * 0.22).setPosition(side * m.shoulderX * 0.82, 0.345, 0.0),
+    );
+  }
+
+  /** Um traço de circuito: caixa fina e acesa, colada na superfície. */
+  const traco = (
+    x: number,
+    y: number,
+    z: number,
+    comprimento: number,
+    vertical: boolean,
+    cor: Hex,
+    origem: typeof chest | typeof quadril,
+  ): void => {
+    const g = vertical
+      ? new THREE.BoxGeometry(0.009, comprimento, 0.008)
+      : new THREE.BoxGeometry(comprimento, 0.009, 0.008);
+    b.addGeometry(g, { color: cor, finish: Finish.Holo, ...origem }, new THREE.Matrix4().makeTranslation(x, y, z));
+  };
+
+  // --- os traços de circuito ---
+  //
+  // O pedido literal do briefing: circuitos luminosos integrados ao
+  // vestuário. Eles correm em ângulos retos, como trilha de placa —
+  // linha curva leria como costura, e costura não é circuito.
+  //
+  // Ficam na **frente** e nas laterais do tronco, onde a câmera do
+  // jogo os vê. Atrás seria gasto puro.
+  const zFrente = 0.098;
+  // A trilha do peito corre **de um lado só**. Par simétrico de
+  // traços em volta do emblema é exatamente o que a bancada leu como
+  // rosto na primeira rodada: dois aros viraram olhos, o degrau
+  // horizontal virou boca. Assimetria mata a leitura e ainda rima
+  // com a mecha assimétrica do cabelo.
+  const ladoTrilha = -1;
+  traco(ladoTrilha * 0.086, 0.252, zFrente - 0.008, 0.132, true, ciano, chest);
+  traco(ladoTrilha * 0.06, 0.186, zFrente - 0.004, 0.052, false, azul, chest);
+  // O nó: um quadradinho aceso onde a trilha dobra.
+  b.addGeometry(
+    new THREE.BoxGeometry(0.015, 0.015, 0.009),
+    { color: ciano, finish: Finish.Holo, ...chest },
+    new THREE.Matrix4().makeTranslation(ladoTrilha * 0.086, 0.186, zFrente - 0.006),
+  );
+  for (const side of [-1, 1]) {
+    // A trilha do braço, na face externa, onde ela aparece de frente
+    // e de perfil. O corredor do braço vai de 0,13 a 0,28 em |x|.
+    // Esta pode ser simétrica: longe do eixo, não forma cara.
+    traco(side * 0.214, 0.26, 0.012, 0.15, true, ciano, chest);
+    traco(side * 0.214, 0.335, 0.012, 0.042, false, azul, chest);
+    // A trilha da coxa.
+    traco(side * 0.105, -0.3, 0.052, 0.17, true, azul, quadril);
+  }
+
+  // A faixa da cintura, que separa o tronco da calça e fecha o
+  // circuito dos dois lados.
+  b.addGeometry(
+    flatRing(m.waistWidth * 1.05, WAIST_DEPTH, 0.022, Math.max(12, detail.segments)),
+    { color: prata, finish: Finish.Shine, ...chest },
+    new THREE.Matrix4().makeRotationX(Math.PI / 2).setPosition(0, 0.135, 0),
+  );
+  b.addGeometry(
+    new THREE.BoxGeometry(0.044, 0.016, 0.014),
+    { color: ciano, finish: Finish.Holo, ...chest },
+    new THREE.Matrix4().makeTranslation(0, 0.135, m.waistWidth * WAIST_DEPTH + 0.011),
+  );
 }
 
 function buildSonoraSuit(
@@ -2726,6 +2885,222 @@ function buildHair(b: SurfaceBuilder, a: AvatarAppearance, m: BodyMetrics, detai
       buildAntlers(b, detail, cy, R);
       break;
     }
+    case 'fibra': {
+      // A queda da Haru — Fibra Óptica.
+      //
+      // O nome não é enfeite: a Nexara é a Deusa da Internet e o
+      // penteado dela chama `fluxo`. Fibra é a infraestrutura por
+      // onde o tráfego passa, que é o domínio da Haru; fluxo é o
+      // tráfego. As duas são deusas digitais e precisam de nomes e
+      // silhuetas que não se confundam.
+      //
+      // O briefing listou "cabelo curto assimétrico" entre as
+      // características a preservar, e a arte de referência enviada
+      // no mesmo pedido mostra cabelo **muito longo**. Perguntado, o
+      // Criador escolheu o longo — e a bio em `Pantheon.ts` foi
+      // corrigida junto, porque deixar o texto prometendo chanel
+      // enquanto a malha entrega outra coisa é como o modelo antigo
+      // já estava errado.
+      //
+      // O que sobreviveu da característica oficial: **a franja**, que
+      // a calota base já desenha, e **a assimetria**, abaixo.
+      const topY = cy + 0.05;
+      const bottomY = cy - 0.84;
+      const rings = segments >= 26 ? 15 : segments >= 14 ? 11 : 5;
+      // `t` 0 na ponta, 1 no couro cabeludo — convenção herdada da
+      // `cascata` da Suki, que é a outra queda muito longa do Éden.
+      const yOf = (t: number): number => bottomY + (topY - bottomY) * t;
+      // Afunilamento contínuo, sem patamar. Trecho de largura
+      // constante desenha um cilindro, e cilindro com fundo abaulado
+      // vira urna — foi o que a bancada mostrou no marco da Suki.
+      // Quase reta, afinando só no último quinto. A primeira versão
+      // ia de `0,94R` no couro a `0,41R` na ponta e a bancada
+      // devolveu um cone — leu como capa de chuva, não como cabelo.
+      // Cabelo longo desce acompanhando a largura dos ombros e só a
+      // ponta fecha.
+      //
+      // No couro ela precisa ser **maior que o crânio**, não menor:
+      // com `0,92R` a queda nascia dentro da cabeça e a bancada
+      // mostrou a nuca nua entre a calota e o cabelo. A `cascata` do
+      // estilo `longo` usa `1,06R` pelo mesmo motivo.
+      const rxOf = (t: number): number => R * (0.8 + 0.26 * t) * (1 - 0.42 * smoothstep(0.22, 0, t));
+      const rzBackOf = (t: number): number => R * (0.44 + 0.64 * t ** 0.85);
+      const zcOf = (t: number): number => -R * (0.3 - 0.22 * smoothstep(0.4, 1, t));
+
+      const fall: Ctl[] = [];
+      for (let i = 0; i < rings; i += 1) {
+        const t = i / (rings - 1);
+        fall.push({
+          y: yOf(t),
+          rx: rxOf(t),
+          rz: R * 0.34,
+          rzBack: rzBackOf(t),
+          z: zcOf(t),
+          // Ciano na raiz, aqua claro na ponta: o cabelo acende para
+          // baixo, como luz percorrendo a fibra.
+          color: tint(tint(dark, hair, smoothstep(0, 0.45, t)), 0xd8fbff, 0.45 * (1 - smoothstep(0.05, 0.6, t))),
+          bone: Bone.Head,
+          bone2: Bone.Torso,
+          blend: 0.85 * (1 - smoothstep(cy - 0.78, cy - 0.04, yOf(t))),
+        });
+      }
+      // Sem `subdivideProfile`: ela trava a cor na estação mais
+      // próxima e o degradê é por anel.
+      b.loft(toStations(fall), { segments, capBottom: R * 0.1, capRings: 2 });
+
+      if (detail.segments >= 14) {
+        // --- a franja ---
+        //
+        // A calota base já traz uma, mas é **relevo**: `feature()`
+        // empurra a casca e, nesta escala, o sulco desaparece no
+        // sombreamento — na bancada a cabeça saiu como touca de
+        // natação, testa lisa de orelha a orelha. A franja é a única
+        // coisa que sobrou da característica oficial "chanel" depois
+        // que o Criador escolheu o cabelo longo, então ela tem de
+        // existir em geometria.
+        //
+        // São lâminas **largas e sobrepostas**, não mechas soltas: a
+        // primeira tentativa usou tubos finos e espaçados e a bancada
+        // devolveu uma fileira de dedos apontando para o rosto.
+        //
+        // E assentam na **casca do cabelo**, não no crânio. A segunda
+        // tentativa mediu o raio da cabeça e as lâminas nasceram
+        // dentro da calota, que é mais bojuda que o osso: a franja
+        // existia, custava triângulos e não aparecia — o mesmo
+        // engano do laço enterrado no marco da Akemi. A elipse abaixo
+        // é a da calota, com uma folga de 2 % para fora.
+        const frenteDaCalota = (h: number, x: number): number => {
+          const rx = R * (1.0 - 0.42 * smoothstep(0.1, 0.18, h));
+          const rz = R * (0.95 - 0.2 * smoothstep(0.11, 0.18, h));
+          return rz * Math.sqrt(Math.max(0.05, 1 - (x / rx) ** 2)) + R * 0.02;
+        };
+        // Pontas desiguais e repartição fora do centro: franja de
+        // comprimento igual lê como tigela. O lado direito é o mais
+        // curto porque é onde mora o visor.
+        // Largura irregular de propósito: sete lâminas idênticas e
+        // igualmente espaçadas vincam a testa como as pregas de um
+        // abajur. A linha mais baixa para na sobrancelha — a malha
+        // põe o olho em `cy + 0,12R`, e franja abaixo disso rouba o
+        // rosto.
+        const pontas: readonly (readonly [number, number, number])[] = [
+          [-0.128, 0.05, 0.2],
+          [-0.088, 0.055, 0.15],
+          [-0.046, 0.062, 0.215],
+          [-0.004, 0.069, 0.155],
+          [0.038, 0.077, 0.205],
+          [0.079, 0.086, 0.16],
+          [0.118, 0.095, 0.19],
+        ];
+        for (const [fx, fy, fw] of pontas) {
+          const mecha: Ctl[] = [
+            { y: cy + fy, x: fx, rx: R * fw * 0.85, rz: R * 0.04, z: frenteDaCalota(fy, fx), color: tint(hair, 0xd8fbff, 0.3), bone: Bone.Head },
+            { y: cy + 0.11, x: fx * 0.98, rx: R * fw, rz: R * 0.055, z: frenteDaCalota(0.11, fx), color: hair, bone: Bone.Head },
+            { y: cy + 0.165, x: fx * 0.86, rx: R * fw * 0.9, rz: R * 0.06, z: frenteDaCalota(0.165, fx), color: dark, bone: Bone.Head },
+          ];
+          b.loft(toStations(mecha), { segments: 6, capBottom: R * 0.03, capRings: 1 });
+        }
+
+        // --- a assimetria ---
+        //
+        // O briefing pedia assimetria e ela sobrevive à troca de
+        // comprimento: uma mecha mais cheia desce só pelo lado
+        // direito, à frente do ombro. É o que impede a queda de ler
+        // como cortina simétrica.
+        //
+        // Ela passa **à frente** do ombro de propósito. Atrás seria
+        // invisível: o resto do cabelo já cobre as costas inteiras.
+        //
+        // O deslocamento lateral vai no campo `x` de cada estação:
+        // `LoftOptions` não aceita matriz, e empurrar a peça depois
+        // exigiria uma segunda varredura.
+        const mx = R * 0.76;
+        const mecha: Ctl[] = [
+          // A ponta afina de verdade. A primeira versão tinha raio
+          // quase constante e a mecha saiu como cano de piscina.
+          { y: cy - 0.5, x: mx, rx: R * 0.06, rz: R * 0.06, z: R * 0.27, color: tint(hair, 0xd8fbff, 0.5), bone: Bone.Head, bone2: Bone.Torso, blend: 0.65 },
+          { y: cy - 0.3, x: mx, rx: R * 0.15, rz: R * 0.13, z: R * 0.33, color: tint(hair, 0xd8fbff, 0.3), bone: Bone.Head, bone2: Bone.Torso, blend: 0.45 },
+          { y: cy - 0.08, x: mx, rx: R * 0.2, rz: R * 0.17, z: R * 0.34, color: hair, bone: Bone.Head, bone2: Bone.Torso, blend: 0.2 },
+          { y: cy + 0.04, x: mx, rx: R * 0.22, rz: R * 0.2, z: R * 0.26, color: hair, bone: Bone.Head },
+          { y: cy + 0.13, x: mx * 0.78, rx: R * 0.19, rz: R * 0.18, z: R * 0.14, color: dark, bone: Bone.Head },
+        ];
+        b.loft(toStations(mecha), { segments: Math.max(8, Math.round(segments * 0.5)), capBottom: R * 0.08, capRings: 2 });
+
+        // --- os filamentos de dado ---
+        //
+        // Sulcos de relevo primeiro, que custam **zero**: `feature()`
+        // empurra vértices que já existem. Eles dão a quebra de
+        // superfície que impede a queda de ler como prancha.
+        //
+        // O guarda de elipsoide abaixo não é zelo excessivo: no marco
+        // da Akemi um campo de relevo empurrou o crânio 35 mm para
+        // fora e a cabeça saiu amassada. `feature()` não sabe o que é
+        // cabelo — empurra todo vértice ao alcance, e alcance é três
+        // vezes o raio. Bolha que nasça perto do osso esculpe o osso.
+        const longeDaCabeca = (x: number, y: number, z: number): boolean => {
+          const dx = x / (R * 1.05);
+          const dy = (y - cy) / (R * 1.12);
+          const dz = z / (R * 1.15);
+          return Math.sqrt(dx * dx + dy * dy + dz * dz) >= 1.25;
+        };
+        for (const base of [-1.05, -0.45, 0.18, 0.78]) {
+          for (let t = 0.06; t <= 0.9; t += 0.07) {
+            const az = Math.PI + base * (1 + 0.16 * (1 - t));
+            const sx = Math.sin(az);
+            const sz = Math.cos(az);
+            const px = sx * rxOf(t);
+            const pz = zcOf(t) + sz * rzBackOf(t);
+            const py = yOf(t);
+            if (!longeDaCabeca(px, py, pz)) continue;
+            b.feature([px, py, pz], [R * 0.18, R * 0.44, R * 0.18], -R * 0.11, [sx, 0, sz]);
+          }
+        }
+      }
+
+      if (detail.segments >= 20) {
+        // E as fitas acesas, que são o que de fato conta a fibra
+        // óptica. Relevo sozinho não bastou: na bancada a queda saiu
+        // como uma prancha azul lisa, porque a esta escala um sulco
+        // de dois milímetros não sobrevive ao sombreamento.
+        //
+        // Elas correm **sobre** a superfície da queda, lendo a mesma
+        // parametrização que a construiu. Adereço que não nasce da
+        // superfície real flutua — lição do marco da Nexara.
+        const fita = (a: THREE.Vector3, c: THREE.Vector3): void => {
+          const eixo = new THREE.Vector3().subVectors(c, a);
+          const meio = new THREE.Vector3().addVectors(a, c).multiplyScalar(0.5);
+          const cima = eixo.clone().normalize();
+          const fora = new THREE.Vector3(meio.x, 0, meio.z - zcOf(0.5)).normalize();
+          fora.addScaledVector(cima, -fora.dot(cima)).normalize();
+          const lado = new THREE.Vector3().crossVectors(cima, fora).normalize();
+          b.addGeometry(
+            new THREE.BoxGeometry(R * 0.042, eixo.length(), 0.004),
+            { color: 0x8fe6ff, finish: Finish.Holo, skin: { bone: Bone.Head } },
+            new THREE.Matrix4().makeBasis(lado, cima, fora).setPosition(meio),
+          );
+        };
+        const naQueda = (base: number, t: number): THREE.Vector3 => {
+          const az = Math.PI + base;
+          // 1,04 encosta a fita na casca sem afundar nela.
+          return new THREE.Vector3(
+            Math.sin(az) * rxOf(t) * 1.04,
+            yOf(t),
+            zcOf(t) + Math.cos(az) * rzBackOf(t) * 1.04,
+          );
+        };
+        for (const base of [-0.66, -0.24, 0.1, 0.44, 0.78]) {
+          for (const [de, ate] of [
+            [0.12, 0.34],
+            [0.34, 0.56],
+            [0.56, 0.78],
+          ] as const) {
+            fita(naQueda(base, de), naQueda(base, ate));
+          }
+        }
+      }
+
+      buildHaruGear(b, detail, cy);
+      break;
+    }
     case 'rabo': {
       const tail: Ctl[] = [
         { y: cy - 0.17, rx: R * 0.1, rz: R * 0.1, z: -R * 1.42, color: dark, bone: Bone.Head },
@@ -3003,6 +3378,132 @@ function buildAntlers(b: SurfaceBuilder, detail: BodyDetail, cy: number, R: numb
       ramo(p2, v(1.52, 0.46, -0.12), 0.015);
       ramo(p2.clone().lerp(p3, 0.4), v(0.62, 0.5, -0.78), 0.013);
     }
+  }
+}
+
+/**
+ * O equipamento da Haru: abafadores e o visor do EdenOS.
+ *
+ * ## Os abafadores
+ *
+ * A Haru é a **primeira deusa autista do Panteão**, e este é o
+ * elemento que representa isso no corpo. Ele entra como
+ * **equipamento de trabalho**, não como marcador médico: regulação
+ * sensorial é prática cotidiana e real, e numa Deusa da Tecnologia a
+ * concha sobre a orelha lê como ferramenta de quem opera
+ * infraestrutura. Ela os usa porque funcionam — do mesmo jeito que a
+ * Saturno tem os braços nus porque trabalha com as mãos.
+ *
+ * Nada aqui infantiliza nem estampa diagnóstico. O símbolo da
+ * identidade dela é o **infinito** no peito, que é o endossado pela
+ * comunidade autista, e está em `buildSystemSuit`. A peça de
+ * quebra-cabeça não é usada e não deve ser.
+ *
+ * ## Por que nascem no penteado
+ *
+ * `fones`, `oculos` e `chapeu` são acessórios que os **habitantes
+ * herdam**: remasterizar qualquer um deles mexeria em gente sorteada
+ * pelo mundo inteiro. E `appearance.accessory` é um campo só — pelo
+ * caminho do acessório ela não poderia ter abafadores **e** visor.
+ *
+ * O acessório `oculos` que ela usava custava **524 triângulos** no
+ * LOD baixo e era construído inteiro mesmo a três metros, onde uma
+ * armação não chega a um pixel. Sozinho comia toda a folga de
+ * orçamento dela. Tudo aqui corta por distância.
+ */
+function buildHaruGear(b: SurfaceBuilder, detail: BodyDetail, cy: number): void {
+  // Detalhe de perto. A três metros nada disto chega a um pixel, e é
+  // esse corte que paga o marco — o acessório antigo não cortava.
+  if (detail.segments < 14) return;
+
+  const head: SkinBinding = { bone: Bone.Head };
+  const casco = 0x2b3a52;
+  const prata = 0xc9d8e8;
+  const ciano = 0x45e7ff;
+  const segs = Math.max(8, Math.round(detail.segments * 0.5));
+
+  // --- os abafadores ---
+  //
+  // Medido na malha: a orelha está em `|x| = 0,1804`, `y = 0,682`,
+  // `z = −0,0123`. A concha fica um pouco por fora disso, senão
+  // nasce dentro do crânio em vez de cobrir a orelha.
+  const orelhaY = cy - 0.018;
+  for (const side of [-1, 1]) {
+    // A concha.
+    b.ball([side * 0.197, orelhaY, -0.012], [0.031, 0.056, 0.05], { color: casco, finish: Finish.Cloth, skin: head }, 6);
+    // O anel prateado que contorna a concha, para ela não ler como
+    // bolha de massa colada na cabeça.
+    const anel = new THREE.TorusGeometry(0.046, 0.007, 4, segs);
+    b.addGeometry(
+      anel,
+      { color: prata, finish: Finish.Shine, skin: head },
+      new THREE.Matrix4().makeRotationY(Math.PI / 2).setPosition(side * 0.212, orelhaY, -0.012),
+    );
+    // A luz de estado: acesa, discreta, do tamanho de um LED.
+    b.addGeometry(
+      new THREE.BoxGeometry(0.008, 0.016, 0.016),
+      { color: ciano, finish: Finish.Holo, skin: head },
+      new THREE.Matrix4().makeTranslation(side * 0.219, orelhaY + 0.022, -0.012),
+    );
+  }
+
+  // O arco que liga as duas conchas por cima da cabeça. Sem ele são
+  // dois caroços soltos nas laterais, não um par de abafadores.
+  //
+  // Meia volta **no plano XY**, que é o plano das duas orelhas: as
+  // pontas caem exatamente em `|x| = 0,198`, onde as conchas estão.
+  // A primeira versão girava o arco 90° em Y e com isso o punha no
+  // plano da nuca e da testa — na bancada ele atravessou o rosto
+  // acima dos olhos e leu como uma monocelha escura.
+  const arco = new THREE.TorusGeometry(0.198, 0.012, 4, segs * 2, Math.PI);
+  b.addGeometry(
+    arco,
+    { color: casco, finish: Finish.Cloth, skin: head },
+    new THREE.Matrix4().makeTranslation(0, orelhaY, -0.012),
+  );
+
+  // --- o visor do EdenOS ---
+  //
+  // Substitui os óculos redondos, a pedido do Criador e seguindo a
+  // arte de referência: a peça nasce na têmpora e projeta uma lâmina
+  // de interface à frente do olho.
+  //
+  // Medido na malha: a frente do rosto na linha dos olhos está em
+  // `z ≈ 0,173`, e o nariz avança até `0,208`. O visor fica à frente
+  // disso, e na altura `cy + 0,12R` — que é onde `FACE.eyeY` põe o
+  // olho. A primeira versão o pôs 2 cm acima e a lâmina cobriu a
+  // sobrancelha em vez da vista. No marco da Akemi um adereço frontal foi parar atrás da
+  // superfície e sumiu — aqui a cota sai da sonda.
+  const ladoVisor = 1;
+  // O corpo da peça, encostado na têmpora.
+  b.addGeometry(
+    new THREE.BoxGeometry(0.03, 0.026, 0.044),
+    { color: casco, finish: Finish.Shine, skin: head },
+    new THREE.Matrix4().makeRotationY(-0.34).setPosition(ladoVisor * 0.146, cy + 0.042, 0.073),
+  );
+  // A haste que leva da têmpora ao olho.
+  b.addGeometry(
+    new THREE.BoxGeometry(0.052, 0.009, 0.009),
+    { color: prata, finish: Finish.Shine, skin: head },
+    new THREE.Matrix4().makeRotationY(-0.38).setPosition(ladoVisor * 0.123, cy + 0.036, 0.142),
+  );
+  // A lâmina de interface, em vidro aceso, à frente do olho.
+  b.addGeometry(
+    new THREE.BoxGeometry(0.088, 0.046, 0.005),
+    { color: ciano, finish: Finish.Holo, skin: head },
+    new THREE.Matrix4().makeRotationY(-0.2).setPosition(ladoVisor * 0.064, cy + 0.029, 0.196),
+  );
+
+  if (detail.segments < 20) return;
+
+  // As linhas de leitura dentro da lâmina — o que faz a peça ler
+  // como tela, e não como placa de acrílico colorida.
+  for (let i = 0; i < 3; i += 1) {
+    b.addGeometry(
+      new THREE.BoxGeometry(0.05 - i * 0.012, 0.005, 0.004),
+      { color: 0xd8fbff, finish: Finish.Holo, skin: head },
+      new THREE.Matrix4().makeRotationY(-0.2).setPosition(ladoVisor * (0.055 - i * 0.004), cy + 0.052 - i * 0.012, 0.2),
+    );
   }
 }
 

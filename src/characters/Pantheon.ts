@@ -247,10 +247,23 @@ const HARU: EdenCharacter = {
   bio: [
     'Haru cuida do EdenOS, a infraestrutura digital que liga aparelhos, serviços e cidades do Éden Aero.',
     'É a primeira deusa autista do panteão. Prefere conversas diretas, combina pausas quando precisa e enxerga padrões antes de todo mundo.',
-    'Azul, ciano, aqua e prata; cabelo em chanel assimétrico; reflexos digitais nos olhos e desenhos de circuito no traje.',
+    'Azul, ciano, aqua e prata; cabelo longo e assimétrico com franja; visor do EdenOS sobre o olho e desenhos de circuito acesos no traje.',
   ],
   place: inFrontOf('centro-edenconnect'),
-  appearance: look('#f6c9a4', 'curto', '#7fd6ff', '#2f6fb3', 'aero', '#29c8ff', '#2e3a4f', '#f4f6fb', 'oculos', 0.99),
+  // Haru 2.0. Os três campos de aparência eram compartilhados, e o
+  // pior deles era o traje: `aero` é dividido com o **Aérion, o
+  // Criador do Éden Aero**, e com a Amara. Remasterizar o `aero`
+  // onde ele mora teria mudado o Criador junto — por isso ela ganhou
+  // `sistema`, e `aero` sai do marco intocado.
+  //
+  // `topColor` era `#29c8ff`, que é exatamente o destaque genérico
+  // que o motor usa em todo avatar: ela era a personagem pintada com
+  // a cor padrão do sistema. Agora o pano é grafite e a luz vem da
+  // emissão — é o que a separa da Nexara, que é clara.
+  //
+  // `accessory: 'nenhum'` é deliberado: abafadores e visor nascem
+  // dentro do penteado, e `accessory` é um campo só.
+  appearance: look('#f6c9a4', 'fibra', '#7fd6ff', '#2f6fb3', 'sistema', '#36476b', '#1d2740', '#f4f6fb', 'nenhum', 0.99),
   aura: 0x7fd6ff,
   contact: {
     handle: '@haru',
