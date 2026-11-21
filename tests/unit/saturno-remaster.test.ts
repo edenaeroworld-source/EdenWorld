@@ -206,31 +206,49 @@ describe('Saturno 2.0 — a ficha', () => {
     // Saturno ficasse com a flor, a Maze chegaria ao marco dela sem
     // assinatura nenhuma.
     expect(maze.title).toBe('Deusa da Natureza');
-    expect(maze.appearance.accessory).toBe('flor');
     expect(saturno.appearance.accessory).not.toBe('flor');
-    // A `flor` continua acessível aos habitantes, como sempre foi.
+    // A `flor` continua acessível aos habitantes, como sempre foi —
+    // e desde o marco da Maze ela é **só** deles: a Maze trocou o
+    // acessório por uma coroa dentro do próprio penteado.
     expect(CITIZEN_ACCESSORIES).toContain('flor');
   });
 
-  it('a ficha da Maze e a da Júpiter saem do marco intactas', () => {
-    // Nenhuma das duas foi remasterizada ainda. Mexer na aparência
-    // delas aqui seria gastar o marco das duas sem briefing.
-    expect(maze.appearance).toEqual({
-      skin: '#7d4a2c',
-      hairStyle: 'longo',
-      hairColor: '#3fcf86',
-      eyeColor: '#2f9a66',
-      outfit: 'vestido',
-      topColor: '#a8f0c0',
-      bottomColor: '#1fae6b',
-      shoeColor: '#f3ead6',
-      accessory: 'flor',
-      height: 1.03,
-    });
-    expect(maze.aura).toBe(0x7df0a8);
-    expect(maze.colors).toEqual(['#9df0b0', '#1fae6b']);
+  it('a ficha da Júpiter sai do marco intacta', () => {
+    // A Júpiter ainda não foi remasterizada. Mexer na aparência dela
+    // aqui seria gastar o marco dela sem briefing.
     expect(jupiter.appearance.hairStyle).toBe('cacheado');
     expect(jupiter.appearance.outfit).toBe('vestido');
+  });
+
+  it('a ficha da Maze mudou no marco dela, e não neste', () => {
+    // Esta asserção **foi reescrita** no marco da Maze 2.0, e a
+    // reescrita é deliberada: a versão original deste arquivo fixava
+    // a aparência inteira da Maze por `toEqual` com a justificativa
+    // de que ela ainda não tinha sido remasterizada. Depois de
+    // `Maze 2.0 — Remasterização Oficial` essa justificativa deixou
+    // de valer, e manter os valores antigos aqui seria travar a
+    // Maze no estado anterior a partir do arquivo de **outra**
+    // deusa.
+    //
+    // O que este teste guarda continua sendo o mesmo de antes: que o
+    // marco da Saturno não encoste na Maze. Por isso ele afirma o
+    // estado **novo** e canônico dela, e qualquer mudança feita a
+    // partir daqui volta a quebrar o teste, como deve.
+    expect(maze.appearance).toEqual({
+      skin: '#7d4a2c',
+      hairStyle: 'copa',
+      hairColor: '#a8702f',
+      eyeColor: '#2f9a66',
+      outfit: 'jardim',
+      topColor: '#eef9ef',
+      bottomColor: '#2fa36a',
+      shoeColor: '#f3ead6',
+      accessory: 'nenhum',
+      height: 1.03,
+    });
+    // O que o marco da Maze **não** podia tocar, e não tocou.
+    expect(maze.aura).toBe(0x7df0a8);
+    expect(maze.colors).toEqual(['#9df0b0', '#1fae6b']);
   });
 
   it('a paleta dourada dela não encosta na paleta verde da Maze', () => {
