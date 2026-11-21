@@ -901,7 +901,15 @@ const SATURNO: EdenCharacter = {
     'Na Casa EdenPawl ela cuida de quem chega perdido e ensina a cidade a conviver com bicho solto.',
   ],
   place: inFrontOf('casa-edenpawl'),
-  appearance: look('#a96c45', 'cacheado', '#8a5a2b', '#c98a2b', 'casual', '#ffd84a', '#7ddc5a', '#f3ead6', 'flor', 1.0),
+  // Saturno 2.0. Os três campos que mudaram eram todos **compartilhados**:
+  // `cacheado` é penteado de habitante e da Júpiter, `casual` é de
+  // habitante, e `flor` é de habitante e da Maze — a Deusa da Natureza,
+  // que ainda não foi remasterizada. Uma deusa não pode ter a assinatura
+  // de outra. Agora ela usa peças próprias, fora das listas de habitante.
+  //
+  // `accessory: 'nenhum'` é deliberado: a galhada nasce do penteado
+  // `silvestre`, não do acessório, e assim ela deixa a `flor` para a Maze.
+  appearance: look('#f3d2c1', 'silvestre', '#8a5a2b', '#c98a2b', 'guardia', '#ffd84a', '#d99a30', '#f3ead6', 'nenhum', 1.0),
   aura: 0xffd98a,
   contact: {
     handle: '@saturno',
