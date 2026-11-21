@@ -176,11 +176,20 @@ export function buildBodyGeometry(a: AvatarAppearance, p: BodyProportions, m: Bo
   // O que muda não é o corte — é que agora o pano é escuro e a luz
   // vem da emissão, o que a separa da Nexara, que é clara.
   const sistema = outfit === 'sistema';
+  // O Traje Jardim, da Maze: drapeado branco translúcido com folhagem
+  // verde por cima, vinhas na barra e gotas de água.
+  //
+  // Ombros e braços nus, como na arte — e pela mesma razão da
+  // Saturno: ela planta, e manga comprida esconde a mão que planta.
+  // Barra longa, a do Manto Aurora, porque a arte mostra um drapeado
+  // que varre o chão; a `SKIRT_HEM_Y` do `vestido` que ela usava
+  // parava no joelho.
+  const jardim = outfit === 'jardim';
   const longSleeves = outfit === 'aero' || aurora || rede || sonora || cosplay || sistema;
-  const bareArms = outfit === 'esportivo' || outfit === 'vestido' || guardia;
+  const bareArms = outfit === 'esportivo' || outfit === 'vestido' || guardia || jardim;
   const longPants = outfit === 'casual' || outfit === 'aero' || rede || sistema;
-  const bareLegs = outfit === 'vestido' || docente || cosplay || guardia;
-  const dress = outfit === 'vestido' || aurora || docente || sonora || cosplay || guardia;
+  const bareLegs = outfit === 'vestido' || docente || cosplay || guardia || jardim;
+  const dress = outfit === 'vestido' || aurora || docente || sonora || cosplay || guardia || jardim;
   // Dois acabamentos, e a diferença entre eles é deliberada.
   //
   // `cloth` é o que vale para o que se **acrescenta** por cima do
@@ -228,7 +237,7 @@ export function buildBodyGeometry(a: AvatarAppearance, p: BodyProportions, m: Bo
   // A barra longa é a mesma do Manto Aurora: abaixo de `GOWN_HEM_Y` a
   // saia deixa de abrir como cone e vira coluna, que é o que separa
   // um vestido longo de uma tenda.
-  if (dress) buildSkirt(b, m, detail, dress && (sonora || cosplay || guardia) ? bottom : top, origins, cosplay ? COSPLAY_HEM_Y : aurora || docente || sonora || guardia ? GOWN_HEM_Y : SKIRT_HEM_Y);
+  if (dress) buildSkirt(b, m, detail, dress && (sonora || cosplay || guardia) ? bottom : top, origins, cosplay ? COSPLAY_HEM_Y : aurora || docente || sonora || guardia || jardim ? GOWN_HEM_Y : SKIRT_HEM_Y);
 
   // A oclusão é a última coisa antes de fechar a malha: ela precisa do
   // corpo inteiro montado para saber o que esconde o quê. É daqui que
@@ -360,6 +369,9 @@ function buildTorso(b: SurfaceBuilder, ctx: TorsoCtx): void {
   }
   if (outfit === 'sistema') {
     buildSystemSuit(b, m, detail, torso, hip);
+  }
+  if (outfit === 'jardim') {
+    buildGardenSuit(b, m, detail, torso, hip);
   }
 
   if (outfit === 'aero') {
@@ -1028,6 +1040,337 @@ function buildSystemSuit(
     { color: ciano, finish: Finish.Holo, ...chest },
     new THREE.Matrix4().makeTranslation(0, 0.135, m.waistWidth * WAIST_DEPTH + 0.011),
   );
+}
+
+/**
+ * O Traje Jardim, da Maze — Deusa da Natureza.
+ *
+ * A arte mostra um drapeado **branco translúcido** com folhagem verde
+ * correndo por cima, e é essa a leitura: o pano é claro, a vida é que
+ * é verde. O `vestido` que ela usava era verde-menta liso dos dois
+ * lados, e o resultado era uma figura de uma cor só.
+ *
+ * A folha aqui é **pano** (`Finish.Cloth`), não vidro. Não é detalhe
+ * de gosto: a Saturno já usa folha de **vidro** verde, e o relatório
+ * do marco dela registrou a divisão por escrito — o eixo da Saturno é
+ * animal e a vegetação dela é ornamento translúcido; o eixo da Maze é
+ * vegetal e a folha dela é matéria viva. Duas deusas de natureza no
+ * mesmo elenco só funcionam se o material separar as duas de perto,
+ * já que de longe ambas são verdes.
+ *
+ * O pano claro não é pintado aqui: ele vem de `topColor`, pelas
+ * varreduras do tronco e por `buildSkirt`. Esta função só acrescenta
+ * a vida por cima, e as cores dela saem da paleta canônica da ficha
+ * (`colors`), não dos campos de roupa — é o que garante que a
+ * folhagem continue verde mesmo que alguém vista o traje noutra cor.
+ *
+ * O que acende é a **nervura** (`Finish.Holo`), fina, e as **gotas de
+ * água** são o único vidro da peça. O briefing pede acabamento
+ * Frutiger Aero e avisa contra transformá-la em personagem
+ * tecnológica: a saída é que o brilho venha de seiva e de água, nunca
+ * de circuito. Traço reto, placa e painel são vocabulário da Haru e
+ * da Nexara, e não entram aqui.
+ */
+function buildGardenSuit(
+  b: SurfaceBuilder,
+  m: BodyMetrics,
+  detail: BodyDetail,
+  torso: readonly [number, number, number],
+  hip: readonly [number, number, number],
+): void {
+  const chest = { skin: { bone: Bone.Torso }, zone: MorphZone.Bust, origin: torso } as const;
+  const quadril = { skin: { bone: Bone.Hips }, zone: MorphZone.Curve, origin: hip } as const;
+  // Verdes da paleta canônica dela (`colors`), não inventados: é o que
+  // amarra o traje à ficha.
+  const folha = 0x3fa96b;
+  const folhaClara = 0x9df0b0;
+  const seiva = 0x6cf5a8;
+
+  /**
+   * Uma folha: losango achatado, encostado na superfície.
+   *
+   * `rot` gira a folha no plano da peça, para que a nervura aponte
+   * para onde o galho cresce. Folha toda na mesma direção lê como
+   * escama.
+   */
+  const folhaEm = (
+    x: number,
+    y: number,
+    z: number,
+    comprimento: number,
+    rot: number,
+    cor: Hex,
+    origem: typeof chest | typeof quadril,
+  ): void => {
+    const g = new THREE.BoxGeometry(comprimento * 0.42, comprimento, 0.008);
+    // Os quatro cantos recuados: um losango lê como folha, uma caixa
+    // lê como etiqueta costurada.
+    const pos = g.getAttribute('position');
+    for (let i = 0; i < pos.count; i += 1) {
+      const py = pos.getY(i);
+      const k = 1 - Math.abs(py) / (comprimento * 0.5);
+      pos.setX(i, pos.getX(i) * (0.25 + 0.75 * k));
+    }
+    pos.needsUpdate = true;
+    b.addGeometry(
+      g,
+      { color: cor, finish: Finish.Cloth, ...origem },
+      new THREE.Matrix4().makeRotationZ(rot).setPosition(x, y, z),
+    );
+  };
+
+  /**
+   * Uma folha assentada num corpo de revolução — a saia.
+   *
+   * Diferente de `folhaEm`, que encosta a folha num plano frontal:
+   * aqui ela tem de girar com o azimute para acompanhar a curva, ou
+   * nasce de perfil e some.
+   */
+  const folhaNaSaia = (
+    az: number,
+    y: number,
+    raio: number,
+    comprimento: number,
+    inclina: number,
+    cor: Hex,
+  ): void => {
+    const g = new THREE.BoxGeometry(comprimento * 0.6, comprimento, 0.009);
+    const pos = g.getAttribute('position');
+    for (let i = 0; i < pos.count; i += 1) {
+      const k = Math.cos((pos.getY(i) / comprimento) * Math.PI) * 0.5 + 0.5;
+      pos.setX(i, pos.getX(i) * (0.18 + 0.95 * k));
+      pos.setZ(i, pos.getZ(i) + Math.abs(pos.getX(i)) * 0.35);
+    }
+    pos.needsUpdate = true;
+    b.addGeometry(
+      g,
+      { color: cor, finish: Finish.Cloth, ...quadril },
+      new THREE.Matrix4()
+        .makeRotationY(az)
+        .multiply(new THREE.Matrix4().makeRotationZ(inclina))
+        .setPosition(Math.sin(az) * raio, y, Math.cos(az) * raio),
+    );
+  };
+
+  // --- a faixa de folhagem no tronco ---
+  //
+  // Cruza o peito **na diagonal**, de um ombro à cintura oposta. A
+  // assimetria é deliberada e foi aprendida caro no marco da Haru:
+  // peça simétrica no meio do peito lê como rosto, e um par de folhas
+  // em volta do esterno viraria dois olhos.
+  //
+  // Medido na malha: a frente do torso chega a `z = 0,1120` em
+  // `y = 0,2744`. As folhas saem à frente disso.
+  const zFrente = 0.104;
+  const ombro = m.shoulderX * 0.78;
+  for (let i = 0; i < 7; i += 1) {
+    const t = i / 6;
+    // Do ombro esquerdo (alto) à cintura direita (baixo).
+    const x = -ombro + (ombro * 1.5) * t;
+    const y = 0.38 - 0.23 * t;
+    const z = zFrente - 0.012 * Math.abs(x) * 6;
+    const tamanho = 0.108 - 0.026 * t;
+    folhaEm(x, y, z, tamanho, -0.95 + 0.5 * t, i % 2 === 0 ? folha : folhaClara, chest);
+  }
+
+  if (detail.segments < 14) return;
+
+  // --- a gola de folhas ---
+  //
+  // Anel completo na linha do pescoço, à frente **e** atrás. Duas
+  // placas soltas na frente do peito não são uma gola — foi a lição
+  // do marco da Lilly, e a primeira versão da gola da Saturno repetiu
+  // o erro ao contrário, pondo tudo nas costas.
+  const golaR = m.neckR * 1.5;
+  const golaN = Math.max(7, Math.round(detail.segments * 0.4));
+  for (let i = 0; i < golaN; i += 1) {
+    const a = (i / golaN) * TAU;
+    folhaEm(
+      Math.sin(a) * golaR,
+      m.neckY - 0.052,
+      Math.cos(a) * golaR * 0.72,
+      0.052,
+      Math.sin(a) * 0.7,
+      i % 3 === 0 ? folhaClara : folha,
+      chest,
+    );
+  }
+
+  // --- as nervuras acesas ---
+  //
+  // Finas, correndo junto da faixa. São o que faz a folhagem ler como
+  // viva à noite, quando o pano branco apaga.
+  for (let i = 0; i < 6; i += 1) {
+    const t = i / 5;
+    const x = -ombro * 0.92 + (ombro * 1.42) * t;
+    const y = 0.365 - 0.215 * t;
+    b.addGeometry(
+      new THREE.BoxGeometry(0.052, 0.005, 0.006),
+      { color: seiva, finish: Finish.Holo, ...chest },
+      new THREE.Matrix4().makeRotationZ(-0.95 + 0.5 * t).setPosition(x, y, zFrente - 0.012 * Math.abs(x) * 6 + 0.006),
+    );
+  }
+
+  // --- a cinta de vinha ---
+  //
+  // Marca a cintura e fecha a diagonal dos dois lados, para a faixa
+  // não terminar no ar.
+  b.addGeometry(
+    flatRing(m.waistWidth * 1.05, WAIST_DEPTH, 0.016, Math.max(12, detail.segments)),
+    { color: folha, finish: Finish.Cloth, ...chest },
+    new THREE.Matrix4().makeRotationX(Math.PI / 2).setPosition(0, 0.142, 0),
+  );
+
+  // --- as vinhas da barra ---
+  //
+  // O erro mais caro do marco da Saturno, e a razão de a cota abaixo
+  // ser medida e não calculada: `buildSkirt` escreve um perfil de
+  // controle cuja barra vale `hipWidth · 1,22`, mas a saia que sai do
+  // forno é muito maior — a varredura e a zona de morfologia abrem
+  // mais que o perfil sugere. Lá as folhas nasceram enterradas dentro
+  // do pano, invisíveis e pagas.
+  //
+  // E a medida tem de ser **desta** saia. A primeira versão herdou o
+  // número do marco da Saturno — raio 0,3497 em `y = −0,36` — mas
+  // aquilo era a barra `SKIRT_HEM_Y`. O Traje Jardim usa
+  // `GOWN_HEM_Y`, que desce a −0,46 e abre muito mais. Varrido na
+  // malha vestida, o raio real por altura é:
+  //
+  //     y −0,20 → 0,2758    y −0,32 → 0,3412
+  //     y −0,24 → 0,2931    y −0,36 → 0,3797
+  //     y −0,28 → 0,3113    y −0,44 → 0,4084
+  //
+  // As folhas da primeira versão, em 0,368 na altura −0,40, estavam
+  // **dentro** do pano. O mesmo erro, na mesma peça, por confiar num
+  // número de segunda mão.
+  const raioDaSaia = (y: number): number =>
+    0.2758 + (0.4084 - 0.2758) * smoothstep(-0.2, -0.44, y);
+
+  if (detail.segments >= 14) {
+    const vinhaN = Math.max(8, Math.round(detail.segments * 0.5));
+    for (let i = 0; i < vinhaN; i += 1) {
+      const a = (i / vinhaN) * TAU;
+      const y = -0.395 - 0.045 * Math.abs(Math.sin(i * 1.7));
+      const r = raioDaSaia(y) + 0.016 + 0.01 * Math.sin(i * 2.3);
+      folhaEm(Math.sin(a) * r, y, Math.cos(a) * r, 0.082, Math.sin(a) * 0.5, i % 2 === 0 ? folha : folhaClara, quadril);
+    }
+
+    // --- a folhagem que cai sobre a saia ---
+    //
+    // Esta é a terceira versão desta peça, e as duas anteriores foram
+    // descartadas na bancada, não no papel.
+    //
+    // A ideia original era um drapeado de pano: pregas de tecido
+    // verde caindo da cintura sobre o branco, como na arte. Foi
+    // tentada com trapézios planos (saiu uma saia de bandeirinhas de
+    // festa junina), depois com pregas de barriga e bico (saiu uma
+    // franja havaiana), depois com barra arredondada e frente aberta
+    // (saíram placas de papel coladas no quadril).
+    //
+    // A conclusão é sobre o motor, não sobre a arte: superfície plana
+    // e larga, sob luz difusa e sem textura, não lê como pano — lê
+    // como cartolina. O vocabulário que este render desenha bem é o
+    // que o resto do Éden usa, a **folha** de volume próprio. Então a
+    // folhagem da arte vira folhagem de verdade: folhas grandes
+    // caindo em camadas sobre o branco, densas atrás e nos lados,
+    // ralas na frente, como hera crescendo por cima do vestido.
+    //
+    // Quarta versão, e a lição é de composição, não de geometria: a
+    // terceira espalhou folhas em três anéis regulares por toda a
+    // saia e a bancada devolveu confete verde — manchas sem desenho,
+    // e um vazio branco no meio.
+    //
+    // A arte não tem folhagem distribuída. Tem uma **cascata**: a
+    // vegetação desce por um lado, contínua, como hera que subiu pelo
+    // vestido. Então é isso que ela ganha — uma linha só, grossa,
+    // descendo em espiral do quadril à barra, do mesmo lado onde a
+    // faixa do peito termina. Tronco e saia passam a ler como uma
+    // peça, não duas.
+    //
+    // A contagem é baixa de propósito. A primeira cascata usou
+    // `segments · 0,6` — vinte e seis nós espremidos em trinta
+    // centímetros de queda — e virou um arbusto colado no quadril.
+    // Hera tem espaço entre os nós.
+    const cascataN = Math.max(7, Math.round(detail.segments * 0.25));
+    for (let i = 0; i < cascataN; i += 1) {
+      const t = i / (cascataN - 1);
+      // Continua a diagonal do peito, que morre na cintura direita.
+      // Começa quase de frente, onde a diagonal do peito morre, e
+      // some girando para trás. A primeira volta começava em 0,95 e
+      // escondia a cascata inteira atrás do quadril: de frente ela
+      // era um vestido branco liso.
+      // Giro curto. Com duas voltas e meia de espiral a cascata
+      // enrolava no quadril e virava um buquê preso na cintura: os
+      // nós da frente ficavam todos na mesma altura e nenhum descia.
+      // Hera cai mais do que contorna.
+      const az = 0.58 + t * 1.15;
+      const y = -0.115 - t * 0.34;
+      const jitter = Math.sin(i * 2.9);
+      // Três folhas por nó, abertas em leque: hera cresce em tufo, e
+      // folha solta em fila vira pontilhado.
+      for (const ramo of [-1, 0, 1]) {
+        if (ramo !== 0 && i % 2 === 1) continue;
+        const azF = az + ramo * 0.3 + jitter * 0.06;
+        const yF = y + ramo * 0.012 + jitter * 0.014;
+        const tam = (0.185 - 0.06 * t) * (ramo === 0 ? 1 : 0.72);
+        folhaNaSaia(
+          azF,
+          yF,
+          raioDaSaia(yF) + 0.015 + 0.01 * Math.abs(ramo),
+          tam,
+          Math.PI + ramo * 0.5 + jitter * 0.3,
+          (i + ramo) % 3 === 0 ? folhaClara : folha,
+        );
+      }
+    }
+
+    // Do lado oposto, três folhas soltas e pequenas: o bastante para
+    // a cascata não parecer colada num manequim simétrico, longe de
+    // encher o outro lado.
+    for (const [az, y, tam] of [
+      [-1.0, -0.18, 0.115],
+      [-1.5, -0.27, 0.1],
+      [-2.25, -0.34, 0.085],
+      [-0.62, -0.33, 0.078],
+    ] as const) {
+      folhaNaSaia(az, y, raioDaSaia(y) + 0.015, tam, Math.PI + 0.4, folha);
+    }
+
+    // A nervura acesa que desce entre as folhas. Poucas: é o que
+    // faz o pano ler como vivo sem virar pisca-pisca.
+    if (detail.segments >= 20) {
+      for (let i = 0; i < 4; i += 1) {
+        const t = 0.12 + i * 0.26;
+        const a = 1.15 + t * 2.0;
+        const y = -0.125 - t * 0.3;
+        const r = raioDaSaia(y) + 0.05;
+        b.addGeometry(
+          new THREE.BoxGeometry(0.006, 0.1, 0.005),
+          { color: seiva, finish: Finish.Holo, ...quadril },
+          new THREE.Matrix4().makeRotationY(a).setPosition(Math.sin(a) * r, y, Math.cos(a) * r),
+        );
+      }
+    }
+  }
+
+  if (detail.segments < 20) return;
+
+  // --- as gotas de água ---
+  //
+  // O único vidro da peça, e é **água**, não folha: a folha de vidro é
+  // da Saturno. Poucas e pequenas — água em excesso vira lantejoula.
+  const gota = (x: number, y: number, z: number, r: number, origem: typeof chest | typeof quadril): void => {
+    b.ball([x, y, z], [r, r * 1.35, r], { color: 0xd6fff0, finish: Finish.Glass, ...origem }, 5);
+  };
+  for (const side of [-1, 1]) {
+    gota(side * m.shoulderX * 0.74, 0.355, 0.028, 0.013, chest);
+  }
+  for (let i = 0; i < 6; i += 1) {
+    const a = (i / 6) * TAU + 0.4;
+    const y = -0.432;
+    const r = raioDaSaia(y) + 0.022;
+    gota(Math.sin(a) * r, y, Math.cos(a) * r, 0.013, quadril);
+  }
 }
 
 function buildSonoraSuit(
@@ -2863,7 +3206,7 @@ function buildHair(b: SurfaceBuilder, a: AvatarAppearance, m: BodyMetrics, detai
           const dx = x / (R * 1.05);
           const dy = (y - cy) / (R * 1.12);
           const dz = z / (R * 1.15);
-          return Math.sqrt(dx * dx + dy * dy + dz * dz) >= 1.25;
+          return Math.sqrt(dx * dx + dy * dy + dz * dz) >= 1.3;
         };
         for (const base of [-0.95, -0.32, 0.32, 0.95]) {
           for (let t = 0.08; t <= 0.9; t += 0.085) {
@@ -3099,6 +3442,338 @@ function buildHair(b: SurfaceBuilder, a: AvatarAppearance, m: BodyMetrics, detai
       }
 
       buildHaruGear(b, detail, cy);
+      break;
+    }
+    case 'copa': {
+      // A juba da Maze — Copa de Árvore.
+      //
+      // O nome é literal: a arte mostra uma copa, não um penteado.
+      // Volume enorme, luz filtrando por dentro, vida morando lá.
+      //
+      // A ficha dizia `longo` e `hairColor: '#3fcf86'` — liso, verde,
+      // parando no ombro. A arte de referência mostra uma juba
+      // cacheada castanha e larguíssima, e o Criador escolheu a arte.
+      // O verde não se perdeu: virou a cor das folhas e dos brotos
+      // que moram aqui dentro, e a paleta canônica `colors` da ficha
+      // não foi tocada.
+      //
+      // `longo` sai do marco intacto: é o penteado do **Criador
+      // Aérion** e da Amara.
+      // A juba é uma **esfera**, não uma queda: cabelo cacheado
+      // afro-texturado cresce para fora em todas as direções, e o
+      // raio maior fica na altura das orelhas, não no couro cabeludo.
+      // A primeira versão usou o perfil de uma queda longa e o
+      // resultado foi um capuz que cortava o crânio no meio.
+      const jubaY = cy - 0.01;
+      const jubaR = R * 1.62;
+      const topY = jubaY + jubaR * 0.8;
+      const bottomY = jubaY - jubaR * 1.02;
+      const rings = segments >= 26 ? 13 : segments >= 14 ? 9 : 5;
+      // `t` 0 na ponta, 1 no alto, como na `cascata` e na `fibra` — é
+      // a convenção dos penteados grandes do Éden.
+      const yOf = (t: number): number => bottomY + (topY - bottomY) * t;
+      const perfil = (t: number): number =>
+        Math.sqrt(Math.max(0.02, 1 - ((yOf(t) - jubaY) / jubaR) ** 2));
+      const rxOf = (t: number): number => R * 1.62 * perfil(t);
+      const rzBackOf = (t: number): number => R * 1.5 * perfil(t);
+      // A frente tem **duas alturas**, e é o que resolve dois
+      // problemas opostos de uma vez.
+      //
+      // Rasa na linha dos olhos: a primeira versão deu à juba a mesma
+      // profundidade na frente e atrás e a bancada devolveu uma bola
+      // de cabelo com o rosto preso dentro. Medido, a frente do rosto
+      // está em `z = 0,1808` e a juba precisa parar antes.
+      //
+      // Funda em cima: com a frente rasa em toda a altura, a calota
+      // compartilhada de `buildHair` — que chega a `R · 0,92` e não é
+      // minha para alterar — **furava** a juba e aparecia por fora,
+      // lisa e polida, terminando numa aresta dura sobre as
+      // sobrancelhas. Acima da testa o cabelo avança até cobri-la; na
+      // altura do olhar ele recua. É o que uma franja faz.
+      const rzFrenteOf = (t: number): number =>
+        R * (0.55 + 0.95 * smoothstep(cy + 0.015, cy + 0.185, yOf(t))) * perfil(t);
+      const zcOf = (): number => -R * 0.2;
+
+      const fall: Ctl[] = [];
+      for (let i = 0; i < rings; i += 1) {
+        const t = i / (rings - 1);
+        fall.push({
+          y: yOf(t),
+          rx: rxOf(t),
+          rz: rzFrenteOf(t),
+          rzBack: rzBackOf(t),
+          z: zcOf(),
+          color: tint(dark, hair, smoothstep(0.08, 0.7, t)),
+          bone: Bone.Head,
+          bone2: Bone.Torso,
+          blend: 0.5 * (1 - smoothstep(cy - 0.18, cy + 0.06, yOf(t))),
+        });
+      }
+      b.loft(toStations(fall), { segments, capBottom: R * 0.2, capRings: 2 });
+
+      if (detail.segments >= 14) {
+        // --- o cacho ---
+        //
+        // Relevo, que custa **zero** em triângulos: `feature()` empurra
+        // vértices que já existem. É o que quebra a casca lisa e a faz
+        // ler como cabelo cacheado em vez de capacete.
+        //
+        // O guarda de elipsoide não é zelo: no marco da Akemi um campo
+        // de relevo empurrou o crânio 35 mm para fora e a cabeça saiu
+        // amassada. `feature()` não sabe o que é cabelo — empurra todo
+        // vértice ao alcance, e alcance é três vezes o raio da bolha.
+        const longeDaCabeca = (x: number, y: number, z: number): boolean => {
+          const dx = x / (R * 1.05);
+          const dy = (y - cy) / (R * 1.12);
+          const dz = z / (R * 1.15);
+          return Math.sqrt(dx * dx + dy * dy + dz * dz) >= 1.25;
+        };
+        //
+        // A amplitude não é estética, é aritmética: `feature()` pesa
+        // o empurrão por `exp(-d²·1,4)`, então o pico vale o que diz
+        // o argumento e some em três desvios. A primeira versão pediu
+        // `R·0,055` — onze milímetros — e a bancada devolveu uma
+        // bola de plástico lisa. Cacho precisa de centímetros.
+        //
+        // A bolha é **pequena** de propósito: `feature()` varre a
+        // geometria inteira, inclusive o crânio que já está lá. Com
+        // raio `R·0,24` o alcance morre antes da cabeça, e o que
+        // sobra no rosto vale dois milésimos do empurrão.
+        //
+        // Vai até o topo. A primeira versão parou em `t = 0,9` e
+        // deixou uma **calota lisa** sobre a testa: de perto a Maze
+        // usava um capacete polido com a juba começando numa aresta
+        // dura. O alto da cabeça é a primeira coisa que se vê num
+        // diálogo.
+        for (let anel = 0; anel < 10; anel += 1) {
+          const t = 0.1 + anel * 0.1;
+          const n = anel >= 8 ? 8 : 11;
+          for (let i = 0; i < n; i += 1) {
+            // Deslocamento por anel: cachos alinhados em colunas leem
+            // como as pregas de um abajur.
+            const az = (i / n) * TAU + anel * 0.47;
+            const sx = Math.sin(az);
+            const sz = Math.cos(az);
+            const raio = sz < 0 ? rzBackOf(t) : rzFrenteOf(t);
+            const px = sx * rxOf(t);
+            const pz = zcOf() + sz * raio;
+            const py = yOf(t);
+            if (!longeDaCabeca(px, py, pz)) continue;
+            b.feature([px, py, pz], [R * 0.21, R * 0.23, R * 0.21], R * 0.3, [sx, 0.12, sz]);
+          }
+        }
+
+        // --- as folhas na juba ---
+        //
+        // Assentadas na **casca do cabelo**, não no crânio. No marco da
+        // Haru a franja mediu o raio da cabeça e nasceu dentro da
+        // calota: existia, custava triângulos e não aparecia. A conta
+        // abaixo é a mesma elipse que construiu a juba.
+        const naJuba = (t: number, az: number, fora: number): [number, number, number] => {
+          const sx = Math.sin(az);
+          const sz = Math.cos(az);
+          const raio = sz < 0 ? rzBackOf(t) : rzFrenteOf(t);
+          return [sx * rxOf(t) * fora, yOf(t), zcOf() + sz * raio * fora];
+        };
+        const folha = (t: number, az: number, tam: number, cor: Hex): void => {
+          const [px, py, pz] = naJuba(t, az, 1.02);
+          // Larga. A primeira versão fez `tam·0,4` e afinou as
+          // pontas a 25%: na bancada saíram palitos verdes. Folha lê
+          // como folha quando tem barriga no meio.
+          const g = new THREE.BoxGeometry(tam * 0.66, tam, 0.008);
+          const pos = g.getAttribute('position');
+          for (let i = 0; i < pos.count; i += 1) {
+            const k = Math.cos((pos.getY(i) / tam) * Math.PI) * 0.5 + 0.5;
+            pos.setX(i, pos.getX(i) * (0.2 + 0.9 * k));
+            // Vinco: a folha dobra pela nervura, não fica chapada.
+            pos.setZ(i, pos.getZ(i) + Math.abs(pos.getX(i)) * 0.3);
+          }
+          pos.needsUpdate = true;
+          b.addGeometry(
+            g,
+            { color: cor, finish: Finish.Cloth, skin: { bone: Bone.Head } },
+            new THREE.Matrix4()
+              .makeRotationY(az)
+              .multiply(new THREE.Matrix4().makeRotationZ(Math.sin(az * 2.1) * 0.9))
+              .setPosition(px, py, pz),
+          );
+        };
+        // Espalhadas sem padrão. Folha em fileira regular lê como
+        // guirlanda de festa.
+        const espalhadas: readonly (readonly [number, number, number])[] = [
+          [0.8, -2.6, 0.105],
+          [0.66, -1.5, 0.088],
+          [0.84, -0.55, 0.078],
+          [0.58, 0.72, 0.112],
+          [0.74, 1.95, 0.094],
+          [0.46, 2.8, 0.1],
+          [0.38, -2.1, 0.082],
+          [0.3, 1.25, 0.09],
+          [0.52, -0.12, 0.07],
+          [0.88, 2.45, 0.084],
+          [0.62, -3.0, 0.092],
+          [0.44, 0.3, 0.076],
+        ];
+        for (const [t, az, tam] of espalhadas) {
+          // Nada na frente abaixo da testa. Na bancada uma folha
+          // nasceu pendurada sobre a bochecha: a frente da juba é
+          // rasa de propósito, e o que é posto nela encosta no rosto.
+          if (Math.cos(az) > 0.72 && yOf(t) < cy + 0.1) continue;
+          folha(t, az, tam, (az * 7) % 2 > 1 ? 0x9df0b0 : 0x3fa96b);
+        }
+
+        // --- a coroa ---
+        //
+        // Substitui o acessório `flor`, a pedido do Criador. A flor
+        // antiga custava **912 triângulos idênticos nos quatro
+        // LODs** — nunca cortava, nem a cinquenta metros — e era uma
+        // florzinha rosa de um centímetro numa têmpora só, numa
+        // personagem de paleta verde.
+        //
+        // Esta é um **anel**, em volta da cabeça, e corta por
+        // distância como tudo o mais.
+        //
+        // A altura sai de uma conta, não de um palpite: `tDaTesta`
+        // resolve `yOf(t) = cy + 0,13`, que é a linha da testa. A
+        // primeira versão usou `t = 0,9` direto e a coroa caiu em
+        // `cy + 0,02` — que é onde `FACE.eyeY` põe o olho. Na bancada
+        // ela atravessou o rosto na altura das sobrancelhas.
+        const tDaTesta = (cy + 0.145 - bottomY) / (topY - bottomY);
+        const coroaN = Math.max(9, Math.round(segments * 0.45));
+        for (let i = 0; i < coroaN; i += 1) {
+          const az = (i / coroaN) * TAU;
+          folha(tDaTesta, az, 0.058, i % 3 === 0 ? 0x9df0b0 : 0x3fa96b);
+        }
+        // As três flores da coroa, à frente e nas têmporas.
+        for (const az of [-0.75, 0, 0.75]) {
+          const [px, py, pz] = naJuba(tDaTesta, az, 1.04);
+          for (let i = 0; i < 5; i += 1) {
+            const a = (i / 5) * TAU;
+            b.ball(
+              [px + Math.cos(a) * R * 0.05, py + Math.sin(a) * R * 0.05, pz],
+              [R * 0.042, R * 0.042, R * 0.028],
+              { color: 0xfdf6e3, finish: Finish.Cloth, skin: { bone: Bone.Head } },
+              4,
+            );
+          }
+          b.ball([px, py, pz + R * 0.02], [R * 0.03, R * 0.03, R * 0.024], { color: 0xffd84a, finish: Finish.Shine, skin: { bone: Bone.Head } }, 4);
+        }
+      }
+
+      if (detail.segments >= 20) {
+        // --- os tufos ---
+        //
+        // O relevo sozinho não bastou: `feature()` empurra a casca,
+        // mas a casca continua contínua, e na bancada a juba leu como
+        // uma bola de madeira polida. Cacho tem **silhueta** — o
+        // contorno precisa ser recortado, e isso só vem de volume
+        // novo na borda.
+        //
+        // Só nos dois níveis de perto. De longe o relevo basta, e a
+        // silhueta de uma esfera cacheada e de uma esfera lisa é a
+        // mesma a vinte metros.
+        for (let anel = 0; anel < 6; anel += 1) {
+          const t = 0.2 + anel * 0.157;
+          const n = anel >= 4 ? 7 : 10;
+          for (let i = 0; i < n; i += 1) {
+            const az = (i / n) * TAU + anel * 0.6;
+            const sx = Math.sin(az);
+            const sz = Math.cos(az);
+            // Nada de tufo na frente abaixo da testa: ali está o rosto.
+            if (sz > 0.72 && yOf(t) < cy + 0.1) continue;
+            const raio = sz < 0 ? rzBackOf(t) : rzFrenteOf(t);
+            const rr = R * (0.17 + 0.05 * Math.sin(i * 2.1 + anel));
+            // No alto o perfil fecha e os tufos se amontoam no eixo:
+            // menores, ou viram uma bola de massa no topo da cabeça.
+            const encolhe = 1 - 0.35 * smoothstep(0.78, 1, t);
+            b.ball(
+              [sx * rxOf(t) * 0.97, yOf(t), zcOf() + sz * raio * 0.97],
+              [rr * encolhe, rr * 0.92 * encolhe, rr * encolhe],
+              { color: tint(dark, hair, 0.35 + 0.5 * t), finish: Finish.Hair, skin: { bone: Bone.Head } },
+              4,
+            );
+          }
+        }
+
+        // --- as pontas sobre a testa ---
+        //
+        // Mesmo com a franja cobrindo a calota, a borda onde ela sai
+        // da testa é uma **linha reta**: é a interseção de duas
+        // superfícies suaves, e interseção limpa lê como aresta de
+        // plástico. Cabelo cacheado não tem linha de corte — tem
+        // pontas que descem desiguais.
+        //
+        // Pousadas na superfície da testa (`z ≈ R · 0,9`, medido) e
+        // acima da sobrancelha, que `buildFace` põe em `cy + 0,058`.
+        for (let i = 0; i < 9; i += 1) {
+          const u = (i / 8) * 2 - 1;
+          const az = u * 1.2;
+          const desce = Math.sin(i * 2.3) * 0.5 + 0.5;
+          const rr = R * (0.1 + 0.042 * desce);
+          b.ball(
+            [
+              Math.sin(az) * R * 0.72,
+              cy + 0.108 - 0.03 * desce - 0.016 * u * u,
+              // À frente **das duas** superfícies: a testa está em
+              // `R · 0,90` e a franja chega ao mesmo ponto. A
+              // primeira tentativa pôs as pontas em `R · 0,84` e
+              // elas nasceram dentro da cabeça — a captura saiu
+              // idêntica à anterior, sem nenhuma ponta à vista.
+              Math.cos(az) * R * 0.99,
+            ],
+            [rr * 1.1, rr, rr],
+            { color: tint(dark, hair, 0.58), finish: Finish.Hair, skin: { bone: Bone.Head } },
+            4,
+          );
+        }
+
+        // E um anel extra bem no alto, onde a casca fechava lisa.
+        for (let i = 0; i < 9; i += 1) {
+          const az = (i / 9) * TAU + 0.31;
+          const sx = Math.sin(az);
+          const sz = Math.cos(az);
+          const t = 0.95;
+          const raio = sz < 0 ? rzBackOf(t) : rzFrenteOf(t);
+          const rr = R * 0.13;
+          b.ball(
+            [sx * rxOf(t) * 0.94, yOf(t) - R * 0.03, zcOf() + sz * raio * 0.94],
+            [rr, rr * 0.86, rr],
+            { color: tint(dark, hair, 0.82), finish: Finish.Hair, skin: { bone: Bone.Head } },
+            4,
+          );
+        }
+
+        // --- os brotos acesos ---
+        //
+        // Pequenos, sem simetria, espalhados pela juba. São o que a
+        // faz parecer viva à noite, quando o castanho apaga — e são a
+        // bioluminescência que o briefing pede, vinda de **seiva**,
+        // não de circuito.
+        const brotos: readonly (readonly [number, number])[] = [
+          [0.76, -2.9],
+          [0.64, -1.9],
+          [0.88, -1.1],
+          [0.52, -0.3],
+          [0.72, 0.4],
+          [0.44, 1.1],
+          [0.8, 1.6],
+          [0.6, 2.3],
+          [0.36, 3.0],
+          [0.68, -0.9],
+        ];
+        for (const [t, az] of brotos) {
+          if (Math.cos(az) > 0.72 && yOf(t) < cy + 0.1) continue;
+          const sx = Math.sin(az);
+          const sz = Math.cos(az);
+          const raio = sz < 0 ? rzBackOf(t) : rzFrenteOf(t);
+          b.ball(
+            [sx * rxOf(t) * 1.02, yOf(t), zcOf() + sz * raio * 1.02],
+            [R * 0.026, R * 0.026, R * 0.026],
+            { color: 0x6cf5a8, finish: Finish.Holo, skin: { bone: Bone.Head } },
+            4,
+          );
+        }
+      }
       break;
     }
     case 'rabo': {
