@@ -89,9 +89,9 @@ interface Ctl {
  * cor da roupa para cada anel; isto só traduz essa escolha, em vez de
  * repetir o acabamento em trinta estações à mão.
  */
-function withFinish(control: Ctl[], skin: Hex, shoe?: Hex, cloth: FinishId = Finish.Cloth): Ctl[] {
+function withFinish(control: Ctl[], skin: Hex, shoe?: Hex, cloth: FinishId = Finish.Cloth, skinFinish: number = Finish.Skin): Ctl[] {
   for (const c of control) {
-    c.finish = c.color === skin ? Finish.Skin : shoe !== undefined && c.color === shoe ? Finish.Rubber : cloth;
+    c.finish = c.color === skin ? skinFinish : shoe !== undefined && c.color === shoe ? Finish.Rubber : cloth;
   }
   return control;
 }
@@ -211,10 +211,32 @@ export function buildBodyGeometry(a: AvatarAppearance, p: BodyProportions, m: Bo
   // chão. Ela é a única deusa grávida do Éden, e saia curta num corpo
   // que o morph empurra 9 cm para a frente sobe junto com o ventre.
   const regaco = outfit === 'regaco';
-  const longSleeves = outfit === 'aero' || aurora || rede || sonora || cosplay || sistema;
-  const bareArms = outfit === 'esportivo' || outfit === 'vestido' || guardia || jardim || lumen || regaco;
-  const longPants = outfit === 'casual' || outfit === 'aero' || rede || sistema;
-  const bareLegs = outfit === 'vestido' || docente || cosplay || guardia || jardim || lumen || regaco;
+  // Os quatro trajes masculinos. Nenhum deles custa uma varredura
+  // nova: a roupa comum do Éden sempre foi combinação destes quatro
+  // sinalizadores com a cor por anel, e é essa máquina que eles usam.
+  // O que cada um acrescenta de geometria é só o detalhe que o
+  // identifica — gola, alça, capuz, cordão.
+  // A camiseta não aparece em nenhum dos quatro sinalizadores abaixo, e
+  // isso é o traje inteiro: manga curta é **não** estar em `longSleeves`
+  // nem em `bareArms` (ver `shortSleeve`, em `buildArm`), e short é
+  // **não** estar em `longPants` nem em `bareLegs`. Ela existe por
+  // ausência, como a manga três-quartos do Vestido Docente.
+  // O traje do criador do Éden — e a palavra "traje" só vale como
+  // nome da configuração, porque não há peça nenhuma. A decisão A da
+  // Etapa 3 é que o cosmos **é** o corpo: nada de pano, nada de
+  // manto, nada de faixa. O que o diferencia de um corpo nu comum é
+  // o acabamento, que deixa de ser pele e passa a ser campo estelar.
+  //
+  // Ele não desenha um vértice sequer de roupa, e é por isso que sai
+  // mais barato que o Traje Aero que o Aérion usava.
+  const criador = outfit === 'criador';
+  const regata = outfit === 'regata';
+  const moletom = outfit === 'moletom';
+  const banho = outfit === 'banho';
+  const longSleeves = outfit === 'aero' || aurora || rede || sonora || cosplay || sistema || moletom;
+  const bareArms = outfit === 'esportivo' || outfit === 'vestido' || guardia || jardim || lumen || regaco || regata || banho || criador;
+  const longPants = outfit === 'casual' || outfit === 'aero' || rede || sistema || moletom || regata;
+  const bareLegs = outfit === 'vestido' || docente || cosplay || guardia || jardim || lumen || regaco || criador;
   const dress = outfit === 'vestido' || aurora || docente || sonora || cosplay || guardia || jardim || lumen || regaco;
   // Dois acabamentos, e a diferença entre eles é deliberada.
   //
@@ -245,16 +267,29 @@ export function buildBodyGeometry(a: AvatarAppearance, p: BodyProportions, m: Bo
   // renderizava envernizada. O vidro do haori é pedido peça a peça,
   // onde ele de fato existe, e a base continua sendo pano.
   const cloth: FinishId = aurora || rede || sonora ? Finish.Glass : Finish.Cloth;
-  const suit: FinishId = rede ? Finish.Glass : Finish.Cloth;
+  // A pele do criador é campo estelar, e isso vale para o corpo
+  // inteiro — tronco, braços, pernas, mãos, pescoço e rosto. Um só
+  // acabamento, porque a emenda apareceria exatamente onde a cabeça
+  // encontra o pescoço se os dois divergissem.
+  b.skinFinish = criador ? Finish.Cosmos : Finish.Skin;
+  const suit: FinishId = criador ? Finish.Cosmos : rede ? Finish.Glass : Finish.Cloth;
+  // O acabamento que as varreduras do corpo carregam.
+  //
+  // Tem de ser aqui, e não na cor de cada estação, porque
+  // `subdivideProfile` descarta o `finish` das estações ao inserir os
+  // anéis intermediários: o que sobrevive é o `b.surface` vigente. É
+  // por isso que marcar as estações de pele não bastaria — o corpo
+  // inteiro sairia com o acabamento do pano, como sempre saiu.
+  const bodySurface: FinishId = criador ? Finish.Cosmos : cloth;
 
   // Cada parte declara o seu acabamento antes de ser varrida.
-  b.surface = cloth;
+  b.surface = bodySurface;
   buildTorso(b, { m, detail, skin, top, bottom, accent, outfit, dress, origins, suit });
   for (const side of [1, -1] as const) {
-    buildArm(b, side, { m, detail, skin, top, accent, longSleeves, bareArms, outfit, cloth, suit });
+    buildArm(b, side, { m, detail, skin, top, accent, longSleeves, bareArms, outfit, cloth: bodySurface, suit });
     buildLeg(b, side, { m, detail, skin, bottom, shoe, longPants, bareLegs, outfit, origins, suit });
   }
-  b.surface = Finish.Skin;
+  b.surface = b.skinFinish;
   buildHead(b, a, p, m, detail);
   // Onde a saia começa no buffer: é assim que um teste separa o tecido
   // do corpo sem adivinhar por cor ou por raio.
@@ -305,10 +340,28 @@ function buildTorso(b: SurfaceBuilder, ctx: TorsoCtx): void {
   const hip = origins.hips;
   const torso = origins.torso;
 
+  // A bermuda de banho veste o quadril e mais nada: o tronco inteiro é
+  // pele. O traje do criador nem isso — o corpo dele é cósmico de
+  // ponta a ponta (ver `buildBodyGeometry`). Todos os outros sobem
+  // com a cor do pano desde o quadril.
+  const bareTorso = outfit === 'banho' || outfit === 'criador';
+  // A regata cobre o peito e deixa o ombro de fora. A diferença entre
+  // ela e uma camiseta sem manga está exatamente neste anel: a manga
+  // curta termina **no** ombro, a alça passa **por cima** dele.
+  const tank = outfit === 'regata';
+  const chest = bareTorso ? skin : top;
+  const shoulderColor = bareTorso || tank ? skin : top;
+
   // A barriga aparece em quem usa traje de praia; nos outros a cor da
   // roupa sobe desde o quadril.
-  const belly = outfit === 'praia' ? skin : outfit === 'esportivo' ? skin : top;
-  const lower = dress ? top : bottom;
+  const belly = outfit === 'praia' || outfit === 'esportivo' || bareTorso ? skin : top;
+  // A pelve é a última peça de guarda-roupa que sobrava no Criador: a
+  // bermuda de banho pinta esta faixa com a cor de baixo porque ela
+  // **é** uma bermuda, mas o traje do criador não é roupa nenhuma, e
+  // um corpo cósmico de ponta a ponta não tem por que mudar de tom no
+  // quadril. Sem isto, `bottomColor` — uma cor de guarda-roupa que
+  // ninguém pode editar nele — continuava desenhada no corpo.
+  const lower = dress ? top : outfit === 'criador' ? skin : bottom;
 
   const control: Ctl[] = [
     // A pelve termina na altura da virilha, não abaixo dela: descer
@@ -331,22 +384,22 @@ function buildTorso(b: SurfaceBuilder, ctx: TorsoCtx): void {
     })),
     // A cintura: onde o perfil afina e onde o osso troca.
     { y: 0.1, rx: m.waistWidth, rz: 0.086, rzBack: 0.09, color: belly, bone: Bone.Torso, zone: MorphZone.Bust, origin: torso },
-    { y: 0.165, rx: m.waistWidth * 1.06, rz: 0.09, rzBack: 0.092, color: top, bone: Bone.Torso, zone: MorphZone.Bust, origin: torso },
-    { y: 0.235, rx: m.chestWidth * 0.97, rz: 0.104, rzBack: 0.096, color: top, bone: Bone.Torso, zone: MorphZone.Bust, origin: torso },
-    { y: 0.3, rx: m.chestWidth, rz: 0.102, rzBack: 0.094, color: top, bone: Bone.Torso, zone: MorphZone.Bust, origin: torso },
+    { y: 0.165, rx: m.waistWidth * 1.06, rz: 0.09, rzBack: 0.092, color: chest, bone: Bone.Torso, zone: MorphZone.Bust, origin: torso },
+    { y: 0.235, rx: m.chestWidth * 0.97, rz: 0.104, rzBack: 0.096, color: chest, bone: Bone.Torso, zone: MorphZone.Bust, origin: torso },
+    { y: 0.3, rx: m.chestWidth, rz: 0.102, rzBack: 0.094, color: chest, bone: Bone.Torso, zone: MorphZone.Bust, origin: torso },
     // A linha dos ombros é larga e rasa: é o trapézio, não uma tampa.
     // E tem de subir **até a altura da junta do braço** (`waist +
     // shoulderY`): parando antes, o braço nascia no ar ao lado do
     // pescoço, com um vão de dois dedos na axila.
-    { y: 0.365, rx: Math.max(m.chestWidth * 0.99, m.shoulderX * 0.88), rz: 0.096, rzBack: 0.09, color: top, bone: Bone.Torso, zone: MorphZone.Bust, origin: torso },
-    { y: m.waist + m.shoulderY, rx: Math.max(m.chestWidth * 0.8, m.shoulderX * 0.72), rz: 0.082, rzBack: 0.08, color: top, bone: Bone.Torso, zone: MorphZone.Bust, origin: torso },
+    { y: 0.365, rx: Math.max(m.chestWidth * 0.99, m.shoulderX * 0.88), rz: 0.096, rzBack: 0.09, color: shoulderColor, bone: Bone.Torso, zone: MorphZone.Bust, origin: torso },
+    { y: m.waist + m.shoulderY, rx: Math.max(m.chestWidth * 0.8, m.shoulderX * 0.72), rz: 0.082, rzBack: 0.08, color: shoulderColor, bone: Bone.Torso, zone: MorphZone.Bust, origin: torso },
     // Pescoço: sai do trapézio, não de um buraco.
     { y: m.waist + m.shoulderY + 0.028, rx: m.neckR * 1.5, rz: m.neckR * 1.42, color: skin, bone: Bone.Torso, zone: MorphZone.Bust, origin: torso },
     { y: m.neckY - 0.015, rx: m.neckR * 1.04, rz: m.neckR * 1.02, color: skin, bone: Bone.Head },
     { y: m.neckY + 0.045, rx: m.neckR * 0.99, rz: m.neckR, color: skin, bone: Bone.Head },
   ];
 
-  b.loft(subdivideProfile(toStations(withFinish(control, skin, undefined, ctx.suit)), detail.steps), {
+  b.loft(subdivideProfile(toStations(withFinish(control, skin, undefined, ctx.suit, b.skinFinish)), detail.steps), {
     segments: detail.segments,
     capBottom: 0.055,
     capRings: 2,
@@ -434,7 +487,58 @@ function buildTorso(b: SurfaceBuilder, ctx: TorsoCtx): void {
     const belt = flatRing(m.hipWidth * 0.98, HIP_DEPTH, 0.012, Math.max(12, detail.segments));
     b.addGeometry(belt, { color: accent, skin: { bone: Bone.Hips }, zone: MorphZone.Curve, origin: hip }, new THREE.Matrix4().makeRotationX(Math.PI / 2).setPosition(0, 0.03, 0));
   }
-  void bottom;
+
+  /* -------------------------------------------------------------------- */
+  /* Os quatro trajes masculinos                                           */
+  /* -------------------------------------------------------------------- */
+
+  const bustSkin: SkinBinding = { bone: Bone.Torso };
+  const torsoStation = { skin: bustSkin, zone: MorphZone.Bust, origin: torso };
+
+  if (outfit === 'camiseta') {
+    // Gola redonda e barra. Duas linhas, e são elas que fazem o pano
+    // ler como camiseta em vez de malha colada: sem a gola, o tecido
+    // sobe até o queixo; sem a barra, desce até a virilha sem fim.
+    const collar = flatRing(m.neckR * 1.62, 0.95, 0.013, Math.max(12, detail.segments));
+    b.addGeometry(collar, { color: shade(top, -0.22), ...torsoStation }, new THREE.Matrix4().makeRotationX(Math.PI / 2).setPosition(0, m.waist + m.shoulderY + 0.016, 0));
+    const hem = flatRing(m.waistWidth * 1.05, WAIST_DEPTH, 0.01, Math.max(10, detail.segments));
+    b.addGeometry(hem, { color: shade(top, -0.14), ...torsoStation }, new THREE.Matrix4().makeRotationX(Math.PI / 2).setPosition(0, 0.118, 0));
+  }
+
+  if (outfit === 'regata') {
+    // As alças. O tronco já está com pano no peito e pele no ombro —
+    // a alça é o que liga uma coisa à outra, e sem ela a regata vira
+    // um tubo de pano flutuando sobre o peito.
+    for (const side of [1, -1] as const) {
+      b.ball([side * m.chestWidth * 0.58, m.waist + m.shoulderY - 0.026, 0], [0.027, 0.055, 0.072], { color: top, ...torsoStation }, 5);
+    }
+    const hem = flatRing(m.waistWidth * 1.05, WAIST_DEPTH, 0.01, Math.max(10, detail.segments));
+    b.addGeometry(hem, { color: shade(top, -0.14), ...torsoStation }, new THREE.Matrix4().makeRotationX(Math.PI / 2).setPosition(0, 0.118, 0));
+  }
+
+  if (outfit === 'moletom') {
+    // O capuz, caído nas costas. É meia casca atrás do pescoço, e não
+    // um anel em volta dele: capuz que dá a volta completa deixa de
+    // ser capuz e vira gola rulê — que já é de outro traje.
+    b.ball([0, m.waist + m.shoulderY - 0.012, -0.082], [m.chestWidth * 0.74, 0.082, 0.062], { color: shade(top, -0.12), ...torsoStation }, 6);
+    // O bolso canguru, raso, à frente da barriga.
+    const pocket = new THREE.BoxGeometry(m.waistWidth * 1.15, 0.072, 0.012);
+    b.addGeometry(pocket, { color: shade(top, -0.18), ...torsoStation }, new THREE.Matrix4().makeTranslation(0, 0.16, 0.094));
+    // Os dois cordões do capuz.
+    for (const side of [1, -1] as const) {
+      b.ball([side * 0.026, m.waist + m.shoulderY - 0.072, 0.072], [0.008, 0.042, 0.008], { color: shade(top, 0.4), ...torsoStation }, 4);
+    }
+  }
+
+  if (outfit === 'banho') {
+    // O cós da bermuda e o cordão. O tronco é pele inteiro, então a
+    // única coisa que diz onde a roupa começa é esta linha.
+    const band = flatRing(m.hipWidth * 1.0, HIP_DEPTH, 0.012, Math.max(12, detail.segments));
+    b.addGeometry(band, { color: shade(bottom, -0.22), skin: { bone: Bone.Hips }, zone: MorphZone.Curve, origin: hip }, new THREE.Matrix4().makeRotationX(Math.PI / 2).setPosition(0, 0.042, 0));
+    for (const side of [1, -1] as const) {
+      b.ball([side * 0.022, 0.016, m.hipWidth * 0.7], [0.011, 0.04, 0.011], { color: shade(bottom, 0.45), skin: { bone: Bone.Hips }, zone: MorphZone.Curve, origin: hip }, 4);
+    }
+  }
 }
 
 /**
@@ -2670,7 +2774,7 @@ function buildArm(b: SurfaceBuilder, side: 1 | -1, ctx: ArmCtx): void {
 
   const sleeve = bareArms ? skin : top;
   // Manga curta termina no meio do braço; manga comprida vai ao punho.
-  const shortSleeve = outfit === 'casual' || outfit === 'praia';
+  const shortSleeve = outfit === 'casual' || outfit === 'praia' || outfit === 'camiseta';
   const lowerArmColor = longSleeves ? top : skin;
   const upperArmColor = shortSleeve ? sleeve : sleeve;
   const midArmColor = shortSleeve ? skin : sleeve;
@@ -2703,7 +2807,7 @@ function buildArm(b: SurfaceBuilder, side: 1 | -1, ctx: ArmCtx): void {
     { y: wristY - 0.135, rx: m.armWrist * 0.6, rz: m.armWrist * 1.05, x, color: skin, bone: foreBone },
   ];
 
-  b.loft(subdivideProfile(toStations(withFinish(control, skin, undefined, ctx.suit)), detail.steps), {
+  b.loft(subdivideProfile(toStations(withFinish(control, skin, undefined, ctx.suit, b.skinFinish)), detail.steps), {
     segments: detail.segments,
     descending: true,
     capTop: 0.018,
@@ -2715,7 +2819,7 @@ function buildArm(b: SurfaceBuilder, side: 1 | -1, ctx: ArmCtx): void {
   // nada na ponta. De longe não faz diferença; de perto é a primeira
   // coisa que denuncia um modelo cru, porque a mão é a parte do corpo
   // que o olho mais conhece depois do rosto.
-  b.surface = Finish.Skin;
+  b.surface = b.skinFinish;
   if (detail.segments >= 26) buildFingers(b, side, x, wristY, m, skin, detail, foreBone);
   b.surface = ctx.cloth;
 
@@ -2790,7 +2894,10 @@ function buildLeg(b: SurfaceBuilder, side: 1 | -1, ctx: LegCtx): void {
     { y: hipY - 0.02, rx: r * 1.02, rz: r, x, color: thighColor, bone: thighBone, zone: MorphZone.Thigh, origin: thighOrigin },
     { y: hipY - 0.1, rx: r * 0.96, rz: r * 0.95, x, color: thighColor, bone: thighBone, zone: MorphZone.Thigh, origin: thighOrigin },
     { y: (hipY + kneeY) * 0.5, rx: r * 0.86, rz: r * 0.86, x, color: shortPants ? thighColor : thighColor, bone: thighBone },
-    { y: kneeY + 0.1, rx: r * 0.78, rz: r * 0.78, x, color: shortPants && !stocking ? skin : thighColor, bone: thighBone },
+    // A bermuda de banho desce mais que o short comum: a barra fica
+    // logo acima do joelho, e é esse comprimento que a faz ler como
+    // bermuda e não como calção de corrida.
+    { y: kneeY + 0.1, rx: r * 0.78, rz: r * 0.78, x, color: shortPants && !stocking && outfit !== 'banho' ? skin : thighColor, bone: thighBone },
     // O cano da meia é um **degrau**, não um degradê. Entre a
     // estação de coxa e a do joelho havia sete centímetros e meio de
     // interpolação: a cor da pele virava a cor da meia aos poucos e
@@ -2815,7 +2922,7 @@ function buildLeg(b: SurfaceBuilder, side: 1 | -1, ctx: LegCtx): void {
     { y: ankleY - 0.05, rx: m.legAnkle * 1.18, rz: m.legAnkle * 2.5, z: 0.045, x, color: shoe, bone: shinBone },
   ];
 
-  b.loft(subdivideProfile(toStations(withFinish(control, skin, shoe, ctx.suit)), detail.steps), {
+  b.loft(subdivideProfile(toStations(withFinish(control, skin, shoe, ctx.suit, b.skinFinish)), detail.steps), {
     segments: detail.segments,
     descending: true,
     capTop: 0.03,
@@ -3137,7 +3244,7 @@ function buildHead(b: SurfaceBuilder, a: AvatarAppearance, p: BodyProportions, m
     );
   }
 
-  b.surface = Finish.Skin;
+  b.surface = b.skinFinish;
   // Um toque de cor nas maçãs, que é metade da identidade Frutiger Aero
   // — mas pintado, não colado. Eram duas bolas achatadas, e de perfil
   // apareciam como abas rosa saindo da bochecha.
@@ -3162,7 +3269,7 @@ function buildHead(b: SurfaceBuilder, a: AvatarAppearance, p: BodyProportions, m
   buildHair(b, a, m, detail, cy, R);
   b.surface = Finish.Shine;
   buildAccessory(b, a, m, detail, cy, R);
-  b.surface = Finish.Skin;
+  b.surface = b.skinFinish;
 }
 
 /* --------------------------- cabelo e acessório --------------------------- */
@@ -3181,6 +3288,19 @@ function buildHair(b: SurfaceBuilder, a: AvatarAppearance, m: BodyMetrics, detai
   const dark = shade(hair, -0.18);
   const segments = detail.segments;
   const gap = 1.045;
+  // A calota e a franja vêm antes do `switch`, e no penteado do
+  // criador elas são da mesma matéria que o resto dele.
+  if (a.hairStyle === 'cosmos') b.surface = Finish.Cosmos;
+  // Quantos anéis cada volume de cabelo recebe.
+  //
+  // Fixo, um penteado feito de bolinhas custava o mesmo no celular e
+  // no desktop — e foi exatamente assim que o `crespo` passou do
+  // orçamento em `baixa`, onde o corpo inteiro cabe em quatro mil
+  // vértices. Agora a densidade acompanha o nível, como o resto da
+  // malha sempre acompanhou.
+  const bolaG = detail.segments >= 40 ? 6 : detail.segments >= 20 ? 5 : detail.segments >= 14 ? 4 : 3;
+  const bolaM = Math.max(3, bolaG - 1);
+  const bolaP = Math.max(3, bolaG - 2);
 
   // Calota: cobre da nuca ao alto, deixando a testa livre na frente.
   const cap: Ctl[] = [
@@ -3200,6 +3320,97 @@ function buildHair(b: SurfaceBuilder, a: AvatarAppearance, m: BodyMetrics, detai
   b.feature([0, cy + 0.125, R * 0.95], [R * 0.9, R * 0.085, R * 0.5], R * 0.075, [0, -0.3, 1]);
 
   switch (a.hairStyle) {
+    case 'cosmos': {
+      // O cabelo do criador do Éden.
+      //
+      // Não é uma queda comprida a mais. O que o separa dos outros
+      // dezesseis penteados longos do catálogo é a **direção**: o
+      // cabelo das deusas cai, e este sobe antes de cair. Ele é
+      // levado por um vento que não existe na praça — a mesma
+      // corrente que arrasta a poeira das nebulosas —, e é isso que
+      // se lê de longe, antes de qualquer detalhe de cor.
+      //
+      // Três peças, e nenhuma copiada:
+      //
+      //  · a juba, que **alarga** ao descer em vez de afinar. Toda
+      //    queda do Éden termina em ponta, porque cabelo pesa; esta
+      //    termina aberta, porque a dele não pesa;
+      //  · a crista, três mechas que sobem do alto da cabeça e se
+      //    inclinam para trás — o traço que nenhum outro tem;
+      //  · a esteira, uma faixa estreita que continua atrás da juba
+      //    e some, como o rastro de um cometa.
+      //
+      // O acabamento cósmico já está em vigor desde a calota.
+      const aneis = segments >= 40 ? 9 : segments >= 20 ? 7 : segments >= 14 ? 5 : 4;
+      const baseY = cy + 0.05;
+      const fimY = cy - 0.46;
+      const juba: Ctl[] = [];
+      for (let i = 0; i < aneis; i += 1) {
+        const t = i / (aneis - 1);
+        // `t` = 0 na ponta de baixo, 1 na raiz: a lista sobe, que é
+        // como `loft` espera as estações.
+        const abre = 0.72 + 0.46 * (1 - t) * (1 - t);
+        const fundo = 0.3 + 0.72 * t;
+        juba.push({
+          y: fimY + (baseY - fimY) * t,
+          rx: R * 0.9 * abre,
+          rz: R * 0.2 * fundo,
+          rzBack: R * (0.5 + 0.56 * t) * (0.86 + 0.3 * (1 - t)),
+          // Arrastado para trás na ponta: o vento vem da frente.
+          z: -R * (0.1 + 0.42 * (1 - t)),
+          color: i % 2 === 0 ? hair : dark,
+          bone: Bone.Head,
+        });
+      }
+      b.loft(subdivideProfile(toStations(juba), detail.steps), { segments, capBottom: R * 0.1, capRings: 2 });
+
+      // A crista. Some no nível baixo: três mechas de quatro anéis
+      // não sobrevivem a dez segmentos, e o orçamento de `baixa` é o
+      // mais apertado do panteão.
+      if (segments >= 14) {
+        const mechas = segments >= 30 ? 3 : 2;
+        const mechaAneis = segments >= 30 ? 5 : 4;
+        for (let k = 0; k < mechas; k += 1) {
+          const lado = mechas === 3 ? [-1, 0, 1][k] : [-1, 1][k];
+          const alto = cy + 0.19 + 0.055 * (1 - Math.abs(lado));
+          const mecha: Ctl[] = [];
+          for (let i = 0; i < mechaAneis; i += 1) {
+            const t = i / (mechaAneis - 1);
+            // Afina e inclina para trás enquanto sobe.
+            mecha.push({
+              y: cy + 0.1 + (alto - cy - 0.1) * t + 0.12 * t * t,
+              rx: R * (0.3 - 0.21 * t),
+              rz: R * (0.17 - 0.12 * t),
+              x: lado * R * 0.34 * (1 + 0.5 * t),
+              z: -R * (0.12 + 0.75 * t * t),
+              color: t > 0.5 ? hair : dark,
+              bone: Bone.Head,
+            });
+          }
+          b.loft(subdivideProfile(toStations(mecha), Math.max(1, detail.steps - 1)), {
+            segments: Math.max(6, Math.round(segments * 0.42)),
+            capTop: R * 0.04,
+            capBottom: R * 0.03,
+            capRings: 1,
+          });
+        }
+      }
+
+      // A esteira, só onde há resolução para ela ser vista.
+      if (segments >= 26) {
+        const esteira: Ctl[] = [
+          { y: cy - 0.56, rx: R * 0.34, rz: R * 0.1, z: -R * 0.78, color: dark, bone: Bone.Head },
+          { y: cy - 0.4, rx: R * 0.62, rz: R * 0.14, z: -R * 0.6, color: dark, bone: Bone.Head },
+          { y: cy - 0.22, rx: R * 0.78, rz: R * 0.18, z: -R * 0.44, color: hair, bone: Bone.Head },
+        ];
+        b.loft(subdivideProfile(toStations(esteira), detail.steps), {
+          segments: Math.max(8, Math.round(segments * 0.6)),
+          capBottom: R * 0.06,
+          capRings: 1,
+        });
+      }
+      break;
+    }
     case 'longo': {
       const fall: Ctl[] = [
         { y: cy - 0.26, rx: R * 0.86, rz: R * 0.16, rzBack: R * 0.62, z: -R * 0.3, color: dark, bone: Bone.Head },
@@ -5075,6 +5286,178 @@ function buildHair(b: SurfaceBuilder, a: AvatarAppearance, m: BodyMetrics, detai
         const cone = new THREE.ConeGeometry(0.05, 0.16, Math.max(6, Math.round(segments * 0.4)));
         const matrix = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(rx, 0, rz, 'YXZ')).setPosition(sx, cy + sy, sz);
         b.addGeometry(cone, { color: hair, skin: { bone: Bone.Head } }, matrix);
+      }
+      break;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Os seis cortes masculinos                                           */
+    /* ------------------------------------------------------------------ */
+
+    case 'social': {
+      // A varredura do pente: o volume sobe de um lado e desce no
+      // outro. Três calotas achatadas em diagonal dão isso sem custar
+      // um loft inteiro — e são achatadas em `y` de propósito, porque
+      // esfera inteira em cima da cabeça lê como touca.
+      for (const [sx, sy, w] of [
+        [-R * 0.3, 0.152, 0.92],
+        [0, 0.168, 0.84],
+        [R * 0.34, 0.152, 0.7],
+      ] as const) {
+        b.ball([sx, cy + sy, -R * 0.06], [R * 0.6 * w, R * 0.29, R * 0.74], { color: hair, skin: { bone: Bone.Head } }, bolaG);
+      }
+      // A risca. Sem ela o volume acima vira "curto com cabeça
+      // grande": é o sulco que diz que alguém penteou isto.
+      b.ball([-R * 0.4, cy + 0.166, -R * 0.04], [R * 0.034, R * 0.1, R * 0.6], { color: shade(hair, -0.5), skin: { bone: Bone.Head } }, bolaP);
+      // Costeletas, à frente da orelha: fecham a lateral e dão o
+      // contorno baixo que o corte social tem.
+      for (const side of [1, -1] as const) {
+        b.ball([side * R * 0.9, cy + 0.005, R * 0.12], [R * 0.11, R * 0.16, R * 0.19], { color: hair, skin: { bone: Bone.Head } }, bolaM);
+      }
+      break;
+    }
+    case 'topete': {
+      // Sobe na frente e tomba para trás. A inclinação é tudo: cada
+      // mecha nasce mais atrás e mais baixa que a anterior, e é isso
+      // que separa um topete de um bloco plantado sobre a testa.
+      for (const [sx, sy, sz, s] of [
+        [0, 0.212, 0.46, 1.0],
+        [-R * 0.3, 0.2, 0.4, 0.84],
+        [R * 0.3, 0.2, 0.4, 0.84],
+        [-R * 0.56, 0.18, 0.26, 0.62],
+        [R * 0.56, 0.18, 0.26, 0.62],
+      ] as const) {
+        b.ball([sx, cy + sy, R * sz], [R * 0.33 * s, R * 0.44 * s, R * 0.3 * s], { color: hair, skin: { bone: Bone.Head } }, bolaG);
+      }
+      // Laterais rentes: o topete só existe por contraste com elas.
+      for (const side of [1, -1] as const) {
+        b.ball([side * R * 0.87, cy + 0.04, -R * 0.06], [R * 0.16, R * 0.28, R * 0.56], { color: shade(hair, -0.3), skin: { bone: Bone.Head } }, bolaM);
+      }
+      break;
+    }
+    case 'raspado': {
+      // Corte de máquina. A calota compartilhada já é a casca rente;
+      // o que faz isto ler como cabelo raspado e não como touca são
+      // as duas marcas que a máquina deixa: o degradê nas laterais e
+      // a linha reta da nuca.
+      for (const side of [1, -1] as const) {
+        b.ball([side * R * 0.87, cy + 0.035, -R * 0.02], [R * 0.19, R * 0.29, R * 0.5], { color: shade(hair, -0.42), skin: { bone: Bone.Head } }, bolaM);
+        b.ball([side * R * 0.85, cy - 0.012, R * 0.14], [R * 0.09, R * 0.13, R * 0.13], { color: shade(hair, -0.26), skin: { bone: Bone.Head } }, bolaP);
+      }
+      b.ball([0, cy - 0.008, -R * 0.82], [R * 0.48, R * 0.11, R * 0.15], { color: shade(hair, -0.36), skin: { bone: Bone.Head } }, bolaM);
+      break;
+    }
+    case 'samurai': {
+      // Nó alto e apertado, preso bem atrás. O que o separa do
+      // `coque` são o tamanho e a altura: aquele é largo e baixo na
+      // nuca, este é pequeno e no alto.
+      b.ball([0, cy + 0.198, -R * 0.6], [R * 0.29, R * 0.29, R * 0.29], { color: hair, skin: { bone: Bone.Head } }, bolaG);
+      b.ball([0, cy + 0.206, -R * 0.84], [R * 0.11, R * 0.11, R * 0.13], { color: dark, skin: { bone: Bone.Head } }, bolaP);
+      // A ponta que escapa do nó e cai. Sem ela o coque lê como bola
+      // colada atrás da cabeça.
+      b.ball([0, cy + 0.13, -R * 0.94], [R * 0.09, R * 0.19, R * 0.2], { color: dark, skin: { bone: Bone.Head } }, bolaP);
+      // Laterais puxadas para trás, rentes.
+      for (const side of [1, -1] as const) {
+        b.ball([side * R * 0.84, cy + 0.065, -R * 0.18], [R * 0.15, R * 0.29, R * 0.58], { color: hair, skin: { bone: Bone.Head } }, bolaM);
+      }
+      break;
+    }
+    case 'crespo': {
+      // Cacho pequeno e apertado, em casca densa. O `cacheado` tem
+      // doze bolas grandes e soltas; este tem quase o triplo de
+      // volumes, menores, em duas fileiras — é a diferença entre
+      // cacho solto e crespo.
+      // A contagem **tem** de descer com o nível de detalhe. Fixa, ela
+      // custava mil e quinhentos vértices em `baixa` — mais do que o
+      // corpo inteiro naquele nível — e estourava o orçamento do
+      // aparelho mais fraco, que é justamente quem não pode pagar.
+      const n = detail.segments >= 40 ? 13 : detail.segments >= 20 ? 10 : detail.segments >= 14 ? 8 : 6;
+      const rings = bolaP;
+      for (let i = 0; i < n; i += 1) {
+        const angle = (i / n) * TAU;
+        for (const [yy, rr, ss] of [
+          [0.152, 0.6, 0.29],
+          [0.056, 0.94, 0.33],
+        ] as const) {
+          const z = Math.cos(angle) * R * rr - R * 0.1;
+          // A fileira de baixo não fecha na frente: ali está a testa.
+          if (yy < 0.1 && z > R * 0.56) continue;
+          b.ball([Math.sin(angle) * R * rr, cy + yy, z], [R * ss, R * ss, R * ss], { color: i % 3 === 0 ? dark : hair, skin: { bone: Bone.Head } }, rings);
+        }
+      }
+      break;
+    }
+    case 'franjado': {
+      // Franja reta na testa e laterais até o maxilar. A franja é uma
+      // placa larga e baixa: sem ela, o corte é `curto` com duas
+      // cortinas penduradas.
+      b.ball([0, cy + 0.086, R * 0.74], [R * 0.76, R * 0.13, R * 0.33], { color: hair, skin: { bone: Bone.Head } }, bolaG);
+      for (const side of [1, -1] as const) {
+        const curtain: Ctl[] = [
+          { y: cy - 0.088, rx: R * 0.19, rz: R * 0.25, x: side * R * 0.74, z: R * 0.08, color: dark, bone: Bone.Head },
+          { y: cy - 0.02, rx: R * 0.25, rz: R * 0.33, x: side * R * 0.83, z: R * 0.05, color: hair, bone: Bone.Head },
+          { y: cy + 0.055, rx: R * 0.29, rz: R * 0.43, x: side * R * 0.87, z: 0, color: hair, bone: Bone.Head },
+        ];
+        b.loft(subdivideProfile(toStations(curtain), detail.steps), {
+          segments: Math.max(8, Math.round(segments * 0.55)),
+          capBottom: R * 0.1,
+          capRings: 2,
+        });
+      }
+      break;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Os três cortes femininos genéricos                                  */
+    /* ------------------------------------------------------------------ */
+
+    case 'chanel': {
+      // O corte reto na altura do maxilar. A barra é a peça inteira:
+      // a queda mantém largura quase constante e termina numa linha,
+      // em vez de afinar como o `longo`.
+      const bob: Ctl[] = [
+        { y: cy - 0.135, rx: R * 1.0, rz: R * 0.25, rzBack: R * 0.78, z: -R * 0.16, color: dark, bone: Bone.Head },
+        { y: cy - 0.07, rx: R * 1.07, rz: R * 0.33, rzBack: R * 0.9, z: -R * 0.12, color: hair, bone: Bone.Head },
+        { y: cy, rx: R * 1.09, rz: R * 0.45, rzBack: R * 1.0, z: -R * 0.08, color: hair, bone: Bone.Head },
+        { y: cy + 0.055, rx: R * 1.05, rz: R * 0.59, rzBack: R * 1.04, z: -R * 0.04, color: hair, bone: Bone.Head },
+      ];
+      b.loft(subdivideProfile(toStations(bob), detail.steps), { segments, capBottom: R * 0.2, capRings: 2 });
+      break;
+    }
+    case 'tranca': {
+      // A trança desce pelas costas em nós alternados. É a
+      // alternância que lê como trançado — uma queda lisa no mesmo
+      // lugar seria um rabo de cavalo mal centrado.
+      const nos = detail.segments >= 14 ? 7 : 5;
+      for (let i = 0; i < nos; i += 1) {
+        const t = i / (nos - 1);
+        const s = 1 - t * 0.45;
+        b.ball(
+          [(i % 2 === 0 ? 1 : -1) * R * 0.07 * s, cy + 0.055 - t * 0.33, -R * (1.0 + t * 0.24)],
+          [R * 0.2 * s, R * 0.145 * s, R * 0.19 * s],
+          { color: i % 2 === 0 ? hair : shade(hair, -0.13), skin: { bone: Bone.Head } },
+          bolaM,
+        );
+      }
+      b.ball([0, cy - 0.295, -R * 1.26], [R * 0.085, R * 0.065, R * 0.085], { color: dark, skin: { bone: Bone.Head } }, bolaP);
+      break;
+    }
+    case 'chiquinhas': {
+      // Dois rabos presos acima da orelha. Ficam altos de propósito:
+      // presos baixo, encostam no ombro e somem na silhueta de longe.
+      for (const side of [1, -1] as const) {
+        b.ball([side * R * 0.92, cy + 0.1, -R * 0.08], [R * 0.15, R * 0.15, R * 0.15], { color: dark, skin: { bone: Bone.Head } }, bolaP);
+        const tail: Ctl[] = [
+          { y: cy - 0.145, rx: R * 0.15, rz: R * 0.15, x: side * R * 1.2, z: -R * 0.28, color: dark, bone: Bone.Head },
+          { y: cy - 0.04, rx: R * 0.26, rz: R * 0.26, x: side * R * 1.16, z: -R * 0.22, color: hair, bone: Bone.Head },
+          { y: cy + 0.06, rx: R * 0.29, rz: R * 0.29, x: side * R * 1.05, z: -R * 0.14, color: hair, bone: Bone.Head },
+        ];
+        b.loft(subdivideProfile(toStations(tail), detail.steps), {
+          segments: Math.max(8, Math.round(segments * 0.6)),
+          capTop: R * 0.1,
+          capBottom: R * 0.14,
+          capRings: 2,
+        });
       }
       break;
     }

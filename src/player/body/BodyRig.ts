@@ -17,6 +17,7 @@
 import * as THREE from 'three';
 import { TORSO_JOINT_Y } from '../Gestation';
 import type { BodyProportions } from './BodyProportions';
+import { type BodyShape, SHAPE_FEM } from './BodyShape';
 
 /** Índice de cada osso no `skinIndex`. A ordem é o contrato da malha. */
 export const Bone = {
@@ -168,6 +169,24 @@ export const Finish = Object.freeze({
    * que é o que separa uma projeção de uma peça de roupa.
    */
   Holo: 7,
+  /**
+   * Cósmico: a pele-galáxia do Aérion — o corpo do criador do Éden.
+   *
+   * Não é o holograma com outro nome. O holograma é uma projeção:
+   * acende inteiro, com a mesma luz em todo ponto, porque é isso que
+   * um véu projetado faz. O cósmico é **matéria** — devolve a luz da
+   * cena como qualquer superfície e acende por cima só o bastante
+   * para o campo estelar não morrer na sombra. Daí a emissão em 0,28
+   * contra os 0,55 do holograma: o criador caminha entre os seus, não
+   * ilumina a praça.
+   *
+   * A iridescência é o que faz a leitura de nebulosa no ângulo
+   * rasante, e o verniz dá a casca de vidro por cima do campo. O
+   * campo em si — galáxias, estrelas, poeira — é trabalho do
+   * fragmento, e não existe ainda: aqui está só o material que vai
+   * recebê-lo.
+   */
+  Cosmos: 8,
 } as const);
 
 export type FinishId = (typeof Finish)[keyof typeof Finish];
@@ -449,8 +468,13 @@ export interface BodyMetrics {
  * `build` engrossa tudo junto porque é assim que um corpo engrossa:
  * ninguém tem braço de halterofilista e pescoço de pássaro. Os outros
  * parâmetros ajustam uma região de cada vez por cima disso.
+ *
+ * `shape` entra por último e só nas larguras — é o eixo de silhueta,
+ * descrito em `BodyShape.ts`. O padrão `SHAPE_FEM` tem todos os
+ * fatores em 1, então quem chama com um argumento só recebe,
+ * número a número, o que recebia antes de este eixo existir.
  */
-export function bodyMetrics(p: BodyProportions): BodyMetrics {
+export function bodyMetrics(p: BodyProportions, shape: BodyShape = SHAPE_FEM): BodyMetrics {
   // -1 … 1 em volta da compleição média.
   const bulk = (p.build - 0.5) * 2;
   const thick = 1 + bulk * 0.16;
@@ -468,17 +492,17 @@ export function bodyMetrics(p: BodyProportions): BodyMetrics {
     hipHeight: thigh + shin + ANKLE,
     waist: WAIST,
     shoulderY: SHOULDER_Y,
-    shoulderX: SHOULDER_X * p.shoulders,
+    shoulderX: SHOULDER_X * p.shoulders * shape.shoulderX,
     neckY: NECK_Y * (0.94 + 0.06 * p.neck),
-    legX: LEG_X * (0.85 + 0.15 * p.hips),
-    hipWidth: 0.158 * p.hips * thick,
-    chestWidth: 0.158 * p.chest * thick,
-    waistWidth: 0.128 * p.waist * thick,
-    armTop: 0.062 * thick * (0.9 + 0.1 * p.shoulders),
+    legX: LEG_X * (0.85 + 0.15 * p.hips) * shape.legX,
+    hipWidth: 0.158 * p.hips * thick * shape.hipWidth,
+    chestWidth: 0.158 * p.chest * thick * shape.chestWidth,
+    waistWidth: 0.128 * p.waist * thick * shape.waistWidth,
+    armTop: 0.062 * thick * (0.9 + 0.1 * p.shoulders) * shape.armTop,
     armWrist: 0.036 * thick,
-    legTop: 0.088 * thick * (0.9 + 0.1 * p.hips),
+    legTop: 0.088 * thick * (0.9 + 0.1 * p.hips) * shape.legTop,
     legAnkle: 0.044 * thick,
-    neckR: 0.049 * p.neck * (0.95 + 0.05 * thick),
+    neckR: 0.049 * p.neck * (0.95 + 0.05 * thick) * shape.neckR,
     headR: HEAD_R * p.headSize,
     // Cintura + pescoço + o centro da cabeça + meia cabeça. É o número
     // que a câmera e as etiquetas de nome usam para achar o topo.

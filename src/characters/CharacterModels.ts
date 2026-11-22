@@ -25,6 +25,7 @@ import { PANTHEON, type EdenCharacter } from './Pantheon';
 import { Avatar, HALO_DEFAULT } from '../player/Avatar';
 import type { AvatarAppearance } from '../player/AvatarAppearance';
 import { type BodyProportions, proportionsFingerprint, proportionsFor } from '../player/body/BodyProportions';
+import { type BodyShape, shapeFor } from '../player/body/BodyShape';
 
 /** Índice por id, montado uma vez. */
 const BY_ID = new Map<string, EdenCharacter>(PANTHEON.map((character) => [character.id, character]));
@@ -62,6 +63,30 @@ export function officialProportions(id: string): BodyProportions | null {
 }
 
 /**
+ * A silhueta do modelo oficial.
+ *
+ * Quem não declara `shape` na ficha recebe `SHAPE_FEM`, cujos fatores
+ * valem todos 1 — o corpo de referência do Éden, inalterado.
+ */
+export function officialShape(id: string): BodyShape | null {
+  const character = BY_ID.get(id);
+  if (!character) return null;
+  return shapeFor(character.shape);
+}
+
+/**
+ * Se o modelo oficial carrega o campo cósmico.
+ *
+ * Quem não declara `cosmic` na ficha recebe `false` — ou seja, todo
+ * o Éden menos o Criador. A pergunta é feita pelo **id**, e é só
+ * assim que o campo é concedido: não há caminho que o deduza da
+ * aparência, e montar um avatar com a ficha dele à mão não o acende.
+ */
+export function officialCosmic(id: string): boolean {
+  return BY_ID.get(id)?.cosmic === true;
+}
+
+/**
  * Impressão digital do modelo oficial.
  *
  * Serve para provar, em teste, que o que aparece em Rosas Park é o
@@ -92,7 +117,18 @@ export function officialFingerprint(id: string): string | null {
     // corpo também é identidade, e uma divergência de ombros entre
     // regiões é tão errada quanto uma divergência de cor de cabelo.
     proportionsFingerprint(proportionsFor(character.id, a.height)),
-  ].join('|');
+  ]
+    .join('|')
+    // A silhueta também é identidade: dois corpos com as mesmas
+    // medidas e formas diferentes **não** são o mesmo corpo, e uma
+    // impressão que não os distinguisse estaria mentindo.
+    //
+    // Entra como sufixo, e só para quem declara forma. É o mesmo
+    // princípio do argumento-padrão em `bodyMetrics`: as dez deusas
+    // não declaram nada e a impressão delas continua byte a byte a
+    // que era antes de este eixo existir — o que é verificável com um
+    // `git diff` neste arquivo, sem precisar rodar nada.
+    .concat(character.shape ? `|forma:${character.shape}` : '');
 }
 
 export interface OfficialAvatarOptions {
@@ -116,7 +152,12 @@ export interface OfficialAvatarOptions {
 export function createOfficialAvatar(id: string, options: OfficialAvatarOptions = {}): Avatar | null {
   const character = BY_ID.get(id);
   if (!character) return null;
-  const avatar = new Avatar(character.appearance, proportionsFor(character.id, character.appearance.height));
+  const avatar = new Avatar(
+    character.appearance,
+    proportionsFor(character.id, character.appearance.height),
+    shapeFor(character.shape),
+    character.cosmic === true,
+  );
   avatar.fill = options.fill ?? 0.16;
   // Gestação é identidade, não estado de jogo: entra antes de qualquer
   // Afters e vale sempre que a personagem estiver em cena. Amara é

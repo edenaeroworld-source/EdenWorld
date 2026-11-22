@@ -178,7 +178,15 @@ describe('o acabamento que emite luz', () => {
       FINISH_IRIDESCENCE,
       FINISH_EMISSIVE,
     ];
-    for (const t of tabelas) expect(t).toHaveLength(Finish.Holo + 1);
+    // A altura esperada vem da contagem do enum, e não do último
+    // acabamento conhecido: escrito como `Finish.Holo + 1`, este caso
+    // precisava ser repontado toda vez que um acabamento nascesse —
+    // foi o que aconteceu quando a Etapa 3 acrescentou `Cosmos`. Do
+    // jeito de agora ele continua guardando exatamente a mesma coisa
+    // e passa a acusar a tabela esquecida sozinho.
+    const quantos = Object.keys(Finish).length;
+    expect(quantos).toBeGreaterThan(Finish.Holo);
+    for (const t of tabelas) expect(t).toHaveLength(quantos);
   });
 
   it('só brilha quem tem briefing para brilhar, e nunca uma peça genérica', () => {

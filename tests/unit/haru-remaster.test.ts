@@ -258,10 +258,13 @@ describe('Haru 2.0 — o território, que é da Nexara ao lado', () => {
     // caso guarda — que a Haru não levou o `aero` embora — continua
     // de pé com o dono da peça, comparado contra um habitante que a
     // veste.
-    expect(aerion.appearance.outfit).toBe('aero');
-    const habitante = { ...aerion.appearance, hairStyle: 'curto' as const };
+    // **Repontada na Etapa 3 (C2).** O Aérion saiu do `aero` para o
+    // `criador`, exclusivo dele; a peça continua existindo e é isso
+    // que o caso guarda. O portador agora é sintético.
+    const dono = { ...aerion.appearance, outfit: 'aero' as const, hairStyle: 'longo' as const };
+    const habitante = { ...dono, hairStyle: 'curto' as const };
     for (const nivel of ['baixa', 'media', 'alta', 'ultra'] as const) {
-      expect(triangles(montar(aerion.appearance, nivel).mesh)).toBeGreaterThan(
+      expect(triangles(montar(dono, nivel).mesh)).toBeGreaterThan(
         triangles(montar(habitante, nivel).mesh),
       );
     }

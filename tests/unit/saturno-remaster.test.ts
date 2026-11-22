@@ -244,7 +244,13 @@ describe('Saturno 2.0 — a ficha', () => {
     // marco da Saturno não encoste na Maze. Por isso ele afirma o
     // estado **novo** e canônico dela, e qualquer mudança feita a
     // partir daqui volta a quebrar o teste, como deve.
+    //
+    // A etapa 1 do EdenWorld 2.0 acrescentou `sex` ao esquema da ficha,
+    // com padrão `'fem'`. A Maze não mudou — o esquema ganhou um campo —,
+    // e o literal abaixo passa a declará-lo para que a asserção continue
+    // sendo um `toEqual` exato, e não um `toMatchObject` frouxo.
     expect(maze.appearance).toEqual({
+      sex: 'fem',
       skin: '#7d4a2c',
       hairStyle: 'copa',
       hairColor: '#a8702f',

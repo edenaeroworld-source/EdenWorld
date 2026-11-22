@@ -8,6 +8,13 @@ import { type AvatarAppearance, DEFAULT_APPEARANCE } from './AvatarAppearance';
 import { buildBodyGeometry } from './body/BodyBuilder';
 import { finishVaryingGLSL, finishVertexGLSL } from './body/BodyFinish';
 import {
+  COSMOS_COLOR_FRAGMENT,
+  COSMOS_EMISSIVE_TERM,
+  COSMOS_VERTEX_WRITE,
+  cosmosFragmentGLSL,
+  cosmosVertexGLSL,
+} from './body/BodyCosmos';
+import {
   BODY_DETAIL,
   type BodyDetailLevel,
   type BodyMetrics,
@@ -16,6 +23,7 @@ import {
   createSkeleton,
   poseSkirt,
 } from './body/BodyRig';
+import { type BodyShape, SHAPE_FEM } from './body/BodyShape';
 import { type BodyProportions, DEFAULT_PROPORTIONS, sameProportions, sanitizeProportions } from './body/BodyProportions';
 
 export { HIP_HEIGHT } from './body/BodyRig';
@@ -35,6 +43,17 @@ const ARMPIT_TORSO_Y = 0.27;
  * dourado não dependa de ninguém se lembrar de escrever `halo:` na
  * ficha dele.
  */
+/**
+ * Relógio monotônico em milissegundos.
+ *
+ * `performance` não existe em todo ambiente onde os testes rodam, e
+ * o campo cósmico não é motivo para derrubar um avatar montado fora
+ * do navegador.
+ */
+function agora(): number {
+  return typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
+}
+
 export const HALO_DEFAULT = 0xfff2a8;
 
 /** Quanto a perna abre por unidade de AfterCurve® (0–2.5). */
@@ -149,8 +168,41 @@ export class Avatar {
   private readonly curveUniform = { value: 0 };
   /** Gestação (0–1). Traço de personagem, não produto: ver `Gestation.ts`. */
   private readonly gestationUniform = { value: 0 };
+  /**
+   * Intensidade do campo cósmico (0–1). **Nasce zero em todo avatar.**
+   *
+   * É o segundo cadeado do isolamento do Criador. O primeiro é o
+   * programa: o GLSL do campo só é injetado quando `cosmos` é
+   * verdadeiro, e a chave de cache muda junto, de modo que o
+   * habitante comum não carrega o código — não paga nem o desvio.
+   * Este uniforme existe em todos mesmo assim, valendo zero, para
+   * que um bloco injetado por engano continue desligado.
+   */
+  private readonly cosmosUniform = { value: 0 };
+  /** Relógio do campo, em segundos. Só anda para quem é cósmico. */
+  private readonly cosmosTimeUniform = { value: 0 };
+  /** Instante de nascimento, para o campo começar em zero. */
+  private readonly cosmosStart = agora();
   private current: AvatarAppearance = DEFAULT_APPEARANCE;
   private currentProportions: BodyProportions = DEFAULT_PROPORTIONS;
+  /**
+   * A silhueta deste corpo. Ver `BodyShape.ts`.
+   *
+   * Fica no avatar, e não na aparência, porque não é escolha de
+   * vestuário: é o corpo. Quem não passa nada recebe `SHAPE_FEM`,
+   * cujos fatores valem todos 1 — ou seja, o corpo de sempre.
+   */
+  readonly shape: BodyShape;
+  /**
+   * Se este corpo recebe o campo cósmico procedural.
+   *
+   * Vem da ficha oficial (`EdenCharacter.cosmic`), e de mais lugar
+   * nenhum: **não** se deduz de sexo, de silhueta, de traje nem de
+   * acabamento. Um avatar montado com a aparência do Aérion por fora
+   * da fábrica oficial continua sem campo — é a diferença entre
+   * *parecer* o Criador e *ser* o Criador.
+   */
+  readonly cosmos: boolean;
   private currentDetail: BodyDetailLevel = 'alta';
   private shadowsOn = true;
   /** Se o material corrente tem os termos de tecido e verniz ligados. */
@@ -202,8 +254,17 @@ export class Avatar {
         shader.uniforms.uBust = this.bustUniform;
         shader.uniforms.uCurve = this.curveUniform;
         shader.uniforms.uGestation = this.gestationUniform;
+        // Vai em todos, valendo zero. Num material sem o bloco
+        // cósmico o uniforme sequer chega à placa — o programa não o
+        // declara —, mas a invariante "nasce zero em todo avatar"
+        // fica verdadeira no único lugar onde dá para conferi-la.
+        shader.uniforms.uCosmos = this.cosmosUniform;
+        shader.uniforms.uCosmosTime = this.cosmosTimeUniform;
         shader.fragmentShader = shader.fragmentShader
-          .replace('#include <common>', `#include <common>\nuniform float avatarFill;\n${finishVaryingGLSL()}`)
+          .replace(
+            '#include <common>',
+            `#include <common>\nuniform float avatarFill;\n${finishVaryingGLSL()}${this.cosmos ? cosmosFragmentGLSL(physical) : ''}`,
+          )
           // A luz própria do holograma entra no caminho de emissão que
           // já existia, somada à luz de preenchimento: um ponto só, sem
           // passe novo e sem material novo. `edenEmissive` vale zero em
@@ -211,7 +272,7 @@ export class Avatar {
           // em cena muda de pixel.
           .replace(
             '#include <emissivemap_fragment>',
-            '#include <emissivemap_fragment>\n\ttotalEmissiveRadiance += diffuseColor.rgb * ( avatarFill + edenEmissive( vFinish ) );',
+            `#include <emissivemap_fragment>\n\ttotalEmissiveRadiance += diffuseColor.rgb * ( avatarFill + edenEmissive( vFinish ) )${this.cosmos ? COSMOS_EMISSIVE_TERM : ''};`,
           )
           // A rugosidade e o metal passam a vir do acabamento do vértice.
           .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = edenRoughness(vFinish);')
@@ -240,6 +301,16 @@ export class Avatar {
 \t\treflectedLight.indirectSpecular *= edenApplyOcclusion( edenAo, material.roughness, edenDotNV );
 \t}`,
           );
+        if (this.cosmos) {
+          // O campo entra no albedo logo depois da cor de vértice, e
+          // antes da emissão: assim a luz própria do acabamento
+          // cósmico — que o C2 já havia tabelado — acende a nebulosa
+          // sem precisar de um segundo caminho de emissão.
+          shader.fragmentShader = shader.fragmentShader.replace(
+            '#include <color_fragment>',
+            `#include <color_fragment>\n${COSMOS_COLOR_FRAGMENT}`,
+          );
+        }
         if (physical) {
           // Depois que o Three.js monta o `material`, os termos de
           // tecido e de verniz são remarcados por fragmento. Antes
@@ -260,16 +331,37 @@ export class Avatar {
         shader.vertexShader = shader.vertexShader
           .replace(
             '#include <common>',
-            `#include <common>\n${aftersMorphGLSL()}\n${gestationGLSL()}\n${bodyMorphGLSL()}\n${finishVertexGLSL()}`,
+            `#include <common>\n${aftersMorphGLSL()}\n${gestationGLSL()}\n${bodyMorphGLSL()}\n${finishVertexGLSL()}${this.cosmos ? cosmosVertexGLSL() : ''}`,
           )
           .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\n\tobjectNormal = edenBodyNormal(position, objectNormal);')
-          .replace('#include <begin_vertex>', '#include <begin_vertex>\n\ttransformed = edenBodyPosition(transformed);\n\tvFinish = aFinish;\n\tvAo = aAo;');
+          // `position` é a pose de ligação: o campo fica preso ao
+          // corpo e não escorre quando o braço sobe nem quando o
+          // AfterBust® muda a silhueta.
+          .replace(
+            '#include <begin_vertex>',
+            `#include <begin_vertex>\n\ttransformed = edenBodyPosition(transformed);\n\tvFinish = aFinish;\n\tvAo = aAo;${this.cosmos ? '\n\t' + COSMOS_VERTEX_WRITE : ''}`,
+          );
       };
-      material.customProgramCacheKey = () => `eden-avatar-organico-${physical ? 'fisico' : 'simples'}`;
+      // A chave **precisa** distinguir o programa cósmico. O Three.js
+      // guarda os programas por ela: com a mesma chave, o segundo
+      // avatar a compilar receberia o shader do primeiro — o Criador
+      // sairia sem galáxia, ou um habitante sairia com uma.
+      material.customProgramCacheKey = () =>
+        `eden-avatar-organico-${physical ? 'fisico' : 'simples'}${this.cosmos ? '-cosmos' : ''}`;
       return material;
   }
 
-  constructor(appearance: AvatarAppearance = DEFAULT_APPEARANCE, proportions: BodyProportions = DEFAULT_PROPORTIONS) {
+  constructor(
+    appearance: AvatarAppearance = DEFAULT_APPEARANCE,
+    proportions: BodyProportions = DEFAULT_PROPORTIONS,
+    shape: BodyShape = SHAPE_FEM,
+    cosmos = false,
+  ) {
+    this.shape = shape;
+    this.cosmos = cosmos;
+    // O uniforme nasce zero no campo da classe; só aqui, e só para
+    // quem a ficha oficial marcou, ele sobe.
+    if (cosmos) this.cosmosUniform.value = 1;
     this.root.name = 'avatar';
     this.physical = physicalByDefault;
     this.material = this.buildMaterial(this.physical);
@@ -304,7 +396,7 @@ export class Avatar {
     this.scaler.add(this.pivot);
 
     this.currentProportions = sanitizeProportions({ ...proportions, height: appearance.height });
-    this.metrics = bodyMetrics(this.currentProportions);
+    this.metrics = bodyMetrics(this.currentProportions, this.shape);
     const rig = this.rebuild(appearance, this.currentProportions, this.currentDetail);
     this.body = rig.body;
     this.bones = rig.bones;
@@ -326,7 +418,7 @@ export class Avatar {
     proportions: BodyProportions,
     detail: BodyDetailLevel,
   ): { body: THREE.SkinnedMesh; bones: THREE.Bone[] } {
-    const metrics = bodyMetrics(proportions);
+    const metrics = bodyMetrics(proportions, this.shape);
     this.metrics = metrics;
     const geometry = buildBodyGeometry(appearance, proportions, metrics, BODY_DETAIL[detail]);
     const rig = createSkeleton(metrics);
@@ -334,6 +426,21 @@ export class Avatar {
     const body = new THREE.SkinnedMesh(geometry, this.material);
     body.name = 'corpo';
     body.customDepthMaterial = this.depthMaterial;
+    // O relógio do campo cósmico anda aqui, e só para quem o tem.
+    //
+    // Não há `update(dt)` de avatar: quem anda por quadro é a pose e
+    // o rosto, cada um chamado de cinco lugares diferentes. Pendurar
+    // um passo novo em todos eles seria mexer no `Player`, no
+    // `NpcSystem`, no `CharacterPreview` e nos interiores — quatro
+    // sistemas alheios a este bloco. O gancho de desenho do próprio
+    // corpo resolve dentro de casa: roda uma vez por quadro em que o
+    // Criador aparece, zero vez quando ele não está em cena, e nunca
+    // para ninguém mais.
+    if (this.cosmos) {
+      body.onBeforeRender = () => {
+        this.cosmosTimeUniform.value = (agora() - this.cosmosStart) / 1000;
+      };
+    }
     body.castShadow = this.shadowsOn;
     body.receiveShadow = false;
     // Vincular com a malha fora da cena: a matriz de bind sai identidade

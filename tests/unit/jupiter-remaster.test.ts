@@ -558,7 +558,9 @@ describe('Júpiter 2.0 — a fronteira com o resto do elenco', () => {
     // passou a ser só o Aérion: a Amara saiu dele para a `nascente`,
     // com briefing próprio. O que este caso guarda é a peça, não quem
     // a veste — e a peça continua inteira e no catálogo de habitante.
-    expect(aerion.appearance.hairStyle).toBe('longo');
+    // **Repontada na Etapa 3 (C2):** o Aérion foi para o `cosmos`.
+    // A peça não depende de dono para continuar no catálogo.
+    expect(aerion.appearance.hairStyle).toBe('cosmos');
     expect(CITIZEN_HAIR_STYLES).toContain('longo');
   });
 });

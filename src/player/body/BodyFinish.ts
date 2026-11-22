@@ -23,24 +23,25 @@
  * | olho     | 0,08 | molhado, com verniz por cima |
  * | borracha | 0,72 | fosca, um pouco mais que tecido |
  * | brilhante| 0,22 | enfeites, fivelas, metal leve |
- * | holograma| 0,10 | projeção: lisa, e a única que emite luz |
+ * | holograma| 0,10 | projeção: lisa, emite luz forte |
+ * | cósmico  | 0,30 | pele-galáxia: matéria que acende pouco |
  */
 
 /** Rugosidade e metal de cada acabamento, na ordem de `Finish`. */
-export const FINISH_ROUGHNESS = [0.58, 0.88, 0.42, 0.08, 0.72, 0.22, 0.12, 0.1] as const;
-export const FINISH_METALNESS = [0.0, 0.0, 0.08, 0.0, 0.0, 0.55, 0.18, 0.0] as const;
+export const FINISH_ROUGHNESS = [0.58, 0.88, 0.42, 0.08, 0.72, 0.22, 0.12, 0.1, 0.3] as const;
+export const FINISH_METALNESS = [0.0, 0.0, 0.08, 0.0, 0.0, 0.55, 0.18, 0.0, 0.0] as const;
 /** Brilho de tecido: só o pano tem. */
-export const FINISH_SHEEN = [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] as const;
+export const FINISH_SHEEN = [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] as const;
 /** Verniz: o olho é molhado, o vidro líquido é envernizado por definição. */
-export const FINISH_CLEARCOAT = [0.06, 0.0, 0.14, 1.0, 0.0, 0.35, 1.0, 0.6] as const;
+export const FINISH_CLEARCOAT = [0.06, 0.0, 0.14, 1.0, 0.0, 0.35, 1.0, 0.6, 0.45] as const;
 /** Quanto da irradiância do mapa de ambiente cada acabamento aceita. */
-export const FINISH_ENV_DIFFUSE = [0.22, 0.26, 0.5, 1.0, 0.26, 1.0, 0.85, 0.9] as const;
+export const FINISH_ENV_DIFFUSE = [0.22, 0.26, 0.5, 1.0, 0.26, 1.0, 0.85, 0.9, 0.75] as const;
 /**
  * Iridescência: a película fina que faz o vidro líquido virar
  * arco-íris no ângulo rasante. É o traço Frutiger Aero que não se
  * consegue com cor de vértice — depende do ângulo de visão.
  */
-export const FINISH_IRIDESCENCE = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0] as const;
+export const FINISH_IRIDESCENCE = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.6] as const;
 
 /**
  * Emissão própria: a fração da cor que o fragmento acende sozinho.
@@ -58,7 +59,7 @@ export const FINISH_IRIDESCENCE = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0] as co
  * legível por baixo da luz própria, que é o que faz o véu parecer
  * projetado sobre um corpo em vez de pintado por cima dele.
  */
-export const FINISH_EMISSIVE = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.55] as const;
+export const FINISH_EMISSIVE = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.55, 0.28] as const;
 
 /**
  * GLSL que traduz o atributo em parâmetros do material.
@@ -165,7 +166,7 @@ ${pick('edenClearcoat', FINISH_CLEARCOAT)}
 /** E de película fina: só o vidro líquido. */
 ${pick('edenIridescence', FINISH_IRIDESCENCE)}
 
-/** E de luz própria: só o holograma. Zero em todo o resto. */
+/** E de luz própria: holograma e cósmico. Zero em todo o resto. */
 ${pick('edenEmissive', FINISH_EMISSIVE)}
 `;
 }

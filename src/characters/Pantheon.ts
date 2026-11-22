@@ -1,6 +1,7 @@
 import { type AftersBody, fromPercent } from '../afters/AftersState';
 import { getBuilding } from '../cities/aurora-city/Layout';
 import type { AvatarAppearance } from '../player/AvatarAppearance';
+import type { BodyShapeId } from '../player/body/BodyShape';
 import type { DialogueTree } from './Dialogue';
 
 /**
@@ -53,6 +54,31 @@ export interface EdenCharacter {
   appearance: AvatarAppearance;
   /** Cor da aura divina (hexadecimal). */
   aura: number;
+  /**
+   * Silhueta do corpo. Sem o campo vale `'fem'`, que é a forma de
+   * referência do Éden e tem todos os fatores em 1 — ou seja, o corpo
+   * exatamente como sempre foi. Ver `BodyShape.ts`.
+   *
+   * É um eixo próprio, e não `appearance.sex`, porque as duas coisas
+   * respondem a perguntas diferentes: `sex` diz quem o personagem é e
+   * escolhe catálogo de peças; `shape` diz que corpo ele tem. Enquanto
+   * só um personagem do Éden declara forma masculina, ligá-las
+   * arrastaria junto os vinte e seis habitantes masculinos — que nesta
+   * etapa não mudam.
+   */
+  shape?: BodyShapeId;
+  /**
+   * Se o corpo recebe o campo cósmico procedural (ver
+   * `BodyCosmos.ts`). Sem o campo, não recebe.
+   *
+   * É um sinalizador de **identidade**, declarado personagem a
+   * personagem, e não uma consequência de sexo, de silhueta, de
+   * traje ou de acabamento. Fosse derivado de qualquer um desses, o
+   * efeito vazaria no dia em que outro personagem usasse a mesma
+   * peça — que é exatamente como trinta e quatro habitantes
+   * acordaram com cabelo de deusa na Etapa 1.
+   */
+  cosmic?: boolean;
   /**
    * Cor da auréola, para quem usa o acessório `aureola`.
    *
@@ -118,7 +144,15 @@ function look(
   accessory: AvatarAppearance['accessory'],
   height: number,
 ): AvatarAppearance {
-  return { skin, hairStyle, hairColor, eyeColor, outfit, topColor, bottomColor, shoeColor, accessory, height };
+  // O eixo de sexo entra por aqui, num lugar só, e é por isso que as onze
+  // fichas abaixo não precisaram ser tocadas: o campo nasce `'fem'` para
+  // todo o panteão, que é exatamente o que ele já era.
+  //
+  // Aérion é masculino no cânone — "o criador que caminha entre os seus".
+  // Corrigir o campo dele é mudar o corpo dele no momento em que a
+  // silhueta passar a ler este eixo, e isso é alteração em membro do
+  // panteão: decisão à parte, não desta etapa.
+  return { sex: 'fem', skin, hairStyle, hairColor, eyeColor, outfit, topColor, bottomColor, shoeColor, accessory, height };
 }
 
 /* ------------------------------------------------------------------ */
@@ -138,7 +172,17 @@ const AERION: EdenCharacter = {
     'Ele não se esconde no céu: caminha pela Praça Central, conversa com quem chega e pergunta mais do que responde.',
   ],
   place: { x: -16, z: 16, heading: facing(-16, 16, 0, 0), label: 'Praça Central, junto à Esfera Aurora' },
-  appearance: look('#2a2350', 'longo', '#9a7bff', '#7a5cc9', 'aero', '#1b1040', '#2b1d5a', '#c9a2ff', 'aureola', 1.08),
+  // Cabelo e traje exclusivos, da Etapa 3 (bloco C2). Antes ele usava
+  // `longo` e `aero` — duas peças genéricas que qualquer habitante
+  // podia sortear, no criador do mundo.
+  appearance: look('#2a2350', 'cosmos', '#9a7bff', '#7a5cc9', 'criador', '#1b1040', '#2b1d5a', '#c9a2ff', 'aureola', 1.08),
+  // O criador do Éden é masculino no cânone, e até aqui tinha o corpo
+  // que o hash do nome dele sorteou: peito 0,94 contra cintura 1,15,
+  // isto é, um tubo. É o único personagem do Éden que declara forma.
+  shape: 'masc',
+  // O corpo do Criador é um céu. Único no Éden, por declaração
+  // explícita — ver `BodyCosmos.ts`.
+  cosmic: true,
   aura: 0xb7a2ff,
   contact: {
     handle: '@aerion',

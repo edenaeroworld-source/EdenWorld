@@ -316,10 +316,15 @@ describe('Amara 2.0 — o cabelo Nascente', () => {
   });
 
   it('o `longo` continua montando para quem o veste', () => {
+    // **Repontada na Etapa 3 (C2).** O Aérion saiu das peças
+    // genéricas para `cosmos`/`criador`, exclusivos dele. O que este
+    // caso sempre guardou é que a peça continua inteira e no
+    // catálogo — então a testemunha passa a ser um portador
+    // sintético, e não o último dono que por acaso a vestia.
+    const vestindoLongo = { ...aerion.appearance, hairStyle: 'longo' as const };
     for (const nivel of ['baixa', 'media', 'alta', 'ultra'] as const) {
-      expect(triangulos(aerion.appearance, nivel)).toBeGreaterThan(0);
+      expect(triangulos(vestindoLongo, nivel)).toBeGreaterThan(0);
     }
-    expect(aerion.appearance.hairStyle).toBe('longo');
     expect(CITIZEN_HAIR_STYLES).toContain('longo');
   });
 });
@@ -400,9 +405,14 @@ describe('Amara 2.0 — o Manto Regaço', () => {
     );
   });
 
-  it('o `aero` continua montando para o Criador, que é o dono', () => {
-    expect(aerion.appearance.outfit).toBe('aero');
-    expect(triangulos(aerion.appearance)).toBeGreaterThan(0);
+  it('o `aero` continua montando para quem o veste', () => {
+    // **Repontada na Etapa 3 (C2).** O Aérion saiu das peças
+    // genéricas para `cosmos`/`criador`, exclusivos dele. O que este
+    // caso sempre guardou é que a peça continua inteira e no
+    // catálogo — então a testemunha passa a ser um portador
+    // sintético, e não o último dono que por acaso a vestia.
+    const vestindoAero = { ...aerion.appearance, outfit: 'aero' as const };
+    expect(triangulos(vestindoAero)).toBeGreaterThan(0);
   });
 });
 
@@ -533,13 +543,18 @@ describe('Amara 2.0 — o resto do Éden não mudou', () => {
     }
   });
 
-  it('o Criador Aérion sai do marco com a malha intacta', () => {
-    // Os números são os do baseline, medidos em `f38a2ec`, antes de
-    // uma linha deste marco ser escrita.
-    expect(triangulos(aerion.appearance, 'baixa')).toBe(8220);
-    expect(triangulos(aerion.appearance, 'media')).toBe(12948);
-    expect(triangulos(aerion.appearance, 'alta')).toBe(20330);
-    expect(triangulos(aerion.appearance, 'ultra')).toBe(66224);
+  it('o Criador Aérion tem a malha da Etapa 3', () => {
+    // Os números eram os do baseline da Amara 2.0, medidos em
+    // `f38a2ec`: 8 220 / 12 948 / 20 330 / 66 224. **A Etapa 3 mudou
+    // a malha dele de propósito** — C1 deu silhueta masculina e C2
+    // trocou `longo`/`aero` por `cosmos`/`criador`, que são peças
+    // exclusivas. Os valores abaixo são a medida nova, e continuam
+    // sendo uma trava exata: qualquer mexida acidental no corpo do
+    // Aérion cai aqui.
+    expect(triangulos(aerion.appearance, 'baixa')).toBe(7540);
+    expect(triangulos(aerion.appearance, 'media')).toBe(12416);
+    expect(triangulos(aerion.appearance, 'alta')).toBe(20098);
+    expect(triangulos(aerion.appearance, 'ultra')).toBe(70874);
   });
 
   it('as outras nove deusas continuam montando nos quatro níveis', () => {

@@ -8,7 +8,16 @@ import {
   toPercent,
 } from '../afters/AftersState';
 import type { Accessory, AvatarAppearance, HairStyle, Outfit } from '../player/AvatarAppearance';
-import { ACCESSORIES, CLOTH_COLORS, EYE_COLORS, HAIR_COLORS, HAIR_STYLES, SKIN_TONES } from '../player/AvatarAppearance';
+import {
+  CITIZEN_ACCESSORIES,
+  CITIZEN_HAIR_BY_SEX,
+  HAIR_AUDIENCE,
+  CLOTH_COLORS,
+  EYE_COLORS,
+  HAIR_COLORS,
+  SKIN_TONES,
+  type Sex,
+} from '../player/AvatarAppearance';
 import { createRng, pick, randInt, type Rng } from '../utils/math';
 import type { DayPeriod } from '../world/WorldClock';
 
@@ -26,7 +35,18 @@ export interface CitizenArchetype {
   label: string;
   /** Áreas preferidas por período do dia (ids de `AREAS`). */
   routine: Record<DayPeriod, readonly string[]>;
+  /** Trajes do arquétipo para habitantes femininas. */
   outfits: readonly Outfit[];
+  /**
+   * Trajes do arquétipo para habitantes masculinos.
+   *
+   * Lista própria, e não um mapeamento automático do de cima: uma
+   * jardineira de vestido não vira um jardineiro de vestido, e a
+   * tradução certa depende da ocupação — o navegante ganha bermuda
+   * de banho, o músico ganha moletom, e a atleta e o atleta
+   * continuam os dois de esportivo.
+   */
+  outfitsMasc: readonly Outfit[];
   accessories: readonly Accessory[];
   /** Cores preferidas da parte de cima da roupa. */
   palette: readonly string[];
@@ -78,6 +98,7 @@ export const CITIZEN_ARCHETYPES: readonly CitizenArchetype[] = [
       noite: ['praca', 'centro'],
     },
     outfits: ['casual', 'esportivo'],
+    outfitsMasc: ['camiseta', 'regata', 'esportivo'],
     accessories: ['nenhum', 'oculos', 'chapeu'],
     palette: ['#4fd6a8', '#7fe3c0', '#2fa37a', '#bdf3dd'],
     speed: [1.0, 1.4],
@@ -98,6 +119,7 @@ export const CITIZEN_ARCHETYPES: readonly CitizenArchetype[] = [
       noite: ['praca', 'palco', 'centro'],
     },
     outfits: ['casual', 'esportivo', 'vestido'],
+    outfitsMasc: ['camiseta', 'casual', 'regata'],
     accessories: ['oculos', 'nenhum', 'fones'],
     palette: ['#8fd4ff', '#b7a8ff', '#ffd3ef', '#9ff2ff'],
     speed: [1.3, 1.9],
@@ -118,6 +140,7 @@ export const CITIZEN_ARCHETYPES: readonly CitizenArchetype[] = [
       noite: ['palco', 'praca', 'orla'],
     },
     outfits: ['vestido', 'casual', 'aero'],
+    outfitsMasc: ['moletom', 'casual', 'aero'],
     accessories: ['fones', 'nenhum', 'oculos'],
     palette: ['#ff9ecb', '#ffb37a', '#c6a1ff', '#7fe6ff'],
     speed: [1.1, 1.5],
@@ -138,6 +161,7 @@ export const CITIZEN_ARCHETYPES: readonly CitizenArchetype[] = [
       noite: ['centro', 'cristal'],
     },
     outfits: ['aero', 'casual'],
+    outfitsMasc: ['aero', 'camiseta'],
     accessories: ['oculos', 'fones', 'nenhum'],
     palette: ['#7fd6ff', '#aef0ff', '#9ab6ff', '#d7e9ff'],
     speed: [1.4, 1.9],
@@ -158,6 +182,7 @@ export const CITIZEN_ARCHETYPES: readonly CitizenArchetype[] = [
       noite: ['praca', 'centro', 'palco'],
     },
     outfits: ['vestido', 'casual', 'aero'],
+    outfitsMasc: ['camiseta', 'casual', 'aero'],
     accessories: ['nenhum', 'chapeu', 'oculos'],
     palette: ['#ffc98f', '#ffe0a3', '#ff9ea8', '#ffd84a'],
     speed: [1.1, 1.6],
@@ -178,6 +203,7 @@ export const CITIZEN_ARCHETYPES: readonly CitizenArchetype[] = [
       noite: ['orla', 'praca'],
     },
     outfits: ['esportivo'],
+    outfitsMasc: ['esportivo', 'regata', 'banho'],
     accessories: ['fones', 'nenhum'],
     palette: ['#5be0c0', '#8ef2ff', '#ffe27a', '#ff9ecb'],
     speed: [2.1, 2.8],
@@ -198,6 +224,7 @@ export const CITIZEN_ARCHETYPES: readonly CitizenArchetype[] = [
       noite: ['mirante', 'palco', 'praca'],
     },
     outfits: ['aero', 'casual', 'vestido'],
+    outfitsMasc: ['aero', 'moletom', 'camiseta'],
     accessories: ['chapeu', 'nenhum', 'oculos'],
     palette: ['#ff8fb4', '#ffb37a', '#c6a1ff', '#7fe6ff'],
     speed: [0.9, 1.3],
@@ -218,6 +245,7 @@ export const CITIZEN_ARCHETYPES: readonly CitizenArchetype[] = [
       noite: ['parque', 'praca'],
     },
     outfits: ['casual', 'esportivo'],
+    outfitsMasc: ['moletom', 'camiseta'],
     accessories: ['nenhum', 'chapeu', 'oculos'],
     palette: ['#9fe6b0', '#ffd3a8', '#bdf3dd', '#ffe6f2'],
     speed: [1.0, 1.4],
@@ -238,6 +266,7 @@ export const CITIZEN_ARCHETYPES: readonly CitizenArchetype[] = [
       noite: ['pier', 'orla', 'palco'],
     },
     outfits: ['casual', 'aero'],
+    outfitsMasc: ['casual', 'banho'],
     accessories: ['chapeu', 'oculos', 'nenhum'],
     palette: ['#7fd6ff', '#5ec8e6', '#d7e9ff', '#9fe6d0'],
     speed: [1.0, 1.5],
@@ -253,6 +282,7 @@ export const CITIZEN_ARCHETYPES: readonly CitizenArchetype[] = [
     label: 'Visitante de outra cidade',
     routine: always(DAY_ALL),
     outfits: ['casual', 'aero', 'vestido', 'esportivo'],
+    outfitsMasc: ['casual', 'aero', 'camiseta', 'regata'],
     accessories: ['nenhum', 'oculos', 'fones', 'chapeu'],
     palette: ['#b7a8ff', '#ff9ecb', '#ffd84a', '#7fe6ff', '#9fe6b0'],
     speed: [1.2, 1.7],
@@ -265,7 +295,7 @@ export const CITIZEN_ARCHETYPES: readonly CitizenArchetype[] = [
   },
 ];
 
-const FIRST_NAMES: readonly string[] = [
+export const FIRST_NAMES: readonly string[] = [
   'Alícia',
   'Benício',
   'Cauã',
@@ -307,6 +337,114 @@ const FIRST_NAMES: readonly string[] = [
   'Kira',
   'Teo',
 ];
+
+/**
+ * O sexo de cada nome próprio.
+ *
+ * O sexo do habitante **sai daqui**, e não de um sorteio. Dois motivos:
+ *
+ *  · sortear o sexo separado do nome produzia o que a cidade tinha —
+ *    Rafael de cabelo ondulado, Benício de vestido. O nome já dizia a
+ *    resposta e ninguém perguntava a ele;
+ *  · um sorteio a mais no meio de `makeCitizen` deslocaria a sequência
+ *    inteira do gerador.
+ *
+ * A tabela é `Record<string, Sex>` e está travada por teste contra
+ * `FIRST_NAMES`: acrescentar um nome sem classificá-lo quebra a suíte.
+ * O equilíbrio é exatamente vinte para vinte — é assim que a cidade
+ * chega perto de metade e metade sem ninguém forçar uma proporção.
+ *
+ * Os nomes que não carregam gênero em português — Noor, Mio, Sena,
+ * Vega, Zuri — foram distribuídos para fechar essa conta.
+ */
+export const NAME_SEX: Readonly<Record<string, Sex>> = {
+  Alícia: 'fem',
+  Benício: 'masc',
+  Cauã: 'masc',
+  Dandara: 'fem',
+  Enzo: 'masc',
+  Fernanda: 'fem',
+  Gael: 'masc',
+  Helena: 'fem',
+  Ícaro: 'masc',
+  Joana: 'fem',
+  Kauê: 'masc',
+  Lorena: 'fem',
+  Miguel: 'masc',
+  Nina: 'fem',
+  Otávio: 'masc',
+  Priscila: 'fem',
+  Rafael: 'masc',
+  Sofia: 'fem',
+  Théo: 'masc',
+  Valentina: 'fem',
+  Yuri: 'masc',
+  Zara: 'fem',
+  Aiko: 'fem',
+  Noor: 'fem',
+  Kai: 'masc',
+  Mio: 'fem',
+  Lior: 'masc',
+  Sena: 'masc',
+  Taís: 'fem',
+  Vega: 'masc',
+  Zuri: 'masc',
+  Íris: 'fem',
+  Nael: 'masc',
+  Suri: 'fem',
+  Oona: 'fem',
+  Elian: 'masc',
+  Maya: 'fem',
+  Davi: 'masc',
+  Kira: 'fem',
+  Teo: 'masc',
+};
+
+/**
+ * Peso de cada penteado no sorteio. O que não aparece aqui vale 1.
+ *
+ * Cabeça raspada é um traço real e fica no catálogo — mas com peso
+ * igual ao dos outros ela saía em um habitante a cada dez, e a praça
+ * virava um batalhão.
+ */
+const HAIR_WEIGHT: Partial<Readonly<Record<HairStyle, number>>> = {
+  // 0,6 e não 0,3: `careca` serve aos dois sexos, então leva também a
+  // metade de `hairWeight` logo abaixo. Com 0,3 os dois efeitos se
+  // somavam e a cidade ficava sem nenhum habitante de cabeça raspada.
+  careca: 0.6,
+};
+
+/**
+ * O peso com que um penteado entra no baralho de um sexo.
+ *
+ * Peça que serve aos dois é sorteada em **dois** baralhos, e por isso
+ * sai com o dobro da presença na cidade: medindo, `espetado` apareceu
+ * nove vezes em cinquenta e quatro habitantes enquanto cada corte
+ * exclusivo aparecia três. Meio peso em cada baralho devolve a ela a
+ * mesma frequência de uma peça de um sexo só.
+ */
+function hairWeight(style: HairStyle): number {
+  const shared = HAIR_AUDIENCE[style] === 'ambos' ? 0.5 : 1;
+  return shared * (HAIR_WEIGHT[style] ?? 1);
+}
+
+/**
+ * Sorteia um penteado do catálogo do sexo, respeitando os pesos.
+ *
+ * Gasta **uma** chamada do gerador, exatamente como `pick`: a conta do
+ * peso é feita sobre o número já sorteado, não com sorteios extras.
+ */
+function pickHair(rng: Rng, sex: Sex): HairStyle {
+  const list = CITIZEN_HAIR_BY_SEX[sex];
+  let total = 0;
+  for (const style of list) total += hairWeight(style);
+  let mark = rng() * total;
+  for (const style of list) {
+    mark -= hairWeight(style);
+    if (mark < 0) return style;
+  }
+  return list[list.length - 1];
+}
 
 const SURNAMES: readonly string[] = [
   'Aurora',
@@ -353,8 +491,18 @@ export function citizenAftersId(seed: number): string {
  * mesma silhueta. É o que mantém a cidade reconhecível entre sessões, sem
  * precisar gravar nada.
  */
-export function rollCitizenAfters(rng: Rng, archetype: CitizenArchetype): AftersBody {
+export function rollCitizenAfters(rng: Rng, archetype: CitizenArchetype, sex: Sex = 'fem'): AftersBody {
   const base = defaultAftersBody();
+  // Os Afters moldam busto e quadril: é um sistema de silhueta
+  // feminina, e aplicá-lo a um habitante masculino dava exatamente o
+  // que se esperaria — quatro homens de busto 0,85 a 2,05 andando pela
+  // praça assim que metade da cidade passou a ser masculina.
+  //
+  // A saída é antecipada, e não um zeramento depois do sorteio, porque
+  // esta é a **última** chamada de `makeCitizen`: não consumir os
+  // números não desloca campo nenhum. O padrão `'fem'` mantém idêntica
+  // qualquer chamada antiga de dois argumentos.
+  if (sex === 'masc') return base;
   if (rng() >= archetype.afters.chance) return base;
   const preset = getAftersPreset(pick(rng, archetype.afters.presets)) ?? AFTERS_PRESETS[1];
   const body = applyPreset(base, preset);
@@ -385,18 +533,26 @@ export function rollCitizenAfters(rng: Rng, archetype: CitizenArchetype): Afters
 export function makeCitizen(seed: number): CitizenProfile {
   const rng = createRng(seed * 7919 + 13);
   const archetype = CITIZEN_ARCHETYPES[randInt(rng, 0, CITIZEN_ARCHETYPES.length - 1)];
-  const name = `${pick(rng, FIRST_NAMES)} ${pick(rng, SURNAMES)}`;
-  const hairStyle: HairStyle = pick(rng, HAIR_STYLES);
+  const first = pick(rng, FIRST_NAMES);
+  const name = `${first} ${pick(rng, SURNAMES)}`;
+  // O sexo sai do nome que acabou de ser sorteado. Ver `NAME_SEX`.
+  const sex: Sex = NAME_SEX[first] ?? 'fem';
+  const hairStyle: HairStyle = pickHair(rng, sex);
   const appearance: AvatarAppearance = {
+    sex,
     skin: pick(rng, SKIN_TONES),
     hairStyle,
     hairColor: pick(rng, HAIR_COLORS),
     eyeColor: pick(rng, EYE_COLORS),
-    outfit: pick(rng, archetype.outfits),
+    outfit: pick(rng, sex === 'masc' ? archetype.outfitsMasc : archetype.outfits),
     topColor: pick(rng, archetype.palette),
     bottomColor: pick(rng, CLOTH_COLORS),
     shoeColor: pick(rng, CLOTH_COLORS),
-    accessory: rng() < 0.65 ? pick(rng, archetype.accessories) : pick(rng, ACCESSORIES),
+    // O ramo de 35% sorteava de `ACCESSORIES` **cheia** — e era por
+    // ele que o Ouro do Ateliê da Júpiter, as lentes da Suki-Chan e o
+    // Nimbo Materno da Amara apareciam na praça. A lista de habitante
+    // existia desde sempre; faltava alguém lê-la.
+    accessory: rng() < 0.65 ? pick(rng, archetype.accessories) : pick(rng, CITIZEN_ACCESSORIES),
     height: Math.round((0.93 + rng() * 0.14) * 100) / 100,
   };
   // A auréola é marca dos seres divinos: cidadãos comuns não a usam.
@@ -406,7 +562,7 @@ export function makeCitizen(seed: number): CitizenProfile {
   // habitantes já existentes continuem idênticos aos de antes.
   const speed = minSpeed + rng() * (maxSpeed - minSpeed);
   const line = pick(rng, archetype.lines);
-  const afters = rollCitizenAfters(rng, archetype);
+  const afters = rollCitizenAfters(rng, archetype, sex);
   return { seed, name, archetype, appearance, speed, line, afters, aftersNight: archetype.afters.night };
 }
 
