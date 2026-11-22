@@ -20,6 +20,7 @@
 import * as THREE from 'three';
 import * as aftersMorph from '../afters/AftersMorph';
 import { getCharacter, PANTHEON } from '../characters/Pantheon';
+import { officialCosmic, officialProportions, officialShape } from '../characters/CharacterModels';
 import { Avatar } from '../player/Avatar';
 import { AvatarAnimator } from '../player/AvatarAnimator';
 import { DEFAULT_APPEARANCE, type AvatarAppearance } from '../player/AvatarAppearance';
@@ -135,9 +136,21 @@ const BET_RAMPA: readonly number[] = [0, 0.25, 0.5, 0.75, 1, 1.5, 2, 2.5];
 /** Tempo de construção do último `montar`, por avatar, em ms. */
 const custos: { nome: string; ms: number; verts: number }[] = [];
 
-function novoAvatar(nivel: BodyDetailLevel, x: number, extra?: Partial<AvatarAppearance>): Avatar {
+function novoAvatar(nivel: BodyDetailLevel, x: number, extra?: Partial<AvatarAppearance>, oficial?: string): Avatar {
   const t0 = performance.now();
-  const avatar = new Avatar({ ...DEFAULT_APPEARANCE, outfit: ui.roupa, ...extra });
+  // Quando a cena pede um personagem oficial, a bancada monta o corpo
+  // **como o jogo monta**: silhueta e campo cósmico vêm da ficha. Sem
+  // isto o Aérion aparecia aqui com o corpo de referência e sem
+  // galáxia — uma figura que não existe em lugar nenhum do Éden, que
+  // é justamente o que uma bancada de conferência não pode mostrar.
+  const avatar = oficial
+    ? new Avatar(
+        { ...DEFAULT_APPEARANCE, outfit: ui.roupa, ...extra },
+        officialProportions(oficial) ?? undefined,
+        officialShape(oficial) ?? undefined,
+        officialCosmic(oficial),
+      )
+    : new Avatar({ ...DEFAULT_APPEARANCE, outfit: ui.roupa, ...extra });
   avatar.setDetail(nivel);
   avatar.setShadows(true);
   avatar.setMaterialTier(nivel === 'ultra' || nivel === 'alta');
@@ -194,7 +207,7 @@ function montar(): void {
     // de ganhar um modo próprio.
     const ficha = getCharacter(ui.deusa);
     if (ficha) {
-      const avatar = novoAvatar(ui.nivel, 0, ficha.appearance);
+      const avatar = novoAvatar(ui.nivel, 0, ficha.appearance, ficha.id);
       if (ficha.afters) avatar.setMorph(ficha.afters.bust, ficha.afters.curve);
       // A gestação é traço de personagem, não produto cosmético, e o
       // jogo a aplica em `CharacterModels`. A bancada não aplicava, e

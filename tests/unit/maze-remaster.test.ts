@@ -66,7 +66,6 @@ import { createRng } from '../../src/utils/math';
 const maze = getCharacter('maze')!;
 const saturno = getCharacter('saturno')!;
 const jupiter = getCharacter('jupiter')!;
-const aerion = getCharacter('aerion')!;
 
 function bodyOf(avatar: Avatar): THREE.SkinnedMesh {
   const mesh = avatar.root.getObjectByName('corpo') as THREE.SkinnedMesh;
@@ -135,9 +134,10 @@ describe('Maze 2.0 — o que é exclusivo dela', () => {
     expect(maze.appearance.outfit).toBe('jardim');
     // As três que ela largou, e para quem voltaram inteiras.
     expect(maze.appearance.accessory).toBe('nenhum');
-    expect(aerion.appearance.hairStyle).toBe('longo');
-    // **Atualizado no marco da Amara 2.0**: a Amara saiu do `longo`
-    // para a `nascente`, e a testemunha da peça é o Aérion.
+    // **Repontada na Etapa 3 (C2):** o Aérion saiu do `longo` para o
+    // `cosmos`. O `longo` ficou sem dono no panteão e continua no
+    // catálogo da cidade, que é o que este caso guarda.
+    expect(CITIZEN_HAIR_STYLES).toContain('longo');
     // **Reescrito no marco da Júpiter 2.0.** O que este caso guardava
     // é que a Maze não podia levar o `vestido` embora junto com ela:
     // era peça de habitante e da Júpiter. Não levou — quem saiu dele
@@ -571,7 +571,8 @@ describe('Maze 2.0 — o resto do Éden não mudou', () => {
     expect(CITIZEN_OUTFITS).toContain('vestido');
     expect(jupiter.appearance.hairStyle).toBe('pincelada');
     expect(jupiter.appearance.outfit).toBe('lumen');
-    expect(aerion.appearance.hairStyle).toBe('longo');
+    // **Repontada na Etapa 3 (C2):** ver acima.
+    expect(CITIZEN_HAIR_STYLES).toContain('longo');
   });
 
   it('o `vestido` continua montando igual para quem o usa', () => {

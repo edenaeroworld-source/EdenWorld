@@ -176,6 +176,19 @@ export class SurfaceBuilder {
    * valor — não é preciso passar o acabamento em cada estação.
    */
   surface: number = 0;
+  /**
+   * Que acabamento a **pele** recebe neste corpo.
+   *
+   * Existe por causa de um personagem: o Aérion não tem pele, tem
+   * campo estelar, e no traje `criador` o corpo inteiro é a
+   * superfície cósmica. Sem este botão, pintar o criador do Éden
+   * exigiria um `if` em cada varredura que distingue pele de pano —
+   * seis lugares que teriam de concordar entre si para sempre.
+   *
+   * O padrão é `Finish.Skin`, então todo corpo que não mexer nisto
+   * sai idêntico ao que saía antes de o campo existir.
+   */
+  skinFinish: number = 0;
   private readonly skinIndex: number[] = [];
   private readonly skinWeight: number[] = [];
   private readonly zone: number[] = [];
