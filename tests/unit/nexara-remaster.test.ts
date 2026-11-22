@@ -244,6 +244,14 @@ describe('o cabelo Fluxo', () => {
     // Medido pelo ACABAMENTO, nunca pela cor: o Fluxo vai de branco
     // a lavanda de propósito, e um filtro por tom descartaria
     // justamente o trecho que se quer medir.
+    //
+    // **Nota do marco da Amara 2.0.** O que este caso guarda — que o
+    // Fluxo fica entre o `longo` e a `cascata` — segue intacto, e as
+    // asserções abaixo não foram tocadas: entre Nexara e Suki-Chan,
+    // nada mudou. Mas a `cascata` deixou de ser a queda mais longa do
+    // Éden: a `nascente` desce a `y = −0,10` contra os `0,01` dela.
+    // Mais fundo que as duas só a `fibra` da Akemi-Chan (`−0,16`), e
+    // aquilo são filamentos soltos, não massa de cabelo.
     const medir = (estilo: string): number => {
       const { a, mesh } = montar({ hairStyle: estilo as never });
       const pos = mesh.geometry.getAttribute('position');

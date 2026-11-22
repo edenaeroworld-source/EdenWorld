@@ -252,10 +252,45 @@ describe('Amara 2.0 — o cabelo Nascente', () => {
     expect(comCabelo).toBeGreaterThan(careca);
   });
 
-  it('é a queda mais longa do catálogo: passa do ombro e chega à cintura', () => {
-    const nascente = contar(montar(), (x, y) => y > 0.05 && y < 0.35 && Math.abs(x) > 0.16);
-    const careca = contar(montar({ hairStyle: 'careca' }), (x, y) => y > 0.05 && y < 0.35 && Math.abs(x) > 0.16);
-    expect(nascente - careca).toBeGreaterThan(400);
+  it('é a queda mais longa do catálogo, medida contra os dezesseis', () => {
+    // **Medido pelo acabamento, nunca pela cor** — a lição é da
+    // bancada da Nexara: a Nascente vai de verde-água a quase branco
+    // de propósito, e um filtro por tom descartaria justamente o
+    // trecho que se quer medir.
+    //
+    // A primeira versão deste caso contava vértices mais largos que
+    // `|x| = 0,16` na faixa do tronco, e quebrou na rodada em que a
+    // queda foi **estreitada de propósito** (a massa era mais larga
+    // que os ombros e lia como casulo de costas). Contagem de
+    // largura não é medida de comprimento: o que se afirma aqui é
+    // que ela desce mais que qualquer outra, e é isso que se mede.
+    const fundo = (estilo: string): number => {
+      const avatar = new Avatar({ ...DEFAULT_APPEARANCE, hairStyle: estilo as never });
+      avatar.setDetail('alta');
+      const malha = avatar.root.getObjectByName('corpo') as Malha;
+      const pos = malha.geometry.getAttribute('position');
+      const fin = malha.geometry.getAttribute('aFinish');
+      let min = Infinity;
+      for (let i = 0; i < pos.count; i += 1) {
+        if (Math.round(fin.getX(i)) === Finish.Hair) min = Math.min(min, pos.getY(i));
+      }
+      return min;
+    };
+    const dela = fundo('nascente');
+    // Abaixo do quadril, que está em `y = 0`.
+    expect(dela).toBeLessThan(-0.08);
+    // Mais longa que **toda massa de cabelo** do catálogo, incluindo
+    // a `cascata` da Suki-Chan, que detinha o título, e o `longo` que
+    // ela própria vestia antes deste marco.
+    for (const estilo of HAIR_STYLES) {
+      if (estilo === 'nascente' || estilo === 'careca' || estilo === 'fibra') continue;
+      expect(dela, `${estilo} não pode ser mais longo que a Nascente`).toBeLessThan(fundo(estilo));
+    }
+    // A exceção, e ela é honesta: a `fibra` da Akemi-Chan desce a
+    // `−0,158` — mais fundo que a Nascente. Não é massa de cabelo, são
+    // **filamentos ópticos** soltos, e o título que a Nascente toma é
+    // o da queda; o dos fios continua com a Akemi.
+    expect(fundo('fibra')).toBeLessThan(dela);
   });
 
   it('tem degradê de matiz: raiz verde-água e ponta clara', () => {

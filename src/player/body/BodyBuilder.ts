@@ -4695,9 +4695,12 @@ function buildHair(b: SurfaceBuilder, a: AvatarAppearance, m: BodyMetrics, detai
       //
       // Água que brota: a arte de referência mostra um cabelo
       // clarís­simo, liso e longuíssimo, que desce em corrente pelas
-      // costas e passa à frente dos ombros. É a queda mais longa do
-      // catálogo, e é de propósito — ela é a Deusa da Maternidade, e
-      // comprimento aqui é continuidade, não enfeite.
+      // costas e passa à frente dos ombros. É a **massa de cabelo**
+      // mais longa do catálogo — desce a `y = −0,10`, contra os
+      // `0,01` da `cascata` da Suki-Chan, que tinha o título — e é de
+      // propósito: ela é a Deusa da Maternidade, e comprimento aqui é
+      // continuidade, não enfeite. Mais fundo que ela só a `fibra` da
+      // Akemi-Chan, e aquilo são filamentos ópticos soltos.
       //
       // A ficha dizia `longo`, que é a peça do Aérion: 380 triângulos
       // no LOD baixo, uma casca de quatro anéis que para no ombro. Ele
@@ -4763,11 +4766,12 @@ function buildHair(b: SurfaceBuilder, a: AvatarAppearance, m: BodyMetrics, detai
           // Até o centro do domo a massa só engrossa; daí para cima
           // é a elipse. A junção é contínua por construção: em
           // `domoY` os dois ramos valem `domoW`.
-          // 1,12 R na base do domo, não 0,9 R: a pele na altura de
+          // 1,09 R na base do domo, não 0,9 R: a pele na altura de
           // `cy` mede 0,18 de raio, e `0,9 R = 0,154` punha o cabelo
           // **dentro do crânio** — a massa sumia justamente na
-          // altura da orelha.
-          if (y <= domoY) return R * (1.12 + 0.03 * smoothstep(cy, domoY, y));
+          // altura da orelha. O valor casa com o da queda logo
+          // abaixo de `cy`, para não haver degrau na emenda.
+          if (y <= domoY) return R * (1.09 + 0.06 * smoothstep(cy, domoY, y));
           const k = Math.min(1, (y - domoY) / domoH);
           return Math.max(R * 0.06, domoW * Math.sqrt(Math.max(0, 1 - k * k)));
         }
@@ -4785,7 +4789,12 @@ function buildHair(b: SurfaceBuilder, a: AvatarAppearance, m: BodyMetrics, detai
         // vestido inteiro, de ombro a ombro. Cabelo comprido é mais
         // estreito que os ombros, e é a silhueta do pano atrás dele
         // que diz que há uma pessoa ali.
-        return R * (1.14 + 0.08 * smoothstep(0.04, 0.3, d) - 0.32 * smoothstep(0.36, 0.78, d));
+        // Estreita na têmpora (1,09 R = 0,186, contra a orelha em
+        // 0,1804) e larga no ombro (1,26 R): silhueta em **A**. Com
+        // 1,14 R chapado da têmpora ao ombro a massa descia reta
+        // como a lateral de um capacete, e foi isso que o close do
+        // rosto acusou — duas placas lisas ladeando a cara.
+        return R * (1.09 + 0.17 * smoothstep(0.02, 0.34, d) - 0.3 * smoothstep(0.4, 0.78, d));
       };
       // Rasa na linha do olhar: a frente do rosto está em `z = 0,2089`
       // nesta malha, e cabelo que avança ali engole a cara.
@@ -4976,11 +4985,29 @@ function buildHair(b: SurfaceBuilder, a: AvatarAppearance, m: BodyMetrics, detai
             const r = perfil(y) * 0.98;
             b.feature(
               [Math.sin(az) * r, y, Math.cos(az) * r + zcOf(y)],
+              // Rasos de propósito. Foram fundos numa rodada
+              // (`−R · 0,2`, meia-altura `R · 0,26`) e a bancada
+              // mostrou o preço: as cristas entre os vales passaram
+              // a pender **sobre o olho**. Na frente de um rosto o
+              // relevo tem de ser leitura, não volume.
               [R * 0.14, R * (frontal ? 0.24 : 0.3), R * 0.14],
               -R * ((frontal ? 0.14 : 0.09) + 0.04 * ruido(col * 7 + passo)),
               [Math.sin(az), 0.25, Math.cos(az)],
             );
           }
+        }
+
+        // --- a risca ---
+        //
+        // Um vale fundo em `az = 0`, da coroa até a linha do cabelo.
+        // Sem ela a franja fecha um **anel contínuo** de têmpora a
+        // têmpora e a cabeça inteira vira um casco com pala; com
+        // ela a frente se parte em duas mechas, que é como cabelo
+        // cai. Custa zero triângulo: empurra vértice que já existe.
+        for (let passo = 0; passo < 5; passo += 1) {
+          const y = cy + R * (1.32 - passo * 0.3);
+          const r = perfil(y) * 0.98;
+          b.feature([0, y, r + zcOf(y)], [R * 0.1, R * 0.26, R * 0.12], -R * 0.2, [0, 0.2, 1]);
         }
 
         for (let anel = 0; anel < 3; anel += 1) {
@@ -5011,8 +5038,15 @@ function buildHair(b: SurfaceBuilder, a: AvatarAppearance, m: BodyMetrics, detai
         // — foi a sétima rodada da Júpiter.
         for (let col = 0; col < 9; col += 1) {
           const az = (col / 9) * TAU + 0.4;
-          for (let passo = 0; passo < 4; passo += 1) {
-            const y = cy - 0.1 - passo * 0.17 - ruido(col * 5 + passo) * 0.05;
+          // Seis sulcos, não quatro, e começando em `cy + 0,08` em
+          // vez de `cy − 0,1`: os dois primeiros caem na altura do
+          // **rosto**, que é onde o close mostrou placa lisa. A
+          // frente fica de fora (`cos(az) > 0,35`) — ali o raio da
+          // peça é o da testa, e empurrar para fora é furar a pele
+          // da bochecha com uma mecha.
+          if (Math.cos(az) > 0.35) continue;
+          for (let passo = 0; passo < 6; passo += 1) {
+            const y = cy + 0.08 - passo * 0.17 - ruido(col * 5 + passo) * 0.05;
             if (y < bottomY + 0.06) continue;
             const raio = Math.cos(az) < 0 ? perfil(y) * 1.05 : frente(y);
             const px = Math.sin(az) * perfil(y);

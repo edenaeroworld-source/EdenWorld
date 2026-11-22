@@ -102,6 +102,55 @@ captura renderizada.
 | 10–12 | massa pálida contínua, ainda lisa | faltavam vales em meridiano |
 | 13–14 | **aba** atravessada na testa | rampa frontal curta: salto de 13 cm em 4 cm de altura |
 | 15 | **casulo** de costas, de novo | a queda media `1,40 R` — mais larga que os ombros |
+| 16 | **casco** no close do rosto | as laterais eram placas lisas: os sulcos só começavam em `cy − 0,1`, no queixo, e a franja fechava um anel contínuo de têmpora a têmpora |
+| 17 | a franja desceu **sobre o olho** | vales de `−R · 0,2` na frente: as cristas entre eles passaram a pender na linha do olhar. **Revertida** |
+
+### O casco, e o que o desfez
+
+O close do rosto foi o último defeito a cair, e custou três rodadas
+depois de a silhueta já estar certa de longe. O que a captura mostrava
+era um **casco**: massa pálida fechada em volta da cara, com pala.
+Três causas, todas medidas:
+
+- **as laterais eram placas lisas.** Os sulcos verticais da queda
+  começavam em `cy − 0,1` — a altura do queixo. Toda a faixa do rosto
+  (`cy` a `cy + 0,2`) não tinha uma quebra sequer. Agora são seis
+  sulcos a partir de `cy + 0,08`, e a frente fica de fora
+  (`cos(az) > 0,35`): ali o raio da peça é o da testa, e empurrar para
+  fora é furar a bochecha com uma mecha;
+- **a franja fechava um anel.** Sem risca, a borda de baixo do domo
+  dá a volta inteira de têmpora a têmpora. Um vale em `az = 0`, da
+  coroa à linha do cabelo, parte a frente em duas mechas;
+- **o perfil era um tubo.** `1,14 R` chapado da têmpora ao ombro
+  descia reto como a lateral de um capacete. Agora estreita na têmpora
+  (`1,09 R = 0,186`, contra a orelha em `0,1804`) e abre no ombro
+  (`1,26 R`): silhueta em **A**.
+
+A rodada seguinte tentou aprofundar os vales da coroa para `−R · 0,2`
+e **foi revertida na mesma hora**: as cristas entre eles passaram a
+pender sobre o olho. Na frente de um rosto, relevo tem de ser leitura,
+não volume. O estado entregue é o da rodada 16.
+
+### Uma afirmação que a medição derrubou
+
+O plano dizia que a Nascente era "a queda mais longa do catálogo", e o
+teste que a guardava contava vértices largos — o que não é medida de
+comprimento. Medido pelo **acabamento** (`Finish.Hair`), que é o
+método da bancada da Nexara:
+
+| penteado | fundo da peça |
+| --- | --- |
+| `fibra` (Akemi-Chan) | **−0,158** |
+| **`nascente`** | **−0,101** |
+| `cascata` (Suki-Chan) | 0,008 |
+| `fluxo` (Nexara) | 0,068 |
+| `longo` (o que ela vestia) | 0,415 |
+
+A Nascente é a **massa de cabelo** mais longa do Éden, e tira esse
+título da `cascata`. Mas não é a peça que desce mais fundo: a `fibra`
+da Akemi-Chan vai a `−0,158`, e aquilo são filamentos ópticos soltos,
+não cabelo. A afirmação foi corrigida nos três lugares onde aparecia
+— o comentário do penteado, o teste e a nota da trava da Suki.
 
 ### O erro de origem
 
@@ -173,23 +222,81 @@ teto do elenco.
 
 ## 6. Validação
 
-### Assinaturas
+### Assinaturas — relatório final `main` × marco
 
-`tools/assinaturas.ts`, comparado contra o baseline tirado em
-`f38a2ec` antes da primeira linha do marco:
+`tools/assinaturas.ts` rodado duas vezes: uma num worktree limpo de
+`origin/main` (= `f38a2ec`, a base deste branch) e outra no marco.
+Comparação chave a chave:
 
-- **uma única entrada divergiu**: `panteao/amara` (corpo nos quatro
-  níveis, e `rosto`, porque a sobrancelha herda `hairColor`);
-- **doze entradas novas**: `cabelo/nascente`, `traje/regaco`,
-  `acessorio/nimbo`, quatro LODs cada;
-- **nenhuma entrada perdida**. `panteao/aerion`, `cabelo/longo` e
-  `traje/aero` saíram com os mesmos números do baseline.
+| | entradas |
+| --- | --- |
+| na `main` | 260 |
+| no marco | 272 |
+| **idênticas** | **256** |
+| **mudaram** | **4** — e todas são `panteao/amara` |
+| **perdidas** | **0** |
+| **novas** | **12** |
 
-### Testes
+As quatro que mudaram:
+
+```
+panteao/amara baixa   main  corpo:-87496432    → marco  corpo:77083741
+panteao/amara media   main  corpo:-1348967972  → marco  corpo:623577673
+panteao/amara alta    main  corpo:-1227771280  → marco  corpo:-519586166
+panteao/amara ultra   main  corpo:391397831    → marco  corpo:-1516451030
+```
+
+O `rosto` dela também mudou (`82077817` → `1935614329`), e tem causa
+conhecida: **a sobrancelha herda `hairColor`**, que saiu de `#2b1d16`
+para `#e3f6ec`. O `halo` ficou idêntico nos quatro níveis.
+
+As doze novas são as três peças × quatro LODs: `cabelo/nascente`,
+`traje/regaco`, `acessorio/nimbo`.
+
+Intactas por família, nas 256 que não mudaram: `panteao` 40 (as outras
+dez fichas, nos quatro níveis), `cabelo` 64, `traje` 56, `acessorio`
+36, `habitante` 60.
+
+Os três intocáveis declarados no plano foram conferidos nominalmente:
+
+| peça | entradas | resultado |
+| --- | --- | --- |
+| `panteao/aerion` | 4 | **idênticas** |
+| `cabelo/longo` | 4 | **idênticas** |
+| `traje/aero` | 4 | **idênticas** |
+
+### Testes — suíte completa
+
+Rodada inteira, sem nada competindo por CPU:
+
+```
+Test Files  1 failed | 61 passed | 5 skipped  (67)
+     Tests  1 failed | 1372 passed | 11 skipped  (1384)
+  Duration  311,68 s
+```
+
+A **única** falha é `tests/unit/coracao-roseiral.test.ts`, e ela é
+**preexistente**. Verificada num worktree limpo de `origin/main`
+(= `f38a2ec`, a base deste branch), onde dá exatamente o mesmo
+resultado:
+
+| | no marco | em `origin/main` |
+| --- | --- | --- |
+| caso | *nenhum habitante nasce dentro…* | o mesmo |
+| erro | `Test timed out in 5000ms` | `Test timed out in 5000ms` |
+| arquivo | 1 falhou, 33 passaram | 1 falhou, 33 passaram |
+
+É um teste de navegação com orçamento de 5 s que estoura no hardware
+desta máquina; não toca em malha, ficha, catálogo ou acabamento, e
+nada neste marco o alcança.
+
+`tests/unit/universo-persistencia.test.ts` havia falhado uma vez sob
+carga paralela e **passou nas duas rodadas limpas** (29/29): era
+oscilação de tempo, não regressão.
 
 `tests/unit/amara-remaster.test.ts` — **46 casos**, todos passando.
 
-Seis travas de marcos anteriores precisaram de atualização, cada uma
+Sete travas de marcos anteriores precisaram de atualização, cada uma
 com a nota do porquê no próprio arquivo:
 
 | arquivo | o que dizia | o que diz agora |
@@ -200,13 +307,7 @@ com a nota do porquê no próprio arquivo:
 | `maze-remaster.test.ts:575` | idem | idem |
 | `haru-remaster.test.ts:259` | Aérion e Amara saem de `aero` com malhas idênticas | compara o dono da peça contra um habitante que a veste |
 | `nexara-remaster.test.ts:193` | `Finish.Holo` é "da Nexara e de mais ninguém" | só brilha quem tem briefing; e a Amara, trocadas as três peças pelas genéricas, **volta a zero** |
-
-### A falha preexistente
-
-`tests/unit/coracao-roseiral.test.ts` falha no baseline `f38a2ec` e
-continua falhando — é anterior a este marco e está fora de escopo.
-`tests/unit/universo-persistencia.test.ts` passa isolado (29/29) e
-oscila sob carga paralela; não tem relação com o marco.
+| `nexara-remaster.test.ts:243` | — | **nota só, nenhuma asserção tocada**: a `cascata` deixou de ser a queda mais longa do Éden |
 
 ---
 
