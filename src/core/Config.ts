@@ -4,14 +4,37 @@
  * nenhum sistema dependa de "números mágicos" espalhados pelo código.
  */
 
+/**
+ * Identidade e versão do jogo.
+ *
+ * **Esta é a fonte única da versão.** Antes da Genesis 0.5 o número estava
+ * escrito à mão em seis lugares — `package.json`, `index.html`, o manifesto,
+ * o README e dois pontos da interface — e eles divergiram: o README anunciava
+ * a 0.2 enquanto o jogo ainda mostrava "Genesis 0.1" no rodapé do menu. Agora
+ * só se edita aqui:
+ *
+ * - `index.html` recebe o valor por injeção, no `vite.config.ts`;
+ * - a interface lê `GAME` direto;
+ * - `package.json` espelha `version`, e `tests/unit/versao.test.ts` quebra se
+ *   os dois saírem de sincronia;
+ * - o manifesto não carrega mais número nenhum (nome de aplicativo instalado
+ *   não muda a cada versão).
+ */
 export const GAME = {
   name: 'EDENWORLD',
   universe: 'Éden Aero',
-  versionLabel: 'Genesis 0.1',
-  version: '0.1.0',
+  /** Número em SemVer. `package.json` espelha este valor, e um teste guarda. */
+  version: '0.5.0',
+  /** Linha da versão, como aparece para o jogador. */
+  versionLabel: 'Genesis 0.5',
+  /** Subtítulo desta versão. Cada marco oficial ganha o seu. */
+  versionName: 'O universo ganha corpo',
   tagline: 'A WORLD BEYOND IMAGINATION',
   locale: 'pt-BR',
 } as const;
+
+/** `EDENWORLD — Genesis 0.5 · "O universo ganha corpo"`, para título e metadados. */
+export const VERSION_FULL = `${GAME.name} — ${GAME.versionLabel} · “${GAME.versionName}”`;
 
 export const WORLD = {
   /** Altura (Y) da superfície de lagos, rio e oceano. */

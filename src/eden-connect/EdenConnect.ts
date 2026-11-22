@@ -2,9 +2,9 @@ import type { GameSystem } from '../core/GameSystem';
 
 /**
  * Éden Connect — ponto de extensão para a futura conta on-line do
- * universo Éden. A Genesis 0.1 é totalmente off-line: esta camada
- * define o contrato e fornece uma implementação local que NÃO faz
- * nenhuma chamada de rede nem coleta dados.
+ * universo Éden. O jogo é **totalmente off-line**: esta camada define
+ * o contrato e fornece uma implementação local que NÃO faz nenhuma
+ * chamada de rede nem coleta dados.
  */
 export type ConnectStatus = 'indisponivel' | 'desconectado' | 'conectado';
 

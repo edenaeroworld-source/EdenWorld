@@ -2,11 +2,17 @@
   <img src="public/assets/ui/logo-edenworld-480.webp" alt="EDENWORLD" width="280" />
 </p>
 
-# EDENWORLD — Genesis 0.2 · “A cidade ganha gente”
+# EDENWORLD — Genesis 0.5 · “O universo ganha corpo”
 
 **A World Beyond Imagination.** Um mundo aberto em 3D do universo Éden Aero que roda direto no navegador — no computador, no celular e no tablet, sem instalar nada.
 
-**Aurora City** é uma cidade-jardim à beira-mar para explorar a pé com um avatar criado por você — agora habitada: moradores com rotina própria que olham, cumprimentam e conversam entre si, as onze figuras do panteão do Éden em seus lugares, um EdenOS com aplicativos que funcionam de verdade e a tecnologia **Afters** liberada por Luma.
+Não é mais uma cidade: são **sete regiões permanentes** do Éden, duas delas construídas e caminháveis. **Aurora City**, a cidade-jardim à beira-mar, e **Rosas Park**, ligadas pela Estação do Éden — com interiores em que se entra de verdade, moradores com rotina, economia em Cristais, casa própria, bichos e as onze figuras do panteão em seus lugares. E as pessoas deixaram de ser primitivas: têm corpo modelado, rosto com órbita e pálpebra, e dez das onze divindades vestem peças desenhadas só para elas.
+
+<p align="center">
+  <img src="docs/panteao-genesis-0.5.png" alt="As onze figuras do panteão do Éden lado a lado, da esquerda para a direita: Aérion, Haru, Nexara, Suki-Chan, Luma, Lilly, Akemi-Chan, Saturno, Maze, Júpiter e Amara" width="880" />
+</p>
+
+<p align="center"><sub>O panteão do Éden na bancada de personagens, no nível Ultra: Aérion, Haru, Nexara, Suki‑Chan, Luma, Lilly, Akemi‑Chan, Saturno, Maze, Júpiter e Amara.</sub></p>
 
 ## O que há nesta versão
 
@@ -19,6 +25,8 @@
 - **Habitantes de Aurora City**: 54 moradores simulados ao mesmo tempo (até 18 visíveis, conforme a qualidade), cada um com nome, ocupação, roupa, velocidade e rotina que muda de madrugada, manhã, tarde e noite. Dá para conversar com qualquer um.
 - **A cidade repara em você.** A nove metros o morador vira a cabeça e acompanha; a cinco e meio ele cumprimenta — no máximo uma vez a cada 26 segundos por pessoa, e nunca de madrugada, quando a cidade está quieta. Dois moradores que se cruzam param, se viram um para o outro e conversam por alguns segundos, com gesto e expressão. Aperte `G` numa praça cheia e quem estiver por perto **responde ao aceno**, cada um no seu tempo — não em bloco.
 - **Cada pessoa tem um jeito.** Os gestos preferidos, o humor da saudação e a frequência com que se mexe vêm de uma *persona*: Suki‑Chan gesticula sem parar, Saturno quase não se move, Haru demora mais para começar.
+- **Corpos de verdade, não primitivas.** O avatar deixou de ser um boneco de esferas e cilindros: é uma malha única, com volume contínuo, ombro que não quebra na junta, articulações que dobram, oclusão assada por vértice e materiais PBR. O rosto tem órbita, pálpebra, nariz e lábios com geometria — não desenho sobre uma bola. Cada corpo é montado em **quatro níveis** (Baixa, Média, Alta e Ultra), e o nível é escolhido pela qualidade gráfica e pela distância. Ver [`docs/CHARACTER-REMASTER.md`](docs/CHARACTER-REMASTER.md) e [`docs/VALIDACAO-CHARACTER-2.0.md`](docs/VALIDACAO-CHARACTER-2.0.md).
+- **O panteão remasterizado, um a um.** **Dez das onze** figuras ganharam penteado, traje e acessório **desenhados só para elas**, peça por peça, cada uma com seu documento de plano e de validação: o cabelo Cascata e as lentes vazadas da Suki‑Chan, o traje Rede da Nexara, a Sonora de Lilly com as teclas na saia, a fibra óptica da Akemi‑Chan, a Guardiã de Saturno com a galhada, o traje EdenOS e os abafadores de Haru, a Copa e o Jardim de Maze, o Lúmen de Júpiter e o Manto Regaço de Amara. Nenhuma dessas peças entra no sorteio dos habitantes: são exclusivas, e há teste que guarda isso. **Aérion é a exceção** — ela ainda veste peças do catálogo comum, e por isso serve de testemunha nas provas de não‑regressão.
 - **O panteão em pessoa**: Aérion, Haru, Nexara, Suki‑Chan, Luma, Lilly, Akemi‑Chan, Saturno, Maze, Júpiter e Amara estão em pontos fixos da cidade, com aura, plaquinha de nome, diálogo em árvore, registro no diário e contato no EdenPhone. As falas da árvore de cada um trazem direção de atuação: o nó diz qual expressão e qual gesto acompanham aquela frase, então Suki comemora, Saturno pondera e Amara mede a distância.
 - **Um universo, não uma cidade**: sete regiões permanentes — Aurora City, Bitnara, SkyStones, Rosas Park, Noureja Nether, Cidade da Liberdade e Jardim Proibido. Regiões **não são fases**: não há seleção de nível nem ordem obrigatória, e tudo atravessa a viagem (cristais, inventário, bichos, casa, atividades). Você descobre uma região conversando com quem cuida dela — e duas delas só aparecem para quem as achar. Aurora City e **Rosas Park** têm cenário 3D construído, com interiores que se entra de verdade e bichos selvagens desenhados; as outras já existem no mapa, nas lojas, na fauna e nas atividades, e a tela diz isso em vez de levar você para o vazio. Ver [`docs/PLANO-UNIVERSO-VIVO.md`](docs/PLANO-UNIVERSO-VIVO.md) e [`docs/PLANO-ROSAS-3D.md`](docs/PLANO-ROSAS-3D.md).
 - **Interiores construídos**: entrar num prédio não abre um cômodo vazio. Apartamento, loja de tecnologia, mercado, pet shop e repartição pública têm piso, parede, teto, janela com vista, móvel, luz e gente — cada um com planta própria, escada que se sobe e colisão que acompanha a geometria. Ver [`docs/PLANO-INTERIORES.md`](docs/PLANO-INTERIORES.md).
@@ -127,7 +135,7 @@ EDENWORLD_ALLOWED_HOSTS=".meu-tunel.dev" npm run dev
 
 ## Publicação
 
-O jogo é um **site estático**: `npm run build` gera a pasta `dist/` (cerca de 1,7 MB; aproximadamente 260 kB de código compactado com gzip) e basta hospedar o conteúdo dela. Não há servidor, banco de dados nem variáveis de ambiente.
+O jogo é um **site estático**: `npm run build` gera a pasta `dist/` (cerca de 2,2 MB; aproximadamente 400 kB compactados com gzip — 254 kB do jogo e 146 kB do Three.js, em arquivos separados para o navegador guardar o Three.js entre versões) e basta hospedar o conteúdo dela. Não há servidor, banco de dados nem variáveis de ambiente.
 
 - Os caminhos são relativos (`base: './'` no `vite.config.ts`), então o jogo funciona tanto na raiz de um domínio quanto em uma subpasta, como `https://usuario.github.io/EdenWorld/`.
 - Sirva por **HTTPS**: alguns navegadores só liberam o uso do controle em páginas seguras.
@@ -187,13 +195,17 @@ Este arquivo não faz parte do repositório: a escolha da hospedagem fica com qu
 
 ```bash
 npm run typecheck   # tipos
-npm test            # 448 testes unitários (lógica pura, sistemas e telas do EdenOS)
+npm test            # 1.394 testes unitários (lógica pura, sistemas, geometria e telas do EdenOS)
 npm run test:e2e    # cinco cenários de ponta a ponta sobre o build de produção
 ```
 
-Os **testes unitários** (`tests/unit/`) cobrem matemática, colisão, movimento do personagem, relógio do mundo, aparência do avatar, configuração de controles, níveis de qualidade, interações e salvamento (incluindo a migração da versão 1 para a 2). Desde a Genesis 0.2 também cobrem a rede de caminhada e a rotina dos habitantes, a coerência do panteão e das árvores de diálogo, o acervo do EdenReads, o estado social do aparelho, o catálogo Afters e a transformação de silhueta do Afters 2.0 (0%, mínimo, máximo, valores intermediários, canais separados, modo combinado, desligamento independente, mudança ao vivo, persistência e compatibilidade com salvamentos antigos) — e, para a cidade, que habitante e jogador usam o mesmo ator de silhueta, que avatares reaproveitados não herdam a silhueta de quem saiu, que transformar ninguém reconstrói malha, que gente longe é atualizada em frequência reduzida sem perder o destino, e que o mesmo habitante fica igual para dois jogadores — e, em um DOM de teste (`happy-dom`), **as telas dos aplicativos**: cada botão precisa chamar o jogo de verdade, nenhum é enfeite.
+Os **testes unitários** (`tests/unit/`) são **1.394 casos em 68 arquivos**, e cobrem três camadas.
 
-A Genesis 0.2 acrescentou ainda a cobertura do **diálogo e da vida social**: a datilografia e suas pausas, a barra de fala (histórico, marcador de página, escolhas que só aparecem quando a pessoa termina de falar), a regência da conversa (expressão, gesto, olhar e encerramento), a direção de atuação das árvores do panteão, os 13 gestos — com a garantia de que **nenhum deles toca nas pernas**, para continuarem funcionando enquanto o personagem anda —, os alvos de morph do rosto, as regras de notar, cumprimentar e conversar dos moradores, o giro suave para o interlocutor e os três degraus do sistema de voz (clipe, síntese do navegador, texto), incluindo a verificação de que, sem clipes e sem síntese, o jogo **não promete dublagem**.
+**A lógica do jogo:** matemática, colisão, movimento do personagem, relógio do mundo, aparência do avatar, configuração de controles, níveis de qualidade, interações, economia, moradia, missões e salvamento — incluindo a migração do formato 1 para o 3, com salvamentos antigos que continuam abrindo. Mais a rede de caminhada e a rotina dos habitantes, a coerência do panteão e das árvores de diálogo, o acervo do EdenReads, o estado social do aparelho, a integridade dos portais e a persistência entre regiões, e o isolamento de iluminação quando se troca de região.
+
+**A geometria dos personagens**, que é a camada mais recente e a maior: cada remasterização do panteão tem a sua bateria — a silhueta vista de cada ângulo, o acabamento de cada peça, o orçamento de triângulos nos quatro níveis, a fronteira de cor entre uma deusa e outra, e a garantia de que peça de deusa **não vaza para o catálogo dos habitantes**. A prova de não‑regressão é por **assinatura de malha**: `tools/assinaturas.ts` reduz cada corpo a um número, e comparar o antes e o depois mostra exatamente quem mudou. Em um marco de personagem, só a personagem daquele marco pode divergir.
+
+**As telas**, em um DOM de teste (`happy-dom`): cada botão precisa chamar o jogo de verdade, nenhum é enfeite. A datilografia e suas pausas, a barra de fala, a regência da conversa, a direção de atuação das árvores do panteão, os 13 gestos — com a garantia de que **nenhum deles toca nas pernas**, para continuarem funcionando enquanto o personagem anda —, as regras de notar e cumprimentar, os três degraus do sistema de voz (clipe, síntese do navegador, texto) e a verificação de que, sem clipes e sem síntese, o jogo **não promete dublagem**. E `tests/unit/versao.test.ts`, que monta o menu principal e confere que o número de versão exibido é o desta build.
 
 Os **testes de ponta a ponta** (`tests/e2e/`) abrem o jogo em um Chromium sem interface e o usam como um jogador:
 
@@ -205,7 +217,7 @@ Os **testes de ponta a ponta** (`tests/e2e/`) abrem o jogo em um Chromium sem in
 | `controle` | Jogo e menus só com o controle, incluindo conectar e desconectar |
 | `robustez` | Navegador sem WebGL2, armazenamento bloqueado, salvamento corrompido ou adulterado, perda do contexto gráfico e limite do mapa |
 
-> **Atenção:** os cenários de ponta a ponta da Genesis 0.2 **não foram executados** nesta máquina — não há Chrome/Chromium instalado e o download está bloqueado. Rode-os localmente antes de publicar.
+> **Atenção:** os cenários de ponta a ponta **não foram executados** na máquina em que a Genesis 0.5 foi fechada. A suíte unitária e o build de produção foram; o e2e exige um Chrome completo. Rode-os localmente antes de publicar.
 
 ```bash
 node tests/e2e/run.mjs celular controle                   # só alguns cenários (exige "npm run build" antes)
@@ -218,24 +230,35 @@ O executor procura um Chrome, Chromium ou Edge instalado. Se não encontrar, inf
 
 ```text
 index.html               página única do jogo
+lab.html                 bancada de personagens: a oficina onde a geometria é olhada
 public/                  logotipo, ícones e manifesto do aplicativo web
 design/brand/            logotipo original e a origem dos arquivos derivados
 src/
   main.ts                ponto de entrada: checa o WebGL2 e inicia o Engine
-  core/                  Engine (orquestra tudo), laço do jogo, renderizador, configuração, detecção de plataforma
+  core/                  Engine (orquestra tudo), laço do jogo, renderizador, configuração e versão, detecção de plataforma
   world/                 terreno, céu, água, luz, clima, relógio, vegetação, partículas
+  regions/               as sete regiões do Éden, viagem entre elas e o que atravessa
+  universe/              estado do universo que sobrevive à viagem
   cities/aurora-city/    planta, prédios, praça, parques e decoração de Aurora City
+  cities/rosas-park/     a segunda região construída
+  interiors/             plantas, móveis, escadas e colisão dos ambientes em que se entra
   npc/                   rede de caminhada, rotina, vida social e desenho dos moradores
   characters/            panteão do Éden (dados, lugares, árvores de diálogo e personas)
+  creatures/             espécies, corpo e movimento dos bichos
+  economy/               Cristais, lojas com horário, catálogo, devolução e extrato
+  housing/               imóveis, aluguel e a grade de colisão dos móveis
+  missions/              cadeias de tarefa e seu progresso
   edenos/                acervo do EdenReads e estado social do aparelho
   afters/                catálogo, transformação de silhueta e efeitos em volta do avatar
   physics/               colisão e consultas ao cenário (sem biblioteca externa)
   player/                avatar, animação, gestos, rosto e movimento
+  player/body/           a malha do corpo: perfis, costura, acabamento e os quatro níveis
   camera/                câmera em terceira pessoa
   input/                 teclado e mouse, toque, controle, remapeamento e guarda de gestos do navegador
   interactions/          pontos de interação e colecionáveis
   systems/               qualidade gráfica, medição de desempenho, salvamento, progresso, áudio e voz
   interface/             HUD, menus, criador de avatar, EdenPhone e configurações
+  lab/                   a cena da bancada (não entra no build do jogo)
   styles/                folha de estilo da interface
   utils/                 matemática e geometria de apoio
   shared/                catálogo dos recursos “em breve”
@@ -243,6 +266,8 @@ src/
 tests/
   unit/                  testes unitários (Vitest)
   e2e/                   testes de ponta a ponta (puppeteer-core)
+tools/                   instrumentos de inspeção: captura em WebGL, assinaturas de malha, leitura de pixels
+docs/                    planos e validações de cada marco, com as imagens que decidiram
 ```
 
 Feito com **TypeScript**, **Three.js** (WebGL2) e **Vite**. Não há motor de jogo, biblioteca de física nem framework de interface.
@@ -270,11 +295,24 @@ Modelos, texturas, céu, água, vegetação, sons e música são gerados em temp
 
 Com `?debug`, para desempenho e aparelho: `__eden.plataforma()` mostra o que foi detectado (sistema, formato, esquema e orientação), `__eden.medir(30)` roda uma medição de 30 segundos e `__eden.desempenho()` devolve o último relatório. Além do que já existia: `__eden.npcs()` lista a população e onde está cada figura do panteão, `__eden.irPara('haru')` leva você até ela, `__eden.bandeiras()` mostra as marcas de história e `__eden.afters()` mostra o estado do painel Afters, incluindo `body` (intensidades e ativações) e `silhueta` (o que o avatar mostra neste instante, com a transição em andamento). Para a cidade: `__eden.aftersCidade()` resume quantos habitantes usam a tecnologia e qual evento está em vigor, `__eden.aftersNpc('cidadao:41', { bust: 150 })` muda uma pessoa, `__eden.aftersNpcPreset('cidadao:41', 'aurora')` aplica um preset e `__eden.aftersEvento('palco')` força um evento de cidade.
 
+## Versões
+
+| Versão | Data | O que marcou |
+| --- | --- | --- |
+| **Genesis 0.5** · *O universo ganha corpo* | 22/11/2026 | Sete regiões com duas construídas e viagem entre elas, interiores, economia em Cristais, casa, bichos, corpos modelados e o panteão remasterizado |
+| **Genesis 0.2** · *A cidade ganha gente* | 12/11/2026 | Habitantes com rotina, o panteão em pessoa, diálogo em árvore, EdenOS funcional e os Afters |
+| **Genesis 0.1** | 12/11/2026 | Aurora City jogável no navegador: terreno, cidade, avatar, câmera, interações e salvamento |
+
+O número aparece no rodapé do menu principal e na tela **Sobre**. Ele é declarado em **um lugar só** — `GAME`, em [`src/core/Config.ts`](src/core/Config.ts) —, de onde a interface lê direto e o `index.html` recebe por injeção no build; `package.json` espelha o número, e [`tests/unit/versao.test.ts`](tests/unit/versao.test.ts) quebra se os dois divergirem. Essa trava existe porque a deriva já aconteceu: a Genesis 0.2 subiu só o título deste arquivo, e por 33 pull requests o jogo continuou dizendo "Genesis 0.1" para quem abria o menu.
+
+O caminho até a **EDENWORLD 1.0** está em [`docs/PLANO-EDENWORLD-1.0.md`](docs/PLANO-EDENWORLD-1.0.md), e o que entrou nesta versão, com os números, em [`docs/RELEASE-GENESIS-0.5.md`](docs/RELEASE-GENESIS-0.5.md).
+
 ## Limites conhecidos
 
 - **O desempenho em celular não foi medido.** As metas do projeto são 30 FPS estáveis em celular intermediário e a opção de 60 FPS em hardware capaz — são **metas**, não resultados verificados: não há aparelho móvel nem GPU no ambiente em que o jogo foi desenvolvido. Para produzir o número no seu aparelho, abra o jogo com `?bench` (veja os parâmetros de URL acima). O áudio também nunca foi ouvido por uma pessoa.
 - **Um jogador por vez.** Não há multijogador, contas nem serviços on-line nesta versão. O formato de troca da silhueta — do jogador e dos habitantes — já existe e é testado (`src/afters/AftersNet.ts`), mas nada é enviado: não há servidor para receber.
 - **O salvamento é local.** Para continuar em outro navegador ou aparelho é preciso exportar o arquivo de salvamento e importá-lo manualmente.
+- **O panteão está remasterizado em dez de onze.** Suki‑Chan, Nexara, Luma, Lilly, Akemi‑Chan, Saturno, Haru, Maze, Júpiter e Amara têm penteado, traje e acessório próprios. **Aérion ainda veste peças do catálogo comum** — o cabelo `longo`, o traje `aero` e a auréola que qualquer habitante pode usar. Ela não foi esquecida: é justamente por vestir peça genérica que serve de testemunha nas provas de não‑regressão, e o remaster dela é um marco à parte.
 - **Duas regiões construídas, cinco por construir.** Aurora City e Rosas Park têm cenário 3D, interiores visitáveis, fauna desenhada e viagem funcionando entre elas (**Estação do Éden**, ou EdenPhone → Mapa do Éden). Bitnara, SkyStones, Cidade da Liberdade, Noureja Nether e o Jardim Proibido são destinos reais no mapa, nas lojas e nas atividades, mas ainda sem cenário — a tela diz isso em vez de levar você para o vazio.
 - **Não há dublagem.** Nenhuma fala do jogo foi gravada por uma pessoa. O modo padrão é texto, com a boca acompanhando a datilografia; a síntese do navegador é opcional e depende de o navegador oferecê‑la (a tela de ajustes avisa quando não oferece). O lugar dos clipes existe no código e é entregue vazio.
 - **O rosto é estilizado.** São sete expressões desenhadas, não um sistema de músculos faciais: a boca abre e fecha no ritmo da fala, sem visema por fonema.

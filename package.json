@@ -1,8 +1,8 @@
 {
   "name": "edenworld",
-  "version": "0.1.0",
+  "version": "0.5.0",
   "private": true,
-  "description": "EDENWORLD — Genesis 0.1. Mundo aberto 3D do universo Éden Aero para navegadores (TypeScript + Three.js + WebGL2).",
+  "description": "EDENWORLD — Genesis 0.5 · O universo ganha corpo. Mundo aberto 3D do universo Éden Aero para navegadores (TypeScript + Three.js + WebGL2).",
   "type": "module",
   "engines": {
     "node": ">=22.12.0"

@@ -4,7 +4,7 @@ import type { AvatarAppearance } from '../player/AvatarAppearance';
 
 /**
  * Camada social — ponto de extensão para multijogador, amigos e
- * conversas. A Genesis 0.1 é uma experiência para um jogador: esta
+ * conversas. O jogo é uma experiência para um jogador: esta
  * implementação local não se conecta a nada e não exibe outros
  * jogadores. O contrato abaixo descreve o que um futuro serviço
  * precisa oferecer para ser plugado sem alterar o restante do jogo.
