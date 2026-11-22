@@ -2,8 +2,8 @@ import type { IconName } from '../interface/icons';
 
 /**
  * Catálogo dos recursos planejados para as próximas versões do
- * EDENWORLD. Na Genesis 0.1 eles aparecem apenas como "em breve" —
- * nenhum deles simula funcionalidade que ainda não existe.
+ * EDENWORLD. Eles aparecem apenas como "em breve" — nenhum deles
+ * simula funcionalidade que ainda não existe.
  *
  * Para implementar um recurso: crie o sistema correspondente
  * (implementando `GameSystem`), registre-o no `SystemRegistry` do

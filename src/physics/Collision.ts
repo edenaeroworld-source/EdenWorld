@@ -1,7 +1,7 @@
 /**
  * Primitivas de colisão do EDENWORLD.
  *
- * A física da Genesis 0.1 é propositalmente simples e estável:
+ * A física é propositalmente simples e estável:
  * o personagem é um círculo no plano XZ com uma altura, e o cenário é
  * descrito por caixas orientadas e cilindros (ou anéis) com intervalo
  * vertical. Topos "caminháveis" funcionam como pisos (degraus, pontes,

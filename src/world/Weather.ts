@@ -30,8 +30,8 @@ export interface WeatherEffect {
 }
 
 /**
- * Clima de Aurora City. A Genesis 0.1 implementa vento e neblina com
- * variação automática; chuva e arco-íris entram como `WeatherEffect`.
+ * Clima de Aurora City. Vento e neblina têm variação automática;
+ * chuva e arco-íris entram como `WeatherEffect`.
  */
 export class Weather {
   /** x, y = direção do vento no plano XZ; z = força atual em [0, 1]. */

@@ -71,10 +71,11 @@ const STUDIO_CLEARANCE = 4.6;
 /** Giro da câmera ao sair de um portal (rad). */
 const PORTAL_CAMERA_TURN = 0.95;
 const ABOUT_TEXT = [
-  `${GAME.name} ${GAME.versionLabel} é a primeira versão jogável do universo ${GAME.universe}: um passeio livre por Aurora City, direto no navegador.`,
-  'Explore a Praça Central, o Parque das Águas, os Jardins Suspensos, o Mirante Celeste, a Orla Cristalina e o Distrito Cristal. Encontre os Cristais de Luz, ative os portais e leia as placas para preencher seu diário.',
+  `${GAME.name} ${GAME.versionLabel} — “${GAME.versionName}” — é um universo aberto do ${GAME.universe} que roda direto no navegador, sem instalar nada.`,
+  'São sete regiões permanentes. Aurora City e Rosas Park têm cenário construído, com interiores em que se entra de verdade, bichos desenhados e a Estação do Éden ligando as duas; as outras cinco já existem no mapa, nas lojas e nas atividades, e a tela diz isso em vez de levar você para o vazio.',
+  'A cidade é habitada: moradores com rotina que olham, cumprimentam e conversam entre si, e as onze figuras do panteão em seus lugares, cada uma com diálogo próprio. A moeda é o Cristal, e o que você compra vira objeto na sua casa.',
   'Tudo o que você vê e ouve é gerado pelo próprio jogo: não há modelos, texturas ou músicas baixados.',
-  'Recursos como Éden Connect, EdenStore, EdenReads, EdenPawl e os eventos do Éden ainda não existem nesta versão e aparecem apenas como "em breve".',
+  'O que depende de servidor, loja ou catálogo licenciado — Éden Connect, EdenStore, EdenTV, EdenGame, EdenPawl e os eventos com data — continua marcado como “em breve”. Nada aqui simula estar on-line.',
 ];
 
 function nextFrame(): Promise<void> {

@@ -1,4 +1,22 @@
 import { defineConfig } from 'vite';
+import { GAME } from './src/core/Config.ts';
+
+/**
+ * Injeta a versão no `index.html` a partir de `GAME`, em desenvolvimento e no
+ * build. Antes da Genesis 0.5 a `<meta description>` trazia o número escrito à
+ * mão, e ficou quatro versões para trás sem que nada acusasse.
+ */
+function versaoNoHtml() {
+  return {
+    name: 'eden-versao-no-html',
+    transformIndexHtml(html: string) {
+      return html
+        .replaceAll('%EDEN_VERSION_LABEL%', GAME.versionLabel)
+        .replaceAll('%EDEN_VERSION_NAME%', GAME.versionName)
+        .replaceAll('%EDEN_VERSION%', GAME.version);
+    },
+  };
+}
 
 /**
  * Hosts adicionais aceitos pelo servidor de desenvolvimento / preview.
@@ -13,6 +31,7 @@ const extraHosts = (process.env.EDENWORLD_ALLOWED_HOSTS ?? '')
 const allowedHosts = ['localhost', '127.0.0.1', '.e2b.app', '.github.dev', '.gitpod.io', ...extraHosts];
 
 export default defineConfig({
+  plugins: [versaoNoHtml()],
   // Base relativa: o build funciona em qualquer subcaminho (GitHub Pages, itch.io, CDN).
   base: './',
   server: {

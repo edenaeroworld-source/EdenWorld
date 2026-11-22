@@ -41,10 +41,36 @@ Sistemas **já prontos** (não reescrever):
 - **F — Civilização viva (NPCs e panteão).** ✅ entregue nesta etapa (54
   moradores com rotina + 11 figuras do panteão com diálogo).
 - **G — Outras cidades** (Bitnara, SkyStones, Rosas Park, Cidade da Liberdade,
-  Noureja Nether, Jardim Proibido). ⏳ próximo grande bloco.
-- **H — Social e multijogador.** ⏳ exige servidor (ver "Dependências externas").
-- **I — Moradia e eventos.** ⏳
-- **J — Otimização e lançamento.** ⏳
+  Noureja Nether, Jardim Proibido). ⚠️ **parcial na Genesis 0.5**: as sete
+  regiões existem como destino, loja, fauna e atividade, e **duas têm cenário
+  construído** — Aurora City e Rosas Park, ligadas pela Estação do Éden, com
+  interiores e persistência entre elas. Faltam cinco.
+- **H — Social e multijogador.** ❌ não começou; exige servidor (ver
+  "Dependências externas"). É o único marco inteiramente bloqueado.
+- **I — Moradia e eventos.** ⚠️ **parcial**: casa própria, economia em
+  Cristais e cadeias de missão entregues; os eventos com data continuam
+  "em breve".
+- **J — Otimização e lançamento.** ⚠️ **parcial**: os quatro níveis de
+  qualidade pedidos pelo documento existem (Baixa, Média, Alta e Ultra), com
+  LOD de personagem e orçamento de triângulos por nível. O lançamento, não.
+
+### Marcos de engenharia (letras independentes)
+
+Atenção ao ler os commits: além destas dez letras, que são as do **roteiro
+até o 1.0**, o histórico usa outra série de letras para marcos de engenharia
+— "Marco H: Rosas Park em 3D", "Marco I: interiores", "Marco J: integridade
+dos personagens", L, M, N, P. **As duas séries colidem e não têm relação.**
+Um "Marco J" no título de um commit é a integridade de personagens; o marco J
+deste documento é otimização e lançamento.
+
+## Estado na Genesis 0.5 (22/11/2026)
+
+O documento abaixo descreve o repositório como ele estava em 13/11, e foi
+mantido como registro. O que mudou desde então está em
+[`RELEASE-GENESIS-0.5.md`](RELEASE-GENESIS-0.5.md); em resumo: sete regiões
+com duas construídas, interiores, economia, moradia, bichos, missões, corpos
+orgânicos e o panteão remasterizado em dez das onze figuras. O código saiu de
+~23 mil para **51 356 linhas**, e os testes de 202 para **1 394**.
 
 ## Etapa concluída — "A cidade ganha gente" (D + E + F)
 

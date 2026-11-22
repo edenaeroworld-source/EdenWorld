@@ -19,7 +19,7 @@
 
 import * as THREE from 'three';
 import * as aftersMorph from '../afters/AftersMorph';
-import { getCharacter } from '../characters/Pantheon';
+import { getCharacter, PANTHEON } from '../characters/Pantheon';
 import { Avatar } from '../player/Avatar';
 import { AvatarAnimator } from '../player/AvatarAnimator';
 import { DEFAULT_APPEARANCE, type AvatarAppearance } from '../player/AvatarAppearance';
@@ -31,7 +31,7 @@ import type { MotionState } from '../player/PlayerMotor';
 import { allSpecies } from '../creatures/Species';
 import { QUALITY_LEVELS, profileFor } from '../systems/QualitySystem';
 
-type Mode = 'corpo' | 'rosto' | 'bichos' | 'niveis' | 'elenco' | 'bet' | 'betrampa' | 'deusa';
+type Mode = 'corpo' | 'rosto' | 'bichos' | 'niveis' | 'elenco' | 'bet' | 'betrampa' | 'deusa' | 'panteao';
 
 const canvas = document.getElementById('tela') as HTMLCanvasElement;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -173,6 +173,20 @@ function montar(): void {
       const avatar = novoAvatar(ui.nivel, (i - (BET_RAMPA.length - 1) / 2) * 0.78);
       avatar.setMorph(valor, valor);
     });
+  } else if (ui.modo === 'panteao') {
+    // O panteão inteiro em fila, na ordem canônica de `PANTHEON`.
+    //
+    // As cenas `deusa` e `elenco` mostram uma por vez ou um recorte; esta
+    // existe para a pergunta que só o conjunto responde — se as onze se
+    // distinguem umas das outras à primeira vista. É a imagem que vale como
+    // prova do marco, e é por ela que se vê, sem ler ficha nenhuma, que a
+    // Aérion ainda veste peças de catálogo enquanto as outras dez têm peça
+    // própria.
+    PANTHEON.forEach((ficha, i) => {
+      const avatar = novoAvatar(ui.nivel, (i - (PANTHEON.length - 1) / 2) * 0.78, ficha.appearance);
+      if (ficha.afters) avatar.setMorph(ficha.afters.bust, ficha.afters.curve);
+      avatar.setGestation(ficha.gestation ?? 0);
+    });
   } else if (ui.modo === 'deusa') {
     // A deusa escolhida como o jogo a monta: aparência do panteão e os
     // Afters dela. A cena nasceu para a Luma e foi generalizada no
@@ -213,7 +227,7 @@ function montar(): void {
 
 /** Cenas em que cada avatar tem a própria silhueta, e os sliders não mandam. */
 function morphPorAvatar(): boolean {
-  return ui.modo === 'bet' || ui.modo === 'betrampa' || ui.modo === 'elenco' || ui.modo === 'deusa';
+  return ui.modo === 'bet' || ui.modo === 'betrampa' || ui.modo === 'elenco' || ui.modo === 'deusa' || ui.modo === 'panteao';
 }
 
 function aplicarMorph(): void {
@@ -224,7 +238,7 @@ function aplicarMorph(): void {
 function enquadrar(): void {
   const rosto = ui.modo === 'rosto';
   const largo =
-    ui.modo === 'niveis' || ui.modo === 'bichos' || ui.modo === 'elenco' || ui.modo === 'bet' || ui.modo === 'betrampa';
+    ui.modo === 'niveis' || ui.modo === 'bichos' || ui.modo === 'elenco' || ui.modo === 'bet' || ui.modo === 'betrampa' || ui.modo === 'panteao';
   // O alvo do rosto fica na linha do nariz, não na dos olhos: era por
   // isso que a boca e o queixo saíam fora do quadro.
   const alvo = new THREE.Vector3(0, rosto ? 1.56 : 0.95, 0);
@@ -239,7 +253,7 @@ function enquadrar(): void {
   // O elenco são cinco corpos lado a lado: precisa de mais recuo que
   // os quatro níveis, senão o das pontas sai do quadro.
   const dist =
-    (rosto ? 0.95 : ui.modo === 'betrampa' ? 10.2 : ui.modo === 'elenco' ? 7.4 : ui.modo === 'niveis' || ui.modo === 'bet' ? 6.9 : largo ? 6.2 : 3.6) *
+    (rosto ? 0.95 : ui.modo === 'panteao' ? 11.6 : ui.modo === 'betrampa' ? 10.2 : ui.modo === 'elenco' ? 7.4 : ui.modo === 'niveis' || ui.modo === 'bet' ? 6.9 : largo ? 6.2 : 3.6) *
     zoom;
   alvo.add(alvoOff);
   camera.position.set(alvo.x + Math.sin(angle) * dist, alvo.y + (rosto ? 0.04 : 0.35) * zoom, alvo.z + Math.cos(angle) * dist);

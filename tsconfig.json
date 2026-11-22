@@ -12,6 +12,9 @@
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
     "resolveJsonModule": true,
+    // O `vite.config.ts` importa `src/core/Config.ts` para injetar a versão no
+    // HTML. O carregador nativo de config do Vite exige a extensão no import.
+    "allowImportingTsExtensions": true,
     "skipLibCheck": true,
     "noEmit": true,
     "types": ["vite/client", "node"]
