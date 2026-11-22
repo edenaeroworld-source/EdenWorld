@@ -182,6 +182,12 @@ function montar(): void {
     if (ficha) {
       const avatar = novoAvatar(ui.nivel, 0, ficha.appearance);
       if (ficha.afters) avatar.setMorph(ficha.afters.bust, ficha.afters.curve);
+      // A gestação é traço de personagem, não produto cosmético, e o
+      // jogo a aplica em `CharacterModels`. A bancada não aplicava, e
+      // por isso a Amara aparecia aqui **sem o ventre** — montada de
+      // um jeito que não existe em lugar nenhum da cidade. Quem for
+      // vestir uma deusa grávida precisa vê-la grávida.
+      avatar.setGestation(ficha.gestation ?? 0);
     }
   } else if (ui.modo === 'bichos') {
     const porMovimento = new Map<string, ReturnType<typeof allSpecies>[number]>();

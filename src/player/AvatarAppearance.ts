@@ -6,7 +6,7 @@ import { type Rng, clamp, pick } from '../utils/math';
  * valores desconhecidos são substituídos pelo padrão em `sanitizeAppearance`.
  */
 
-export const HAIR_STYLES = ['curto', 'longo', 'ondulado', 'cascata', 'fluxo', 'onda', 'rabo', 'coque', 'cacheado', 'cachos', 'silvestre', 'fibra', 'copa', 'pincelada', 'espetado', 'careca'] as const;
+export const HAIR_STYLES = ['curto', 'longo', 'ondulado', 'cascata', 'fluxo', 'onda', 'rabo', 'coque', 'cacheado', 'cachos', 'silvestre', 'fibra', 'copa', 'pincelada', 'nascente', 'espetado', 'careca'] as const;
 export type HairStyle = (typeof HAIR_STYLES)[number];
 export const HAIR_LABELS: Record<HairStyle, string> = {
   curto: 'Curto',
@@ -23,6 +23,7 @@ export const HAIR_LABELS: Record<HairStyle, string> = {
   fibra: 'Fibra Óptica',
   copa: 'Copa de Árvore',
   pincelada: 'Pincelada',
+  nascente: 'Nascente',
   espetado: 'Espetado',
   careca: 'Sem cabelo',
 };
@@ -44,10 +45,15 @@ export const HAIR_LABELS: Record<HairStyle, string> = {
  * acessório `fones` comum continua no sorteio e continua sendo o
  * mesmo de sempre — o que sai do sorteio é o par de vidro que acende,
  * que é peça de deusa.
+ *
+ * A Nascente é da Amara. É a queda mais longa do catálogo — desce
+ * até a altura do quadril — e carrega o degradê de ponta dela. Num
+ * habitante sorteado seria a Deusa da Maternidade passeando duplicada
+ * pela praça.
  */
-export const CITIZEN_HAIR_STYLES = HAIR_STYLES.filter((h) => h !== 'cascata' && h !== 'fluxo' && h !== 'onda' && h !== 'cachos' && h !== 'silvestre' && h !== 'fibra' && h !== 'copa' && h !== 'pincelada');
+export const CITIZEN_HAIR_STYLES = HAIR_STYLES.filter((h) => h !== 'cascata' && h !== 'fluxo' && h !== 'onda' && h !== 'cachos' && h !== 'silvestre' && h !== 'fibra' && h !== 'copa' && h !== 'pincelada' && h !== 'nascente');
 
-export const OUTFITS = ['casual', 'aero', 'vestido', 'esportivo', 'praia', 'aurora', 'docente', 'rede', 'sonora', 'cosplay', 'guardia', 'sistema', 'jardim', 'lumen'] as const;
+export const OUTFITS = ['casual', 'aero', 'vestido', 'esportivo', 'praia', 'aurora', 'docente', 'rede', 'sonora', 'cosplay', 'guardia', 'sistema', 'jardim', 'lumen', 'regaco'] as const;
 export type Outfit = (typeof OUTFITS)[number];
 /**
  * O que um habitante qualquer pode vestir.
@@ -64,8 +70,13 @@ export type Outfit = (typeof OUTFITS)[number];
  * O Traje Sonora da Lilly fecha a lista: ele traz um equalizador
  * aceso em volta do quadril, e nada do que um habitante veste faz
  * barulho de luz.
+ *
+ * O Manto Regaço é da Amara, e sai do sorteio por um motivo a mais
+ * que os outros: ele é desenhado para um corpo **gestante**. As abas
+ * da frente contornam um ventre que, num habitante qualquer, não
+ * existe — e pano que contorna o que não está lá fica solto no ar.
  */
-export const CITIZEN_OUTFITS = OUTFITS.filter((o) => o !== 'aurora' && o !== 'docente' && o !== 'rede' && o !== 'sonora' && o !== 'cosplay' && o !== 'guardia' && o !== 'sistema' && o !== 'jardim' && o !== 'lumen');
+export const CITIZEN_OUTFITS = OUTFITS.filter((o) => o !== 'aurora' && o !== 'docente' && o !== 'rede' && o !== 'sonora' && o !== 'cosplay' && o !== 'guardia' && o !== 'sistema' && o !== 'jardim' && o !== 'lumen' && o !== 'regaco');
 export const OUTFIT_LABELS: Record<Outfit, string> = {
   casual: 'Casual',
   aero: 'Traje Aero',
@@ -81,9 +92,10 @@ export const OUTFIT_LABELS: Record<Outfit, string> = {
   sistema: 'Traje EdenOS',
   jardim: 'Traje Jardim',
   lumen: 'Traje Lumen',
+  regaco: 'Manto Regaço',
 };
 
-export const ACCESSORIES = ['nenhum', 'oculos', 'fones', 'chapeu', 'flor', 'cristal', 'aureola', 'lentes', 'atelie'] as const;
+export const ACCESSORIES = ['nenhum', 'oculos', 'fones', 'chapeu', 'flor', 'cristal', 'aureola', 'lentes', 'atelie', 'nimbo'] as const;
 export type Accessory = (typeof ACCESSORIES)[number];
 export const ACCESSORY_LABELS: Record<Accessory, string> = {
   nenhum: 'Nenhum',
@@ -95,6 +107,7 @@ export const ACCESSORY_LABELS: Record<Accessory, string> = {
   aureola: 'Auréola',
   lentes: 'Óculos de lente de vidro',
   atelie: 'Ouro do Ateliê',
+  nimbo: 'Nimbo Materno',
 };
 
 /**
@@ -104,8 +117,12 @@ export const ACCESSORY_LABELS: Record<Accessory, string> = {
  * comum continua inteiro e disponível para todo mundo — a lente
  * vazada é dela, e mexer no acessório compartilhado mudaria o rosto
  * de quem nunca pediu.
+ *
+ * O Nimbo Materno é da Amara. A auréola comum (`aureola`) continua no
+ * sorteio e continua a mesma: o que sai é o nimbo de luz própria, que
+ * é insígnia de divindade e não enfeite de passante.
  */
-export const CITIZEN_ACCESSORIES = ACCESSORIES.filter((a) => a !== 'lentes' && a !== 'atelie');
+export const CITIZEN_ACCESSORIES = ACCESSORIES.filter((a) => a !== 'lentes' && a !== 'atelie' && a !== 'nimbo');
 
 export const SKIN_TONES = ['#ffe0c8', '#f6c9a4', '#e8ab82', '#cf8f63', '#a96c45', '#7d4a2c', '#5a3320', '#f3d2c1'] as const;
 export const HAIR_COLORS = ['#2b1d16', '#5a3a22', '#8a5a2b', '#d9a441', '#f3e3a6', '#c0392b', '#ff8fc0', '#7fd6ff', '#9a7bff', '#a855f7', '#f4f6fb'] as const;
