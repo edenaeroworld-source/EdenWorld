@@ -23,7 +23,7 @@ import {
   createSkeleton,
   poseSkirt,
 } from './body/BodyRig';
-import { type BodyShape, SHAPE_FEM } from './body/BodyShape';
+import { type BodyShape, SHAPE_FEM, shapeForSex } from './body/BodyShape';
 import { type BodyProportions, DEFAULT_PROPORTIONS, sameProportions, sanitizeProportions } from './body/BodyProportions';
 
 export { HIP_HEIGHT } from './body/BodyRig';
@@ -189,10 +189,31 @@ export class Avatar {
    * A silhueta deste corpo. Ver `BodyShape.ts`.
    *
    * Fica no avatar, e não na aparência, porque não é escolha de
-   * vestuário: é o corpo. Quem não passa nada recebe `SHAPE_FEM`,
-   * cujos fatores valem todos 1 — ou seja, o corpo de sempre.
+   * vestuário: é o corpo.
+   *
+   * Há dois regimes, e a diferença entre eles é quem manda:
+   *
+   *  · **fixada** — o construtor recebeu uma forma. É o caso das
+   *    fichas oficiais, onde a silhueta é identidade declarada e não
+   *    pode ser derivada de mais nada. O Aérion é `masc` por ficha,
+   *    mesmo com a aparência dele marcada `fem`, e continua assim.
+   *  · **derivada** — o construtor não recebeu forma. Aí a silhueta
+   *    acompanha `appearance.sex`, e muda junto com ele. É o caso do
+   *    jogador, da prévia do celular e dos habitantes da cidade, que
+   *    até aqui recebiam `SHAPE_FEM` mesmo quando a ficha dizia
+   *    `masc` — cabelo e roupa de homem num corpo que não era.
+   *
+   * Quem não passa forma **e** não declara sexo continua em
+   * `SHAPE_FEM`, cujos fatores valem todos 1: o corpo de sempre, sem
+   * um vértice movido.
    */
-  readonly shape: BodyShape;
+  get shape(): BodyShape {
+    return this.currentShape;
+  }
+
+  private currentShape: BodyShape = SHAPE_FEM;
+  /** Forma declarada no construtor; `null` faz a silhueta seguir o sexo. */
+  private readonly pinnedShape: BodyShape | null;
   /**
    * Se este corpo recebe o campo cósmico procedural.
    *
@@ -354,10 +375,11 @@ export class Avatar {
   constructor(
     appearance: AvatarAppearance = DEFAULT_APPEARANCE,
     proportions: BodyProportions = DEFAULT_PROPORTIONS,
-    shape: BodyShape = SHAPE_FEM,
+    shape?: BodyShape,
     cosmos = false,
   ) {
-    this.shape = shape;
+    this.pinnedShape = shape ?? null;
+    this.currentShape = shape ?? shapeForSex(appearance.sex);
     this.cosmos = cosmos;
     // O uniforme nasce zero no campo da classe; só aqui, e só para
     // quem a ficha oficial marcou, ele sobe.
@@ -457,6 +479,17 @@ export class Avatar {
     rig.bones[Bone.Head].add(this.halo);
     this.faceMesh.scale.setScalar(proportions.headSize);
     this.halo.position.y = 0.44 * proportions.headSize;
+
+    // A auréola acende aqui, e não só em `setAppearance`.
+    //
+    // Achado da auditoria da Fase 1.1, e é antigo: o construtor punha
+    // `halo.visible = false` e quem acendia era a troca de aparência.
+    // Um avatar **construído** com `aureola` na ficha — que é como o
+    // jogo cria o Aérion e como um save volta do disco — nascia sem
+    // ela, e só ganhava a auréola se alguém mexesse na aparência
+    // depois. A pré-visualização do criador mascarava o defeito,
+    // porque ela chama `setAppearance` a cada clique.
+    this.halo.visible = appearance.accessory === 'aureola';
 
     this.pivot.add(body);
     this.pivot.position.y = metrics.hipHeight;
@@ -563,8 +596,16 @@ export class Avatar {
 
   private setBody(appearance: AvatarAppearance, proportions: BodyProportions, force = false): void {
     const next = sanitizeProportions({ ...proportions, height: appearance.height });
+    // A silhueta acompanha o sexo — exceto quando a ficha oficial a
+    // fixou no construtor. Trocar de `fem` para `masc` muda larguras
+    // de ombro, peito, cintura e quadril, e isso é malha nova: entra
+    // na comparação abaixo, senão a troca não repercutiria em nada.
+    const nextShape = this.pinnedShape ?? shapeForSex(appearance.sex);
+    const sameShape = nextShape === this.currentShape;
+    this.currentShape = nextShape;
     const sameLook =
       !force &&
+      sameShape &&
       this.current.skin === appearance.skin &&
       this.current.hairStyle === appearance.hairStyle &&
       this.current.hairColor === appearance.hairColor &&

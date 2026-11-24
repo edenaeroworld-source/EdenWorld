@@ -20,7 +20,10 @@ describe('aparência do avatar', () => {
     expect(sanitizeAppearance(42)).toEqual(DEFAULT_APPEARANCE);
     const a = sanitizeAppearance({
       skin: 'vermelho',
-      hairStyle: 'moicano',
+      // Era 'moicano', que a Fase 1.1 transformou em penteado de
+      // verdade. O caso precisa de um nome que não exista no
+      // catálogo — senão ele deixa de provar o que promete.
+      hairStyle: 'tigela',
       hairColor: '#ABCDEF',
       outfit: 'vestido',
       topColor: 'javascript:alert(1)',

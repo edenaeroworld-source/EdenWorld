@@ -9,6 +9,8 @@ import {
   CITIZEN_OUTFITS_BY_SEX,
   CREATOR_HAIR_STYLES,
   CREATOR_OUTFITS,
+  GODDESS_ONLY_HAIR,
+  GODDESS_ONLY_OUTFIT,
   DEFAULT_APPEARANCE,
   HAIR_LABELS,
   HAIR_STYLES,
@@ -150,12 +152,23 @@ describe('C2 — exclusividade: as peças não vazam', () => {
   it('o criador de avatar do jogador não oferece as duas', () => {
     expect(CREATOR_HAIR_STYLES).not.toContain('cosmos');
     expect(CREATOR_OUTFITS).not.toContain('criador');
-    // E continua oferecendo tudo o mais, inclusive peça de deusa:
-    // esta lista não é uma restrição nova sobre o jogador.
-    expect(CREATOR_HAIR_STYLES.length).toBe(HAIR_STYLES.length - 1);
-    expect(CREATOR_OUTFITS.length).toBe(OUTFITS.length - 1);
-    expect(CREATOR_HAIR_STYLES).toContain('cascata');
-    expect(CREATOR_OUTFITS).toContain('aurora');
+    // A regra mudou na Fase 1.1, e este caso mudou com ela.
+    //
+    // Até aqui o criador oferecia tudo menos as duas peças do Aérion
+    // — peça de deusa inclusive, e de propósito. Agora o catálogo
+    // comum é **só** o comum: o que é das dez é delas. A linha que
+    // este caso guardava ("continua oferecendo tudo o mais") deixou
+    // de ser verdadeira porque deixou de ser desejada, e não porque
+    // alguma coisa quebrou.
+    //
+    // O que não mudou, e é o que este arquivo existe para guardar: as
+    // duas peças do Aérion continuam fora, por uma barreira própria.
+    expect(CREATOR_HAIR_STYLES.length).toBe(HAIR_STYLES.length - 1 - GODDESS_ONLY_HAIR.size);
+    expect(CREATOR_OUTFITS.length).toBe(OUTFITS.length - 1 - GODDESS_ONLY_OUTFIT.size);
+    for (const peca of GODDESS_ONLY_HAIR) expect(CREATOR_HAIR_STYLES, `cabelo de deusa: ${peca}`).not.toContain(peca);
+    for (const peca of GODDESS_ONLY_OUTFIT) expect(CREATOR_OUTFITS, `roupa de deusa: ${peca}`).not.toContain(peca);
+    expect(CREATOR_HAIR_STYLES).not.toContain('cascata');
+    expect(CREATOR_OUTFITS).not.toContain('aurora');
   });
 
   it('a tela do criador, montada, não mostra as peças do Aérion', () => {
@@ -170,7 +183,17 @@ describe('C2 — exclusividade: as peças não vazam', () => {
     });
     tela.configure('Viajante', { ...DEFAULT_APPEARANCE }, false);
     document.body.appendChild(tela.element);
-    const texto = tela.element.textContent ?? '';
+    // A Fase 1.1 pôs uma tela antes do acabamento: a escolha de Ele ou
+    // Ela. O caso atravessa essa escolha em vez de ser afrouxado —
+    // o que ele guarda continua sendo o catálogo montado de verdade.
+    tela.element.querySelector<HTMLButtonElement>('.sex-card[data-sex="fem"]')?.click();
+    // E percorre as etapas de peça, porque agora só uma aparece por vez.
+    const texto = Array.from(tela.element.querySelectorAll<HTMLButtonElement>('.stepper__item'))
+      .map((aba) => {
+        aba.click();
+        return tela.element.textContent ?? '';
+      })
+      .join(' ');
     expect(texto).toContain('Longo');
     expect(texto).not.toContain(HAIR_LABELS.cosmos);
     expect(texto).not.toContain(OUTFIT_LABELS.criador);

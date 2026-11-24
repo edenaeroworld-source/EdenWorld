@@ -554,6 +554,13 @@ export function makeCitizen(seed: number): CitizenProfile {
     // existia desde sempre; faltava alguém lê-la.
     accessory: rng() < 0.65 ? pick(rng, archetype.accessories) : pick(rng, CITIZEN_ACCESSORIES),
     height: Math.round((0.93 + rng() * 0.14) * 100) / 100,
+    // Rosto neutro: a variação de rosto é do criador de avatar, e
+    // dar rostos sorteados aos cinquenta e quatro mudaria a praça
+    // inteira — alteração de população, fora do escopo desta fase.
+    faceEye: 1,
+    faceEyeGap: 1,
+    faceBrow: 1,
+    faceMouth: 1,
   };
   // A auréola é marca dos seres divinos: cidadãos comuns não a usam.
   if (appearance.accessory === 'aureola') appearance.accessory = 'nenhum';

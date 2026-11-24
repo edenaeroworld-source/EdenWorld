@@ -249,6 +249,11 @@ describe('Saturno 2.0 — a ficha', () => {
     // com padrão `'fem'`. A Maze não mudou — o esquema ganhou um campo —,
     // e o literal abaixo passa a declará-lo para que a asserção continue
     // sendo um `toEqual` exato, e não um `toMatchObject` frouxo.
+    //
+    // A Fase 1.1 fez o mesmo com os quatro eixos de rosto, pela mesma
+    // razão e com o mesmo cuidado: eles nascem em 1, que é o rosto que
+    // a Maze sempre teve. Declará-los aqui mantém a asserção exata; o
+    // dia em que algum deles sair de 1 nesta ficha, este teste quebra.
     expect(maze.appearance).toEqual({
       sex: 'fem',
       skin: '#7d4a2c',
@@ -261,6 +266,10 @@ describe('Saturno 2.0 — a ficha', () => {
       shoeColor: '#f3ead6',
       accessory: 'nenhum',
       height: 1.03,
+      faceEye: 1,
+      faceEyeGap: 1,
+      faceBrow: 1,
+      faceMouth: 1,
     });
     // O que o marco da Maze **não** podia tocar, e não tocou.
     expect(maze.aura).toBe(0x7df0a8);
