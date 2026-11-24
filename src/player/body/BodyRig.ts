@@ -225,6 +225,74 @@ export const FACE = Object.freeze({
   mouthHalf: 0.3,
 });
 /**
+ * Os quatro eixos de rosto, aplicados sobre as medidas do cânone.
+ *
+ * São **multiplicadores**, e todos nascem em 1 — pela mesma razão que
+ * `SHAPE_FEM` tem os fatores todos em 1 (ver `BodyShape.ts`): com a
+ * ficha padrão, `faceDimsFor` devolve número a número o que `FACE`
+ * sempre deu, e nenhum rosto que já existia muda de vértice. A prova
+ * não depende de teste: depende de 1 × x = x.
+ *
+ * São quatro, e não quatorze, porque cada um precisa ser lido em dois
+ * arquivos ao mesmo tempo — `AvatarFace` desenha pálpebra, cílio,
+ * sobrancelha e lábio, e `BodyBuilder` desenha o globo, a íris e a
+ * cova da boca. Eixo que só um dos dois respeitasse descolaria a
+ * pálpebra do olho.
+ */
+export interface FaceDims {
+  /** Metade da distância entre os olhos. */
+  readonly eyeX: number;
+  readonly eyeY: number;
+  readonly eyeZ: number;
+  /** Raio do globo ocular. */
+  readonly ball: number;
+  readonly iris: number;
+  readonly pupil: number;
+  /** Quanto a sobrancelha sobe sobre o olho, em frações do raio da cabeça. */
+  readonly browLift: number;
+  readonly browZ: number;
+  readonly mouthY: number;
+  readonly mouthZ: number;
+  /** Metade da largura da boca. */
+  readonly mouthHalf: number;
+}
+
+/** Sobrancelha neutra: o valor que o rosto sempre teve. */
+export const BROW_LIFT_BASE = 0.285;
+
+/**
+ * As medidas do rosto desta pessoa, em unidades de mundo.
+ *
+ * `R` é o raio da cabeça e `cy` a altura do centro dela. Os dois
+ * arquivos que desenham rosto chamam esta função com os mesmos dois
+ * números e recebem a mesma tabela — é isso que mantém a pálpebra
+ * sobre o globo quando o olho muda de tamanho.
+ */
+export function faceDimsFor(
+  face: { faceEye?: number; faceEyeGap?: number; faceBrow?: number; faceMouth?: number } | undefined,
+  R: number,
+  cy: number,
+): FaceDims {
+  const eye = face?.faceEye ?? 1;
+  const gap = face?.faceEyeGap ?? 1;
+  const brow = face?.faceBrow ?? 1;
+  const mouth = face?.faceMouth ?? 1;
+  return {
+    eyeX: FACE.eyeX * R * gap,
+    eyeY: cy + FACE.eyeY * R,
+    eyeZ: FACE.eyeZ * R,
+    ball: FACE.eyeBall * R * eye,
+    iris: FACE.iris * R * eye,
+    pupil: FACE.pupil * R * eye,
+    browLift: BROW_LIFT_BASE * brow,
+    browZ: FACE.browZ * R,
+    mouthY: cy + FACE.mouthY * R,
+    mouthZ: FACE.mouthZ * R,
+    mouthHalf: FACE.mouthHalf * R * mouth,
+  };
+}
+
+/**
  * Altura do centro da cabeça sobre a junta do pescoço.
  *
  * `AvatarFace` autora sobrancelhas, pálpebras e boca em volta deste

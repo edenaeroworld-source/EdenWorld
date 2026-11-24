@@ -21,7 +21,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Zone as MorphZone } from '../afters/AftersMorph';
 import { clamp01, createRng, damp, type Rng } from '../utils/math';
 import type { AvatarAppearance } from './AvatarAppearance';
-import { FACE, Finish } from './body/BodyRig';
+import { Finish, faceDimsFor } from './body/BodyRig';
 import { EXPRESSION_WEIGHTS, type Expression, FACE_MORPHS, type FaceMorph } from './Expressions';
 
 export type { Expression, FaceMorph } from './Expressions';
@@ -36,20 +36,39 @@ const HEAD_Y = 0.16;
 /** Raio da cabeça nesse mesmo espaço (`HEAD_R`, antes da escala). */
 const R = 0.176;
 
-const EYE_X = FACE.eyeX * R;
-const EYE_Y = HEAD_Y + FACE.eyeY * R;
-const EYE_Z = FACE.eyeZ * R;
-/** Raio do globo. A pálpebra é uma calota um fio maior, concêntrica. */
-const BALL = FACE.eyeBall * R;
-const LID_R = BALL * 1.035;
+/**
+ * As medidas deste rosto.
+ *
+ * Eram oito constantes de módulo, calculadas uma vez a partir de
+ * `FACE`. Agora saem de `faceDimsFor`, que aplica os quatro eixos da
+ * ficha sobre esse mesmo cânone — com a ficha padrão, devolve os
+ * mesmos oito números de antes.
+ *
+ * `mouthZ` leva o acréscimo de `R · 0,035` que esta malha sempre teve:
+ * a pele dos lábios fica um fio à frente do volume que o crânio dá, e
+ * esse deslocamento é desta malha, não do cânone compartilhado.
+ */
+interface Dims {
+  eyeX: number; eyeY: number; eyeZ: number;
+  lidR: number;
+  mouthY: number; mouthZ: number; mouthHalf: number;
+  browZ: number; browLift: number;
+}
 
-const MOUTH_Y = HEAD_Y + FACE.mouthY * R;
-/** A pele dos lábios fica um fio à frente do volume que o crânio dá. */
-const MOUTH_Z = FACE.mouthZ * R + R * 0.035;
-const BROW_Z = FACE.browZ * R;
-/** Altura do arco acima do centro do olho, em raios de cabeça. */
-const BROW_LIFT = 0.285;
-const MOUTH_HALF = FACE.mouthHalf * R;
+function dimsOf(appearance: AvatarAppearance): Dims {
+  const d = faceDimsFor(appearance, R, HEAD_Y);
+  return {
+    eyeX: d.eyeX,
+    eyeY: d.eyeY,
+    eyeZ: d.eyeZ,
+    lidR: d.ball * 1.035,
+    mouthY: d.mouthY,
+    mouthZ: d.mouthZ + R * 0.035,
+    mouthHalf: d.mouthHalf,
+    browZ: d.browZ,
+    browLift: d.browLift,
+  };
+}
 
 /**
  * Uma pose do rosto.
@@ -231,7 +250,7 @@ function lidCap(cover: number, radius: number, flip: boolean): THREE.BufferGeome
 }
 
 /** Monta as peças móveis do rosto em uma pose. A ordem nunca muda. */
-function buildPose(pose: FacePose, colors: { brow: number; skin: number; lip: number; lipTop: number; lash: number }): THREE.BufferGeometry {
+function buildPose(pose: FacePose, colors: { brow: number; skin: number; lip: number; lipTop: number; lash: number }, dims: Dims): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = [];
 
   // --- sobrancelhas: um arco que segue o osso, não uma barra reta ---
@@ -245,7 +264,7 @@ function buildPose(pose: FacePose, colors: { brow: number; skin: number; lip: nu
     geometry.scale(1, 0.46, 0.5);
     geometry.applyMatrix4(new THREE.Matrix4().makeRotationZ(Math.PI / 2 - 0.85 + tilt * side));
     geometry.applyMatrix4(new THREE.Matrix4().makeRotationY(side * -0.3));
-    geometry.translate(side * EYE_X, EYE_Y + BROW_LIFT * R + lift * R * 0.4 - arc * 0.46, BROW_Z);
+    geometry.translate(side * dims.eyeX, dims.eyeY + dims.browLift * R + lift * R * 0.4 - arc * 0.46, dims.browZ);
     parts.push(tinted(geometry, colors.brow, Finish.Hair));
   }
 
@@ -256,16 +275,16 @@ function buildPose(pose: FacePose, colors: { brow: number; skin: number; lip: nu
       [upper, false],
       [lower, true],
     ] as const) {
-      const cap = lidCap(cover, LID_R, flip);
+      const cap = lidCap(cover, dims.lidR, flip);
       // Um fio mais larga que o globo, para a borda não brigar com ele.
       cap.scale(1.04, 1, 1);
-      cap.translate(side * EYE_X, EYE_Y, EYE_Z);
+      cap.translate(side * dims.eyeX, dims.eyeY, dims.eyeZ);
       parts.push(tinted(cap, colors.skin));
     }
     // Linha de cílios: a borda da pálpebra de cima, escura e fina. É o
     // que faz o olho ter contorno em vez de ser uma bola na cara.
     const { upper: u } = pose.lid(side);
-    const lash = lidCap(u, LID_R * 1.045, false);
+    const lash = lidCap(u, dims.lidR * 1.045, false);
     // Só a faixa de baixo da calota: a borda, que é onde ficam os cílios.
     const lashEdge = new THREE.BufferGeometry();
     const src = lash.getAttribute('position') as THREE.BufferAttribute;
@@ -282,7 +301,7 @@ function buildPose(pose: FacePose, colors: { brow: number; skin: number; lip: nu
     lashEdge.setAttribute('position', new THREE.Float32BufferAttribute(keep, 3));
     lashEdge.setIndex(idx);
     lashEdge.computeVertexNormals();
-    lashEdge.translate(side * EYE_X, EYE_Y, EYE_Z);
+    lashEdge.translate(side * dims.eyeX, dims.eyeY, dims.eyeZ);
     lash.dispose();
     parts.push(tinted(lashEdge, colors.lash, Finish.Hair));
   }
@@ -296,7 +315,7 @@ function buildPose(pose: FacePose, colors: { brow: number; skin: number; lip: nu
   // passar a parecer carne.
   const { open, wide, corner } = pose.mouth;
   const gap = open * R * 0.07;
-  const half = MOUTH_HALF * wide;
+  const half = dims.mouthHalf * wide;
   for (const [sign, tall, deep, tint] of [
     [1, 0.042, 0.042, colors.lipTop],
     [-1, 0.058, 0.05, colors.lip],
@@ -313,13 +332,13 @@ function buildPose(pose: FacePose, colors: { brow: number; skin: number; lip: nu
       pos.setZ(i, pos.getZ(i) * (1 - 0.55 * t * t));
     }
     lip.computeVertexNormals();
-    lip.translate(0, MOUTH_Y + sign * gap + sign * R * 0.026, MOUTH_Z);
+    lip.translate(0, dims.mouthY + sign * gap + sign * R * 0.026, dims.mouthZ);
     parts.push(tinted(lip, tint));
   }
   // O vão: só aparece quando os lábios se afastam.
   const inner = new THREE.SphereGeometry(1, 14, 6);
   inner.scale(half * 0.88, Math.max(R * 0.003, gap * 1.1), R * 0.045);
-  inner.translate(0, MOUTH_Y + R * 0.004, MOUTH_Z - R * 0.022);
+  inner.translate(0, dims.mouthY + R * 0.004, dims.mouthZ - R * 0.022);
   parts.push(tinted(inner, 0x47202a));
 
   const merged = mergeGeometries(parts, false) ?? new THREE.BufferGeometry();
@@ -349,14 +368,15 @@ export function buildFaceGeometry(appearance: AvatarAppearance): THREE.BufferGeo
     lash: hair.clone().lerp(new THREE.Color(0x000000), 0.55).getHex(),
   };
 
-  const base = buildPose(NEUTRAL, colors);
+  const dims = dimsOf(appearance);
+  const base = buildPose(NEUTRAL, colors, dims);
   const count = base.getAttribute('position').count;
   // O rosto nunca deforma com os Afters®, mas o atributo tem de existir:
   // o material do avatar o declara no vertex shader.
   const zones = new Float32Array(count).fill(MorphZone.None);
   base.setAttribute('aZone', new THREE.BufferAttribute(zones, 1));
   base.morphAttributes.position = FACE_MORPHS.map((id) => {
-    const variant = buildPose(MORPH_POSES[id], colors);
+    const variant = buildPose(MORPH_POSES[id], colors, dims);
     const attribute = variant.getAttribute('position') as THREE.BufferAttribute;
     attribute.name = id;
     // A geometria auxiliar não vai para a GPU: só o atributo é aproveitado.

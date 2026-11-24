@@ -3023,3 +3023,186 @@ input[type='range']::-moz-range-thumb {
     transform: none;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Criador 2.0 — escolha de silhueta e fluxo em etapas                 */
+/*                                                                      */
+/* A primeira tela é a única do jogo que ocupa o painel inteiro sem     */
+/* lista: dois cartões de vidro, grandes o bastante para serem tocados  */
+/* com o polegar, sobre o avatar vivo que está atrás.                   */
+/* ------------------------------------------------------------------ */
+
+.creator--choice {
+  --creator-choice: 1;
+}
+
+.creator__lead {
+  margin: 0 0 14px;
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.sex-choice {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.sex-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 18px 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.55)),
+    radial-gradient(120% 80% at 50% 0%, rgba(41, 200, 255, 0.35), transparent 70%);
+  box-shadow: 0 10px 26px rgba(6, 58, 120, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  cursor: pointer;
+  overflow: hidden;
+  transition: transform 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+}
+
+/* O brilho de vidro que corre no alto do cartão. */
+.sex-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 42%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0));
+  pointer-events: none;
+}
+
+.sex-card:hover,
+.sex-card:focus-visible {
+  transform: translateY(-3px);
+  box-shadow: 0 16px 34px rgba(6, 58, 120, 0.26), inset 0 1px 0 #fff;
+}
+
+.sex-card[data-sex='masc'] {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.55)),
+    radial-gradient(120% 80% at 50% 0%, rgba(27, 130, 234, 0.4), transparent 70%);
+}
+
+.sex-card[data-sex='fem'] {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.55)),
+    radial-gradient(120% 80% at 50% 0%, rgba(36, 224, 138, 0.4), transparent 70%);
+}
+
+.sex-card__figure {
+  display: block;
+  width: 56px;
+  height: 104px;
+}
+
+.sex-figure {
+  width: 100%;
+  height: 100%;
+  fill: var(--deep);
+  opacity: 0.82;
+  filter: drop-shadow(0 4px 8px rgba(6, 58, 120, 0.22));
+}
+
+.sex-card__title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--ink);
+  letter-spacing: 0.01em;
+}
+
+.sex-card__hint {
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+/* Trilha de etapas: rolagem horizontal, sem barra à vista. */
+.stepper {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  margin-bottom: 10px;
+  scrollbar-width: none;
+}
+
+.stepper::-webkit-scrollbar {
+  display: none;
+}
+
+.stepper__item {
+  flex: 0 0 auto;
+  padding: 7px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.5);
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+
+.stepper__item[aria-selected='true'] {
+  background: linear-gradient(180deg, var(--aqua), var(--blue));
+  border-color: rgba(255, 255, 255, 0.95);
+  color: #fff;
+  box-shadow: 0 6px 14px rgba(27, 130, 234, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.group__note {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(255, 216, 74, 0.18);
+  border: 1px solid rgba(255, 216, 74, 0.5);
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.summary {
+  display: grid;
+  gap: 6px;
+}
+
+.summary__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.summary__row strong {
+  color: var(--ink);
+}
+
+/* Telas estreitas: os cartões ficam um sobre o outro. */
+@media (max-width: 420px) {
+  .sex-choice {
+    grid-template-columns: 1fr;
+  }
+
+  .sex-card {
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 14px;
+    padding: 12px 16px;
+  }
+
+  .sex-card__figure {
+    width: 38px;
+    height: 72px;
+  }
+}

@@ -152,7 +152,9 @@ function look(
   // Corrigir o campo dele é mudar o corpo dele no momento em que a
   // silhueta passar a ler este eixo, e isso é alteração em membro do
   // panteão: decisão à parte, não desta etapa.
-  return { sex: 'fem', skin, hairStyle, hairColor, eyeColor, outfit, topColor, bottomColor, shoeColor, accessory, height };
+  // Rosto neutro nos quatro eixos: as dez deusas e o Aérion têm
+  // exatamente o rosto que sempre tiveram. Ver `faceDimsFor`.
+  return { sex: 'fem', skin, hairStyle, hairColor, eyeColor, outfit, topColor, bottomColor, shoeColor, accessory, height, faceEye: 1, faceEyeGap: 1, faceBrow: 1, faceMouth: 1 };
 }
 
 /* ------------------------------------------------------------------ */

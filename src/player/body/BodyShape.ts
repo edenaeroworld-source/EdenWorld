@@ -133,3 +133,19 @@ export const BODY_SHAPES: Readonly<Record<BodyShapeId, BodyShape>> = Object.free
 export function shapeFor(id: BodyShapeId | undefined): BodyShape {
   return id ? BODY_SHAPES[id] : SHAPE_FEM;
 }
+
+/**
+ * A forma que corresponde a um sexo declarado na ficha de aparência.
+ *
+ * Os dois eixos têm os mesmos dois nomes (`fem` e `masc`) e isso **não**
+ * é coincidência a ser explorada com um `as`: são tipos diferentes, de
+ * módulos diferentes, que hoje coincidem. A conversão passa por aqui,
+ * num lugar só, para que o dia em que existir uma terceira silhueta —
+ * ou um sexo sem silhueta própria — este seja o único ponto a mudar.
+ *
+ * Qualquer coisa fora da tabela cai em `SHAPE_FEM`, que é a identidade
+ * matemática: fatores todos 1, nenhum vértice movido.
+ */
+export function shapeForSex(sex: string | undefined): BodyShape {
+  return sex === 'masc' ? SHAPE_MASC : SHAPE_FEM;
+}

@@ -1,0 +1,166 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="700" viewBox="0 0 1240 700" font-family="Segoe UI, Frutiger, Myriad Pro, Helvetica Neue, sans-serif">
+<defs>
+<linearGradient id="ceu" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#bfefff"/><stop offset="0.55" stop-color="#e8fbff"/><stop offset="1" stop-color="#d6f7e4"/></linearGradient>
+<linearGradient id="vidro" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff" stop-opacity="0.95"/><stop offset="1" stop-color="#ffffff" stop-opacity="0.55"/></linearGradient>
+<linearGradient id="azul" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#29c8ff"/><stop offset="1" stop-color="#1b82ea"/></linearGradient>
+<linearGradient id="verde" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#24e08a"/><stop offset="1" stop-color="#8be35a"/></linearGradient>
+<linearGradient id="cardM" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff" stop-opacity="0.95"/><stop offset="1" stop-color="#1b82ea" stop-opacity="0.28"/></linearGradient>
+<linearGradient id="cardF" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff" stop-opacity="0.95"/><stop offset="1" stop-color="#24e08a" stop-opacity="0.28"/></linearGradient>
+<filter id="sombra" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="7" stdDeviation="9" flood-color="#063a78" flood-opacity="0.22"/></filter>
+</defs>
+<rect width="1240" height="700" fill="url(#ceu)"/>
+<circle cx="120" cy="610" r="90" fill="#ffffff" opacity="0.3"/>
+<circle cx="1130" cy="110" r="70" fill="#ffffff" opacity="0.26"/>
+<circle cx="980" cy="640" r="55" fill="#ffffff" opacity="0.22"/>
+<circle cx="260" cy="90" r="46" fill="#ffffff" opacity="0.24"/>
+<text x="620" y="46" text-anchor="middle" font-size="27" font-weight="700" fill="#0d3b66">Criador de Avatares — antes e depois da Fase 1.1</text>
+<text x="620" y="70" text-anchor="middle" font-size="14" fill="#3f6e98">Mesmo painel, mesmo motor 3D. O que muda é a ordem das perguntas e o que cada catálogo tem direito de oferecer.</text>
+<text x="90" y="112" font-size="17" font-weight="700" fill="#0d3b66">ANTES  ·  uma lista só, sem pergunta de gênero</text>
+<rect x="90" y="126" width="460" height="516" rx="26" fill="url(#vidro)" stroke="#ffffff" filter="url(#sombra)"/>
+<rect x="90" y="126" width="460" height="92" rx="26" fill="#ffffff" opacity="0.5"/>
+<text x="116" y="166" font-size="18" font-weight="700" fill="#0d3b66">Quem é você no Éden?</text>
+<rect x="116" y="182" width="300" height="26" rx="13" fill="#ffffff" opacity="0.85" stroke="#cfe9ff"/>
+<text x="128" y="200" font-size="13" fill="#3f6e98">Viajante</text>
+<text x="116" y="238" font-size="12" font-weight="600" fill="#3f6e98">Pele</text>
+<rect x="116" y="248" width="20" height="22" rx="11" fill="#ffffff" fill-opacity="0.9" stroke="#cfe9ff"/>
+<text x="126" y="263" text-anchor="middle" font-size="10.5" fill="#0d3b66">●</text>
+<rect x="142" y="248" width="20" height="22" rx="11" fill="#ffffff" fill-opacity="0.9" stroke="#cfe9ff"/>
+<text x="152" y="263" text-anchor="middle" font-size="10.5" fill="#0d3b66">●</text>
+<rect x="168" y="248" width="20" height="22" rx="11" fill="#ffffff" fill-opacity="0.9" stroke="#cfe9ff"/>
+<text x="178" y="263" text-anchor="middle" font-size="10.5" fill="#0d3b66">●</text>
+<rect x="194" y="248" width="20" height="22" rx="11" fill="#ffffff" fill-opacity="0.9" stroke="#cfe9ff"/>
+<text x="204" y="263" text-anchor="middle" font-size="10.5" fill="#0d3b66">●</text>
+<rect x="220" y="248" width="20" height="22" rx="11" fill="#ffffff" fill-opacity="0.9" stroke="#cfe9ff"/>
+<text x="230" y="263" text-anchor="middle" font-size="10.5" fill="#0d3b66">●</text>
+<rect x="246" y="248" width="20" height="22" rx="11" fill="#ffffff" fill-opacity="0.9" stroke="#cfe9ff"/>
+<text x="256" y="263" text-anchor="middle" font-size="10.5" fill="#0d3b66">●</text>
+<text x="116" y="294" font-size="12" font-weight="600" fill="#3f6e98">Cabelo — 26 opções numa fileira só</text>
+<rect x="116" y="304" width="54" height="22" rx="11" fill="#ffffff" fill-opacity="0.9" stroke="#cfe9ff"/>
+<text x="143" y="319" text-anchor="middle" font-size="10.5" fill="#0d3b66">Curto</text>
+<rect x="176.0" y="304" width="54" height="22" rx="11" fill="#ffffff" fill-opacity="0.9" stroke="#cfe9ff"/>
+<text x="203" y="319" text-anchor="middle" font-size="10.5" fill="#0d3b66">Longo</text>
+<rect x="236.0" y="304" width="68" height="22" rx="11" fill="#ffd1dd" fill-opacity="0.9" stroke="#ff7fb0"/>
+<text x="270" y="319" text-anchor="middle" font-size="10.5" fill="#0d3b66">Cascata</text>
+<rect x="310.4" y="304" width="54" height="22" rx="11" fill="#ffd1dd" fill-opacity="0.9" stroke="#ff7fb0"/>
+<text x="337" y="319" text-anchor="middle" font-size="10.5" fill="#0d3b66">Fluxo</text>
+<rect x="370.4" y="304" width="47" height="22" rx="11" fill="#ffd1dd" fill-opacity="0.9" stroke="#ff7fb0"/>
+<text x="394" y="319" text-anchor="middle" font-size="10.5" fill="#0d3b66">Onda</text>
+<rect x="423.2" y="304" width="61" height="22" rx="11" fill="#ffd1dd" fill-opacity="0.9" stroke="#ff7fb0"/>
+<text x="454" y="319" text-anchor="middle" font-size="10.5" fill="#0d3b66">Cachos</text>
+<rect x="116" y="332" width="61" height="22" rx="11" fill="#ffffff" fill-opacity="0.9" stroke="#cfe9ff"/>
+<text x="147" y="347" text-anchor="middle" font-size="10.5" fill="#0d3b66">Topete</text>
+<rect x="183.2" y="332" width="68" height="22" rx="11" fill="#ffffff" fill-opacity="0.9" stroke="#cfe9ff"/>
+<text x="217" y="347" text-anchor="middle" font-size="10.5" fill="#0d3b66">Samurai</text>
+<rect x="257.6" y="332" width="83" height="22" rx="11" fill="#ffd1dd" fill-opacity="0.9" stroke="#ff7fb0"/>
+<text x="299" y="347" text-anchor="middle" font-size="10.5" fill="#0d3b66">Silvestre</text>
+<rect x="346.40000000000003" y="332" width="54" height="22" rx="11" fill="#ffd1dd" fill-opacity="0.9" stroke="#ff7fb0"/>
+<text x="373" y="347" text-anchor="middle" font-size="10.5" fill="#0d3b66">Fibra</text>
+<rect x="406.40000000000003" y="332" width="47" height="22" rx="11" fill="#ffd1dd" fill-opacity="0.9" stroke="#ff7fb0"/>
+<text x="430" y="347" text-anchor="middle" font-size="10.5" fill="#0d3b66">Copa</text>
+<rect x="459.20000000000005" y="332" width="40" height="22" rx="11" fill="#ffffff" fill-opacity="0.9" stroke="#cfe9ff"/>
+<text x="479" y="347" text-anchor="middle" font-size="10.5" fill="#0d3b66">+15</text>
+<text x="116" y="378" font-size="12" font-weight="600" fill="#3f6e98">Roupa — 19 opções numa fileira só</text>
+<rect x="116" y="388" width="61" height="22" rx="11" fill="#ffffff" fill-opacity="0.9" stroke="#cfe9ff"/>
+<text x="147" y="403" text-anchor="middle" font-size="10.5" fill="#0d3b66">Casual</text>
+<rect x="183.2" y="388" width="47" height="22" rx="11" fill="#ffffff" fill-opacity="0.9" stroke="#cfe9ff"/>
+<text x="207" y="403" text-anchor="middle" font-size="10.5" fill="#0d3b66">Aero</text>
+<rect x="236.0" y="388" width="68" height="22" rx="11" fill="#ffffff" fill-opacity="0.9" stroke="#cfe9ff"/>
+<text x="270" y="403" text-anchor="middle" font-size="10.5" fill="#0d3b66">Vestido</text>
+<rect x="310.4" y="388" width="61" height="22" rx="11" fill="#ffd1dd" fill-opacity="0.9" stroke="#ff7fb0"/>
+<text x="341" y="403" text-anchor="middle" font-size="10.5" fill="#0d3b66">Aurora</text>
+<rect x="377.59999999999997" y="388" width="68" height="22" rx="11" fill="#ffd1dd" fill-opacity="0.9" stroke="#ff7fb0"/>
+<text x="412" y="403" text-anchor="middle" font-size="10.5" fill="#0d3b66">Docente</text>
+<rect x="452.0" y="388" width="47" height="22" rx="11" fill="#ffd1dd" fill-opacity="0.9" stroke="#ff7fb0"/>
+<text x="475" y="403" text-anchor="middle" font-size="10.5" fill="#0d3b66">Rede</text>
+<rect x="116" y="416" width="61" height="22" rx="11" fill="#ffd1dd" fill-opacity="0.9" stroke="#ff7fb0"/>
+<text x="147" y="431" text-anchor="middle" font-size="10.5" fill="#0d3b66">Sonora</text>
+<rect x="183.2" y="416" width="68" height="22" rx="11" fill="#ffd1dd" fill-opacity="0.9" stroke="#ff7fb0"/>
+<text x="217" y="431" text-anchor="middle" font-size="10.5" fill="#0d3b66">Guardiã</text>
+<rect x="257.6" y="416" width="61" height="22" rx="11" fill="#ffd1dd" fill-opacity="0.9" stroke="#ff7fb0"/>
+<text x="288" y="431" text-anchor="middle" font-size="10.5" fill="#0d3b66">EdenOS</text>
+<rect x="324.8" y="416" width="40" height="22" rx="11" fill="#ffffff" fill-opacity="0.9" stroke="#cfe9ff"/>
+<text x="345" y="431" text-anchor="middle" font-size="10.5" fill="#0d3b66">+10</text>
+<text x="116" y="462" font-size="12" font-weight="600" fill="#3f6e98">Acessório — 10 opções</text>
+<rect x="116" y="472" width="61" height="22" rx="11" fill="#ffffff" fill-opacity="0.9" stroke="#cfe9ff"/>
+<text x="147" y="487" text-anchor="middle" font-size="10.5" fill="#0d3b66">Nenhum</text>
+<rect x="183.2" y="472" width="61" height="22" rx="11" fill="#ffffff" fill-opacity="0.9" stroke="#cfe9ff"/>
+<text x="214" y="487" text-anchor="middle" font-size="10.5" fill="#0d3b66">Óculos</text>
+<rect x="250.39999999999998" y="472" width="54" height="22" rx="11" fill="#ffffff" fill-opacity="0.9" stroke="#cfe9ff"/>
+<text x="277" y="487" text-anchor="middle" font-size="10.5" fill="#0d3b66">Fones</text>
+<rect x="310.4" y="472" width="61" height="22" rx="11" fill="#ffd1dd" fill-opacity="0.9" stroke="#ff7fb0"/>
+<text x="341" y="487" text-anchor="middle" font-size="10.5" fill="#0d3b66">Lentes</text>
+<rect x="377.59999999999997" y="472" width="61" height="22" rx="11" fill="#ffd1dd" fill-opacity="0.9" stroke="#ff7fb0"/>
+<text x="408" y="487" text-anchor="middle" font-size="10.5" fill="#0d3b66">Ateliê</text>
+<rect x="444.79999999999995" y="472" width="54" height="22" rx="11" fill="#ffd1dd" fill-opacity="0.9" stroke="#ff7fb0"/>
+<text x="472" y="487" text-anchor="middle" font-size="10.5" fill="#0d3b66">Nimbo</text>
+<rect x="116" y="500" width="32" height="22" rx="11" fill="#ffffff" fill-opacity="0.9" stroke="#cfe9ff"/>
+<text x="132" y="515" text-anchor="middle" font-size="10.5" fill="#0d3b66">+4</text>
+<rect x="116" y="566" width="408" height="30" rx="15" fill="#ffffff" opacity="0.7" stroke="#cfe9ff"/>
+<text x="128" y="586" font-size="11.5" fill="#3f6e98">Altura  ──────●────────────────────</text>
+<rect x="116" y="604" width="120" height="26" rx="13" fill="url(#azul)"/>
+<text x="176" y="621" text-anchor="middle" font-size="12" font-weight="600" fill="#ffffff">Aleatório</text>
+<rect x="404" y="604" width="120" height="26" rx="13" fill="url(#verde)"/>
+<text x="464" y="621" text-anchor="middle" font-size="12" font-weight="600" fill="#ffffff">Entrar no Éden</text>
+<circle cx="536" cy="300" r="13" fill="#ff7fb0" opacity="0.95"/>
+<text x="536" y="305" text-anchor="middle" font-size="15" font-weight="700" fill="#ffffff">!</text>
+<text x="90" y="664" font-size="11.5" fill="#b5345f">● em rosa: peça do Panteão aberta a qualquer jogador — 22 ao todo.</text>
+<text x="90" y="682" font-size="11.5" fill="#b5345f">O Aleatório sorteava sempre ficha feminina; o corpo masculino nunca chegava ao jogador.</text>
+<text x="690" y="112" font-size="17" font-weight="700" fill="#0d3b66">DEPOIS  ·  a pergunta primeiro, o acervo depois</text>
+<rect x="690" y="126" width="460" height="516" rx="26" fill="url(#vidro)" stroke="#ffffff" filter="url(#sombra)"/>
+<rect x="690" y="126" width="460" height="92" rx="26" fill="#ffffff" opacity="0.5"/>
+<text x="716" y="160" font-size="18" font-weight="700" fill="#0d3b66">Quem é você no Éden?</text>
+<text x="716" y="180" font-size="11.5" fill="#3f6e98">A escolha define a silhueta e o acervo. Dá para mudar depois.</text>
+<rect x="716" y="192" width="300" height="24" rx="12" fill="#ffffff" opacity="0.85" stroke="#cfe9ff"/>
+<text x="728" y="209" font-size="12" fill="#3f6e98">Viajante</text>
+<rect x="716" y="236" width="196" height="190" rx="24" fill="url(#cardM)" stroke="#ffffff" filter="url(#sombra)"/>
+<rect x="928" y="236" width="196" height="190" rx="24" fill="url(#cardF)" stroke="#ffffff" filter="url(#sombra)"/>
+<circle cx="814" cy="274" r="13" fill="#0a4a94" opacity="0.85"/>
+<path d="M788 292 L840 292 L832 326 L834 350 L794 350 L796 326 Z" fill="#0a4a94" opacity="0.85"/>
+<rect x="781" y="294" width="7" height="42" rx="3.5" fill="#0a4a94" opacity="0.85"/>
+<rect x="840" y="294" width="7" height="42" rx="3.5" fill="#0a4a94" opacity="0.85"/>
+<rect x="796" y="350" width="9" height="40" rx="4" fill="#0a4a94" opacity="0.85"/>
+<rect x="823" y="350" width="9" height="40" rx="4" fill="#0a4a94" opacity="0.85"/>
+<circle cx="1026" cy="274" r="13" fill="#0a4a94" opacity="0.85"/>
+<path d="M1005 292 L1047 292 L1046 326 L1048 350 L1004 350 L1006 326 Z" fill="#0a4a94" opacity="0.85"/>
+<rect x="998" y="294" width="7" height="42" rx="3.5" fill="#0a4a94" opacity="0.85"/>
+<rect x="1047" y="294" width="7" height="42" rx="3.5" fill="#0a4a94" opacity="0.85"/>
+<rect x="1006" y="350" width="9" height="40" rx="4" fill="#0a4a94" opacity="0.85"/>
+<rect x="1037" y="350" width="9" height="40" rx="4" fill="#0a4a94" opacity="0.85"/>
+<text x="814" y="408" text-anchor="middle" font-size="21" font-weight="700" fill="#0d3b66">Ele</text>
+<text x="1026" y="408" text-anchor="middle" font-size="21" font-weight="700" fill="#0d3b66">Ela</text>
+<text x="814" y="422" text-anchor="middle" font-size="10.5" fill="#3f6e98">13 cabelos · 10 roupas</text>
+<text x="1026" y="422" text-anchor="middle" font-size="10.5" fill="#3f6e98">20 cabelos · 10 roupas</text>
+<text x="716" y="458" font-size="12" font-weight="600" fill="#3f6e98">e então, uma pergunta de cada vez:</text>
+<rect x="716" y="470" width="59" height="26" rx="13" fill="url(#azul)" fill-opacity="1" stroke="#ffffff"/>
+<text x="746" y="487" text-anchor="middle" font-size="11" font-weight="600" fill="#ffffff">Rosto</text>
+<rect x="780.0" y="470" width="66" height="26" rx="13" fill="#ffffff" fill-opacity="0.6" stroke="#ffffff"/>
+<text x="813" y="487" text-anchor="middle" font-size="11" font-weight="600" fill="#3f6e98">Cabelo</text>
+<rect x="851.4" y="470" width="59" height="26" rx="13" fill="#ffffff" fill-opacity="0.6" stroke="#ffffff"/>
+<text x="881" y="487" text-anchor="middle" font-size="11" font-weight="600" fill="#3f6e98">Roupa</text>
+<rect x="915.4" y="470" width="96" height="26" rx="13" fill="#ffffff" fill-opacity="0.6" stroke="#ffffff"/>
+<text x="963" y="487" text-anchor="middle" font-size="11" font-weight="600" fill="#3f6e98">Acessórios</text>
+<rect x="1016.4" y="470" width="74" height="26" rx="13" fill="#ffffff" fill-opacity="0.6" stroke="#ffffff"/>
+<text x="1053" y="487" text-anchor="middle" font-size="11" font-weight="600" fill="#3f6e98">Ajustes</text>
+<rect x="1095.2" y="470" width="66" height="26" rx="13" fill="#ffffff" fill-opacity="0.6" stroke="#ffffff"/>
+<text x="1128" y="487" text-anchor="middle" font-size="11" font-weight="600" fill="#3f6e98">Pronto</text>
+<rect x="716" y="508" width="408" height="88" rx="18" fill="#ffffff" fill-opacity="0.62" stroke="#ffffff"/>
+<text x="730" y="528" font-size="11.5" font-weight="600" fill="#3f6e98">Rosto — quatro medidas, nenhuma obrigatória</text>
+<text x="730" y="546" font-size="9.5" fill="#3f6e98">Olhos</text>
+<rect x="800" y="542" width="300" height="4" rx="2" fill="#cfe9ff"/>
+<circle cx="986" cy="544" r="5.5" fill="url(#azul)"/>
+<text x="730" y="559" font-size="9.5" fill="#3f6e98">Distância</text>
+<rect x="800" y="555" width="300" height="4" rx="2" fill="#cfe9ff"/>
+<circle cx="950" cy="557" r="5.5" fill="url(#azul)"/>
+<text x="730" y="572" font-size="9.5" fill="#3f6e98">Sobrancelha</text>
+<rect x="800" y="568" width="300" height="4" rx="2" fill="#cfe9ff"/>
+<circle cx="950" cy="570" r="5.5" fill="url(#azul)"/>
+<text x="730" y="585" font-size="9.5" fill="#3f6e98">Boca</text>
+<rect x="800" y="581" width="300" height="4" rx="2" fill="#cfe9ff"/>
+<circle cx="914" cy="583" r="5.5" fill="url(#azul)"/>
+<rect x="716" y="604" width="120" height="26" rx="13" fill="url(#azul)"/>
+<text x="776" y="621" text-anchor="middle" font-size="12" font-weight="600" fill="#ffffff">Aleatório</text>
+<rect x="1004" y="604" width="120" height="26" rx="13" fill="url(#verde)"/>
+<text x="1064" y="621" text-anchor="middle" font-size="12" font-weight="600" fill="#ffffff">Avançar</text>
+<text x="690" y="664" font-size="11.5" fill="#1d7a4e">Nenhuma peça do Panteão no acervo comum — a separação vale na lógica, não só na tela.</text>
+<text x="690" y="682" font-size="11.5" fill="#1d7a4e">O Aleatório respeita a escolha; quem edita um personagem entra direto no rosto, com o gênero preservado.</text>
+</svg>
